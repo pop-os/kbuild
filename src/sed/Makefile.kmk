@@ -1,0 +1,95 @@
+# $Id: Makefile.kmk 2243 2009-01-10 02:24:02Z bird $
+## @file
+# Sub-Makefile for kmk_sed.
+#
+
+#
+# Copyright (c) 2006-2009 knut st. osmundsen <bird-kBuild-spamix@anduin.net>
+#
+# This file is part of kBuild.
+#
+# kBuild is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# kBuild is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with kBuild.  If not, see <http://www.gnu.org/licenses/>
+#
+#
+
+SUB_DEPTH = ../..
+include $(KBUILD_PATH)/subheader.kmk
+
+#
+# kmk_sed
+#
+PROGRAMS += kmk_sed
+
+kmk_sed_TEMPLATE = BIN
+kmk_sed_DEPS = \
+	$(PATH_kmk_sed)/config.h \
+	$(PATH_kmk_sed)/regex.h
+kmk_sed_CLEAN = $(kmk_sed_DEPS)
+kmk_sed_INCS = \
+	$(PATH_kmk_sed) \
+	. \
+	lib \
+	intl
+kmk_sed_DEFS = \
+	HAVE_CONFIG_H
+kmk_sed_SOURCES = \
+	sed/sed.c \
+	lib/regex.c \
+	sed/compile.c \
+	sed/execute.c \
+	sed/regexp.c \
+	sed/fmt.c \
+	sed/mbcs.c \
+	lib/getopt1.c \
+	lib/getopt.c \
+	lib/utils.c
+kmk_sed_SOURCES.darwin = \
+	lib/strverscmp.c \
+	lib/obstack.c \
+	lib/getline.c
+kmk_sed_SOURCES.dragonfly = \
+	lib/strverscmp.c \
+	lib/obstack.c \
+	lib/getline.c
+kmk_sed_SOURCES.freebsd = \
+	lib/strverscmp.c \
+	lib/obstack.c \
+	lib/getline.c
+kmk_sed_SOURCES.solaris = \
+	lib/strverscmp.c \
+	lib/obstack.c \
+	lib/getline.c
+kmk_sed_SOURCES.win = \
+	lib/strverscmp.c \
+	lib/obstack.c \
+	lib/mkstemp.c \
+	lib/getline.c \
+	../lib/startuphacks-win.c
+
+include $(FILE_KBUILD_SUB_FOOTER)
+
+#
+# Use checked in config.h instead of running ./configure for it.
+#
+kmk_sed_config.h.$(KBUILD_TARGET) := $(kmk_sed_PATH)/config.h.$(KBUILD_TARGET)
+
+$(PATH_kmk_sed)/config.h: $(kmk_sed_config.h.$(KBUILD_TARGET)) | $(call DIRDEP,$(PATH_kmk_sed))
+	$(CP) -f $^ $@
+
+#
+# Use the regex lib shipped with sed and not anything installed on the system.
+#
+$(PATH_kmk_sed)/regex.h: $(kmk_sed_PATH)/lib/regex_.h | $(call DIRDEP,$(PATH_kmk_sed))
+	$(CP) -f $^ $@
+
