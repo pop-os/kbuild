@@ -1,7 +1,8 @@
 Source: kbuild
 Section: devel
 Priority: extra
-Maintainer: Torsten Werner <twerner@debian.org>
+Maintainer: Debian Virtualbox Team <pkg-virtualbox-devel@lists.alioth.debian.org>
+Uploaders: Daniel Baumann <daniel@debian.org>
 Build-Depends: autoconf, automake, byacc, cdbs, cvs, debhelper (>= 5), flex,
  libacl1-dev, quilt
 Standards-Version: 3.8.1
