@@ -181,7 +181,7 @@ kbuild (1060-1) unstable; urgency=low
   * New upstream version
   * Bootstrap every architecture again because some binaries are buggy.
 
- -- Torsten Werner <twerner@debian.org>  Sat,  9 Jun 2007 07:42:44 +0200
+ -- Torsten Werner <twerner@debian.org>  Sat, 09 Jun 2007 07:42:44 +0200
 
 kbuild (894-5) unstable; urgency=low
 
@@ -222,4 +222,4 @@ kbuild (893-1) unstable; urgency=low
 
   * Initial release (Closes: #422367)
 
- -- Torsten Werner <twerner@debian.org>  Fri,  4 May 2007 20:35:40 +0200
+ -- Torsten Werner <twerner@debian.org>  Fri, 04 May 2007 20:35:40 +0200
