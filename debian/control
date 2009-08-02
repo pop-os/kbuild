@@ -3,8 +3,7 @@ Section: devel
 Priority: extra
 Maintainer: Debian Virtualbox Team <pkg-virtualbox-devel@lists.alioth.debian.org>
 Uploaders: Daniel Baumann <daniel@debian.org>
-Build-Depends: autoconf, automake, byacc, cdbs, cvs, debhelper (>= 5), flex,
- libacl1-dev, quilt
+Build-Depends: debhelper (>= 7), autoconf, automake, byacc, cdbs, cvs, flex, libacl1-dev, quilt
 Standards-Version: 3.8.1
 Homepage: http://svn.netlabs.org/kbuild
 Vcs-Browser: http://git.debian.org/?p=pkg-virtualbox/kbuild.git
