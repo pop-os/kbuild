@@ -23,8 +23,6 @@ debian/stamp-build:
 	-gcc -dM -E - < /dev/null
 	kBuild/env.sh --full make -f bootstrap.gmk SRCDIR=`pwd` $(BOOTSTRAP)
 	kBuild/env.sh kmk rebuild PATH_INS=`pwd` $(YACC)
-	pod2man -c 'kBuild for Debian GNU/Linux' \
-	  -r kBuild-$(DEB_UPSTREAM_VERSION) debian/kmk.pod > debian/kmk.1
 	touch $@
 
 install/kbuild::
@@ -33,7 +31,7 @@ install/kbuild::
 
 clean::
 	-kBuild/env.sh kmk uninstall
-	$(RM) -r debian/stamp-* debian/kmk.1 out kBuild/bin/*/* SvnInfo.kmk
+	$(RM) -r debian/stamp-* out kBuild/bin/*/* SvnInfo.kmk
 
 
 get-orig-info:
