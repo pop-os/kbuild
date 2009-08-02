@@ -22,4 +22,3 @@ L<make(1)>
 =head1 AUTHOR
 
 Torsten Werner <twerner@debian.org>
-

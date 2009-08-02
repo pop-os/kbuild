@@ -41,4 +41,3 @@ get-orig-info:
 
 get-orig-source:
 	sh debian/orig-tar.sh $(SVNROOT) $(DEB_UPSTREAM_VERSION) $(REVISION)
-

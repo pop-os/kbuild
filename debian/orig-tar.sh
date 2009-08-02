@@ -17,4 +17,3 @@ if [ -r .svn/deb-layout ]; then
   mv $TAR $origDir
   echo "moved $TAR to $origDir"
 fi
-

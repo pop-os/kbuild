@@ -18,7 +18,7 @@ Description: framework for writing simple makefiles for complex tasks
   - Similar behavior cross all supported platforms.
   - Flexibility, don't create unnecessary restrictions preventing ad-hoc
     solutions.
-  - Makefile can very simple to write and maintain. 
+  - Makefile can very simple to write and maintain.
  .
  There are four concepts being tried out in the current kBuild incaration:
   - One configuration file for a subtree automatically included.

@@ -223,4 +223,3 @@ kbuild (893-1) unstable; urgency=low
   * Initial release (Closes: #422367)
 
  -- Torsten Werner <twerner@debian.org>  Fri,  4 May 2007 20:35:40 +0200
-
