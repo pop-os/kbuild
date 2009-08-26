@@ -1,3 +1,20 @@
+kbuild (1:0.1.98svn2318-2) unstable; urgency=low
+
+  * New maintainer (Closes: #534921).
+  * Removing useless whitespaces at EOL and EOF.
+  * Using correct rfc-2822 date formats in changelog.
+  * Prefixing debhelper files with package name.
+  * Rewriting manpage from scratch and in plain roff.
+  * Updating vcs fields in control.
+  * Updating package to debhelper 7.
+  * Rewriting copyright file in machine-interpretable format.
+  * Using tabs rather than space as seperator in debhelper links file.
+  * Updating uploaders field.
+  * Updating package to standards version 3.8.3.
+  * Sorting and wrapping depends.
+
+ -- Daniel Baumann <daniel@debian.org>  Wed, 26 Aug 2009 17:15:33 +0200
+
 kbuild (1:0.1.98svn2318-1) unstable; urgency=low
 
   * new upstream version (Closes: #523311)
