@@ -2,10 +2,7 @@ Source: kbuild
 Section: devel
 Priority: extra
 Maintainer: Debian Virtualbox Team <pkg-virtualbox-devel@lists.alioth.debian.org>
-Uploaders:
- Philipp Hug <debian@hug.cx>, Marvin Stark <marv@der-marv.de>,
- Michael Meskes <meskes@debian.org>, Patrick Winnertz <winnie@debian.org>,
- Hilko Bengen <bengen@debian.org>
+Uploaders: Michael Meskes <meskes@debian.org>
 Build-Depends:
  debhelper (>= 7), autoconf, automake, byacc, cdbs, cvs, flex, libacl1-dev,
  quilt
