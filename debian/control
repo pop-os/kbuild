@@ -6,7 +6,9 @@ Uploaders:
  Philipp Hug <debian@hug.cx>, Marvin Stark <marv@der-marv.de>,
  Michael Meskes <meskes@debian.org>, Patrick Winnertz <winnie@debian.org>,
  Hilko Bengen <bengen@debian.org>
-Build-Depends: debhelper (>= 7), autoconf, automake, byacc, cdbs, cvs, flex, libacl1-dev, quilt
+Build-Depends:
+ debhelper (>= 7), autoconf, automake, byacc, cdbs, cvs, flex, libacl1-dev,
+ quilt
 Standards-Version: 3.8.3
 Homepage: http://svn.netlabs.org/kbuild
 Vcs-Browser: http://git.debian.org/?p=pkg-virtualbox/kbuild.git
@@ -14,7 +16,7 @@ Vcs-Git: git://git.debian.org/git/pkg-virtualbox/kbuild.git
 
 Package: kbuild
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
+Depends: ${misc:Depends}, ${shlibs:Depends}
 Description: framework for writing simple makefiles for complex tasks
  The goals of the kBuild framework:
   - Similar behavior cross all supported platforms.
