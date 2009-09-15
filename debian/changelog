@@ -1,3 +1,12 @@
+kbuild (1:0.1.98svn2318-3) unstable; urgency=low
+
+  * Added patch to fix build on GNU/kFreeBSD. (Closes: #540665) - thanks
+    to Julian Andres Klode <jak@debian.org>
+  * Added patch to fix build on sh4. (Closes: #544974) - thanks to
+    Nobuhiro Iwamatsu <iwamatsu@nigauri.org>
+
+ -- Michael Meskes <meskes@debian.org>  Tue, 15 Sep 2009 15:37:35 +0200
+
 kbuild (1:0.1.98svn2318-2) unstable; urgency=low
 
   * New maintainer (Closes: #534921).
