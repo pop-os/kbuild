@@ -8,7 +8,7 @@ kbuild (1:0.1.98svn2318-2) unstable; urgency=low
   * Updating vcs fields in control.
   * Updating package to debhelper 7.
   * Rewriting copyright file in machine-interpretable format.
-  * Using tabs rather than space as seperator in debhelper links file.
+  * Using tabs rather than space as separator in debhelper links file.
   * Updating uploaders field.
   * Updating package to standards version 3.8.3.
   * Sorting and wrapping depends.
