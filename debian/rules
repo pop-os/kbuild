@@ -12,7 +12,7 @@ BOOTSTRAP := ASH=/bin/bash ECHO=/bin/echo MKDIR=/bin/mkdir CP=/bin/cp \
 SVNROOT   := http://svn.netlabs.org/repos/kbuild/trunk
 REVISION  := $(shell echo $(DEB_UPSTREAM_VERSION) | sed -e's,.*svn,,')
 
-makebuilddir:: SvnInfo.kmk
+makebuilddir:: SvnInfo.kmk patch
 SvnInfo.kmk:
 	echo "KBUILD_SVN_URL := $(SVNROOT)"  >  $@
 	echo "KBUILD_SVN_REV := $(REVISION)" >> $@
@@ -29,7 +29,7 @@ install/kbuild::
 	kBuild/env.sh kmk install NIX_INSTALL_DIR=/usr LDFLAGS=-Wl,--as-needed
 	cd out/*.*/release/usr/share/kBuild && chmod a-x *.kmk */*.kmk
 
-clean::
+clean:: unpatch
 	-kBuild/env.sh kmk uninstall
 	$(RM) -r debian/stamp-* out kBuild/bin/*/* SvnInfo.kmk
 
