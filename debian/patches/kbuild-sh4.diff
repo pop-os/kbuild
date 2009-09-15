@@ -1,0 +1,46 @@
+diff -urN a/kBuild/env.sh b/kBuild/env.sh
+--- a/kBuild/env.sh	2009-04-09 23:40:04.000000000 +0000
++++ b/kBuild/env.sh	2009-09-03 01:26:04.000000000 +0000
+@@ -364,6 +364,9 @@
+         alpha)
+             KBUILD_HOST_ARCH='alpha'
+             ;;
++	sh2|sh2a|sh3|sh3|sh4|sh4a|sh4al|sh4al-dsp|shmedia)
++	    KBUILD_HOST_ARCH='sh'
++	    ;;
+ 
+         *)  echo "$0: unknown cpu/arch - $KBUILD_HOST_ARCH" 1>&${ERR_REDIR}
+             sleep 1
+diff -urN a/kBuild/header.kmk b/kBuild/header.kmk
+--- a/kBuild/header.kmk	2009-04-09 23:40:04.000000000 +0000
++++ b/kBuild/header.kmk	2009-09-03 07:43:32.000000000 +0000
+@@ -177,7 +177,7 @@
+ # build types. (PORTME)
+ #
+ KBUILD_OSES   := darwin dos dragonfly freebsd gnukfreebsd l4 linux netbsd nt openbsd os2 solaris win os-agnostic
+-KBUILD_ARCHES := x86 amd64 sparc32 sparc64 s390 s390x ppc32 ppc64 mips32 mips64 ia64 hppa32 hppa64 arm alpha
++KBUILD_ARCHES := x86 amd64 sparc32 sparc64 s390 s390x ppc32 ppc64 mips32 mips64 ia64 hppa32 hppa64 arm alpha sh
+ 
+ 
+ #
+diff -urN a/src/lib/k/kDefs.h b/src/lib/k/kDefs.h
+--- a/src/lib/k/kDefs.h	2009-04-09 23:38:32.000000000 +0000
++++ b/src/lib/k/kDefs.h	2009-09-03 07:24:33.000000000 +0000
+@@ -162,6 +162,8 @@
+ #define K_ARCH_SPARC_32         (17 | K_ARCH_BIT_32 | K_ARCH_END_BIG)
+ /** 64-bit SPARC. */
+ #define K_ARCH_SPARC_64         (18 | K_ARCH_BIT_64 | K_ARCH_END_BI)
++/** 32-bit SuperH. */
++#define K_ARCH_SH_32           ( 19 | K_ARCH_BIT_32 | K_ARCH_END_BI)
+ /** The end of the valid architecture values (exclusive). */
+ #define K_ARCH_MAX              (19)
+ /** @} */
+@@ -202,6 +204,8 @@
+ #  define K_ARCH    K_ARCH_S390_64
+ # elif defined(__s390__)
+ #  define K_ARCH    K_ARCH_S390_32
++# elif defined(__sh__) 
++#  define K_ARCH    K_ARCH_SH_32
+ # else
+ #  error "Port Me"
+ # endif
