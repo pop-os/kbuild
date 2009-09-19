@@ -1,2 +1,3 @@
 kbuild-gnukfreebsd.diff
 kbuild-sh4.diff
+kbuild-dprintf-posix2008.diff

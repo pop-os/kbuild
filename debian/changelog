@@ -1,3 +1,9 @@
+kbuild (1:0.1.98svn2318-4) UNRELEASED; urgency=low
+
+  * Added patch from Fedora to fix build on POSIX.1-2008 systems
+
+ -- Felix Geyer <debfx-pkg@fobos.de>  Sat, 19 Sep 2009 12:06:17 +0200
+
 kbuild (1:0.1.98svn2318-3) unstable; urgency=low
 
   * Added patch to fix build on GNU/kFreeBSD. (Closes: #540665) - thanks

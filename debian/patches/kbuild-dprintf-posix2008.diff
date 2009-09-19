@@ -1,0 +1,38 @@
+This dprintf() collides with POSIX.1-2008 dprintf() and is not used at all
+anyways. (Whoa! what a stupid name! standardized before invention of grep!)
+
+Lubomir Rintel <lkundrak@v3.sk>
+
+diff -up kBuild-0.1.5/src/ash/output.c.gcc44 kBuild-0.1.5/src/ash/output.c
+--- kBuild-0.1.5/src/ash/output.c.gcc44	2009-04-13 01:20:33.857017054 +0200
++++ kBuild-0.1.5/src/ash/output.c	2009-04-13 01:20:57.570033297 +0200
+@@ -230,6 +230,7 @@ out1fmt(const char *fmt, ...)
+ 	va_end(ap);
+ }
+ 
++#if 0
+ void
+ dprintf(const char *fmt, ...)
+ {
+@@ -240,6 +241,7 @@ dprintf(const char *fmt, ...)
+ 	va_end(ap);
+ 	flushout(out2);
+ }
++#endif
+ 
+ void
+ fmtstr(char *outbuf, size_t length, const char *fmt, ...)
+diff -up kBuild-0.1.5/src/ash/output.h.gcc44 kBuild-0.1.5/src/ash/output.h
+--- kBuild-0.1.5/src/ash/output.h.gcc44	2009-04-13 01:20:37.724140366 +0200
++++ kBuild-0.1.5/src/ash/output.h	2009-04-13 01:20:47.933142098 +0200
+@@ -65,8 +65,10 @@ void outfmt(struct output *, const char 
+     __attribute__((__format__(__printf__,2,3)));
+ void out1fmt(const char *, ...)
+     __attribute__((__format__(__printf__,1,2)));
++#if 0
+ void dprintf(const char *, ...)
+     __attribute__((__format__(__printf__,1,2)));
++#endif
+ void fmtstr(char *, size_t, const char *, ...)
+     __attribute__((__format__(__printf__,3,4)));
+ void doformat(struct output *, const char *, va_list);
