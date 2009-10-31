@@ -32,7 +32,12 @@ install/kbuild::
 clean:: unpatch
 	-kBuild/env.sh kmk uninstall
 	$(RM) -r debian/stamp-* out kBuild/bin/*/* SvnInfo.kmk
-
+	( cd src/kmk; $(RM) -f aclocal.m4 config.h.in configure Makefile.in )
+	( cd src/kmk/config; $(RM) -f compile config.guess config.sub depcomp install-sh Makefile.in missing )
+	$(RM) -f src/kmk/glob/Makefile.in src/kmk/w32/Makefile.in
+	( cd src/sed/config; $(RM) -f intdiv0.m4 intmax.m4 inttypes_h.m4 inttypes.m4 inttypes-pri.m4 isc-posix.m4 longdouble.m4 longlong.m4 mkinstalldirs nls.m4 po.m4 printf-posix.m4 signed.m4 size_max.m4 stdint_h.m4 uintmax_t.m4 ulonglong.m4 wchar_t.m4 wint_t.m4 xsize.m4 )
+	( cd src/sed/intl; $(RM) -f libgnuintl.h.in localcharset.h log.c printf-args.c printf-args.h printf.c printf-parse.c printf-parse.h relocatable.c relocatable.h vasnprintf.c vasnprintf.h vasnwprintf.h wprintf-parse.h xsize.h )
+	( cd src/sed/po; $(RM) -f Makevars.template remove-potcdate.sin )
 
 get-orig-info:
 	svn info $(SVNROOT)
