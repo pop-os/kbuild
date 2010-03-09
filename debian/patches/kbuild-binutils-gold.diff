@@ -1,0 +1,14 @@
+Description: Fix FTBFS with binutils-gold
+Bug-Debian: http://bugs.debian.org/554937
+
+--- kbuild-0.1.98svn2318.orig/src/kmk/Makefile.kmk	2010-03-09 19:47:27.378142252 +0100
++++ kbuild-0.1.98svn2318/src/kmk/Makefile.kmk	2010-03-09 19:47:29.358674592 +0100
+@@ -218,6 +218,8 @@
+ #kmk_LIBS.solaris = malloc
+ #kmk_DEFS.solaris += HAVE_MALLINFO
+ 
++kmk_LIBS.linux = pthread
++
+ kmk_LIBS.gnukfreebsd.amd64 = pthread
+ kmk_LIBS.freebsd.amd64 = pthread
+ 

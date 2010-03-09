@@ -2,3 +2,4 @@ kbuild-gnukfreebsd.diff
 kbuild-sh4.diff
 kbuild-dprintf-posix2008.diff
 kbuild-armv7l.diff
+kbuild-binutils-gold.diff
