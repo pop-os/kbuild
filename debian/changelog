@@ -1,3 +1,10 @@
+kbuild (1:0.1.98svn2318-5) UNRELEASED; urgency=low
+
+  * Add patch to fix build on armv7l. (LP: #535093) - thanks to
+    Jamie Bennett <jb@canonical.com>
+
+ -- Felix Geyer <debfx-pkg@fobos.de>  Tue, 09 Mar 2010 18:19:52 +0100
+
 kbuild (1:0.1.98svn2318-4) unstable; urgency=low
 
   [ Felix Geyer ]
