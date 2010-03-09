@@ -4,8 +4,9 @@ kbuild (1:0.1.98svn2318-5) UNRELEASED; urgency=low
     Jamie Bennett <jb@canonical.com>
   * Added myself as uploader.
   * Bump Standards-Version to 3.8.4 (no changes).
+  * Build-Depend on autopoint instead of cvs. (Closes: #572473)
 
- -- Felix Geyer <debfx-pkg@fobos.de>  Tue, 09 Mar 2010 18:56:55 +0100
+ -- Felix Geyer <debfx-pkg@fobos.de>  Tue, 09 Mar 2010 19:43:30 +0100
 
 kbuild (1:0.1.98svn2318-4) unstable; urgency=low
 

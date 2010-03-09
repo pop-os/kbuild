@@ -8,9 +8,9 @@ Build-Depends:
  debhelper (>= 7),
  autoconf,
  automake,
+ autopoint,
  byacc,
  cdbs,
- cvs,
  flex,
  libacl1-dev,
  quilt (>= 0.40)
