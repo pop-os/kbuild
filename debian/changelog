@@ -1,4 +1,4 @@
-kbuild (1:0.1.98svn2318-5) UNRELEASED; urgency=low
+kbuild (1:0.1.98svn2318-5) unstable; urgency=low
 
   * Add patch to fix build on armv7l. (LP: #535093) - thanks to
     Jamie Bennett <jb@canonical.com>
