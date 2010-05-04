@@ -1,9 +1,13 @@
 kbuild (1:0.1.98svn2318-6) unstable; urgency=low
 
+  [ Felix Geyer ]
   * Replaced bintuils-gold patch by new one not breaking compilation on
     hppa. (Closes: #577604)
 
- -- Felix Geyer <debfx-pkg@fobos.de>  Tue, 04 May 2010 16:09:33 +0200
+  [ Michael Meskes ]
+  * Added source/format file.
+
+ -- Michael Meskes <meskes@debian.org>  Tue, 04 May 2010 16:16:46 +0200
 
 kbuild (1:0.1.98svn2318-5) unstable; urgency=low
 
