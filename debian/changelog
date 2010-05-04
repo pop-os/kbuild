@@ -1,3 +1,10 @@
+kbuild (1:0.1.98svn2318-6) unstable; urgency=low
+
+  * Replaced bintuils-gold patch by new one not breaking compilation on
+    hppa. (Closes: #577604)
+
+ -- Felix Geyer <debfx-pkg@fobos.de>  Tue, 04 May 2010 16:09:33 +0200
+
 kbuild (1:0.1.98svn2318-5) unstable; urgency=low
 
   * Add patch to fix build on armv7l. (LP: #535093) - thanks to
