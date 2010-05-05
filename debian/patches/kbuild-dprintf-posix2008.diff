@@ -1,7 +1,8 @@
-This dprintf() collides with POSIX.1-2008 dprintf() and is not used at all
-anyways. (Whoa! what a stupid name! standardized before invention of grep!)
-
-Lubomir Rintel <lkundrak@v3.sk>
+Description: This dprintf() collides with POSIX.1-2008 dprintf()
+ and is not used at all anyways.
+ (Whoa! what a stupid name! standardized before invention of grep!)
+Author: Lubomir Rintel <lkundrak@v3.sk>
+Bug-Debian: http://bugs.debian.org/552843
 
 diff -up kBuild-0.1.5/src/ash/output.c.gcc44 kBuild-0.1.5/src/ash/output.c
 --- kBuild-0.1.5/src/ash/output.c.gcc44	2009-04-13 01:20:33.857017054 +0200

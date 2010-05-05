@@ -1,4 +1,6 @@
 Description: Fix FTBFS on sh4
+Author: Nobuhiro Iwamatsu <iwamatsu@nigauri.org>
+Bug-Debian: http://bugs.debian.org/544974
 
 diff -urN a/kBuild/env.sh b/kBuild/env.sh
 --- a/kBuild/env.sh	2009-04-09 23:40:04.000000000 +0000
