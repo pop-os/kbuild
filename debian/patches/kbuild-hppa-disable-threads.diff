@@ -1,19 +1,15 @@
-Description: Fix FTBFS with binutils-gold
+Description: Fix FTBFS on hppa by disabling threads.
 Author: Felix Geyer <debfx-pkg@fobos.de>
-Bug-Debian: http://bugs.debian.org/554937
 
 diff -Nur kbuild.orig/src/kmk/Makefile.kmk kbuild/src/kmk/Makefile.kmk
 --- kbuild.orig/src/kmk/Makefile.kmk	2010-05-03 13:59:59.000000000 +0200
 +++ kbuild/src/kmk/Makefile.kmk	2010-05-03 14:28:01.815287097 +0200
-@@ -224,6 +224,12 @@
- kmk_DEFS.hppa32 = CONFIG_WITHOUT_THREADS
- kmk_DEFS.hppa64 = CONFIG_WITHOUT_THREADS
+@@ -221,6 +221,9 @@
+ #kmk_LIBS.solaris = malloc
+ #kmk_DEFS.solaris += HAVE_MALLINFO
  
-+ifeq ($(KBUILD_TARGET), linux)
-+  ifn1of ($(KBUILD_TARGET_ARCH), hppa32 hppa64)
-+    kmk_LIBS += pthread
-+  endif
-+endif
++kmk_DEFS.hppa32 = CONFIG_WITHOUT_THREADS
++kmk_DEFS.hppa64 = CONFIG_WITHOUT_THREADS
 +
  kmk_LIBS.gnukfreebsd.amd64 = pthread
  kmk_LIBS.freebsd.amd64 = pthread
