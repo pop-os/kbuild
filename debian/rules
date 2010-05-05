@@ -3,9 +3,6 @@
 include /usr/share/cdbs/1/rules/debhelper.mk
 include /usr/share/cdbs/1/rules/patchsys-quilt.mk
 
-# workaround for hppa
-export KMK_THREADS_DISABLED := 1
-
 YACC      := YACC=/usr/bin/byacc
 BOOTSTRAP := ASH=/bin/bash ECHO=/bin/echo MKDIR=/bin/mkdir CP=/bin/cp \
   RM=/bin/rm INSTALL=/usr/bin/install $(YACC)
