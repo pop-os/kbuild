@@ -7,8 +7,10 @@ kbuild (1:0.1.98svn2318-7) UNRELEASED; urgency=low
   * Split parts of kbuild-binutils-gold.diff into
     kbuild-hppa-disable-threads.diff.
   * Rename the patches so the filename starts with the patch number.
+  * Add 07_special-chars-build-path.diff to fix FTBFS when the build path
+    contains special characters.
 
- -- Felix Geyer <debfx-pkg@fobos.de>  Thu, 13 May 2010 23:28:08 +0200
+ -- Felix Geyer <debfx-pkg@fobos.de>  Fri, 14 May 2010 01:42:43 +0200
 
 kbuild (1:0.1.98svn2318-6) unstable; urgency=low
 
