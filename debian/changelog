@@ -6,8 +6,9 @@ kbuild (1:0.1.98svn2318-7) UNRELEASED; urgency=low
   [ Felix Geyer ]
   * Split parts of kbuild-binutils-gold.diff into
     kbuild-hppa-disable-threads.diff.
+  * Rename the patches so the filename starts with the patch number.
 
- -- Felix Geyer <debfx-pkg@fobos.de>  Wed, 05 May 2010 17:28:13 +0200
+ -- Felix Geyer <debfx-pkg@fobos.de>  Thu, 13 May 2010 23:28:08 +0200
 
 kbuild (1:0.1.98svn2318-6) unstable; urgency=low
 

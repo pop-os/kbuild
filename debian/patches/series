@@ -1,6 +1,6 @@
-kbuild-gnukfreebsd.diff
-kbuild-sh4.diff
-kbuild-dprintf-posix2008.diff
-kbuild-armv7l.diff
-kbuild-hppa-disable-threads.diff
-kbuild-binutils-gold.diff
+01_gnukfreebsd.diff
+02_sh4.diff
+03_dprintf-posix2008.diff
+04_armv7l.diff
+05_hppa-disable-threads.diff
+06_binutils-gold.diff
