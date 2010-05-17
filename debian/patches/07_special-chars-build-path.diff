@@ -31,7 +31,7 @@ diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/GCC32.kmk kbuild-0.1.98svn2318/
 -	$(QUIET)$(APPEND) $(out).ar-script 'SAVE'
 -	$(QUIET)$(APPEND) $(out).ar-script 'END'
 -	$(QUIET)$(REDIRECT) -rti $(out).ar-script -- $(TOOL_GCC32_AR) -M
-+	$(call xargs,$(QUIET)$(TOOL_GCC32_AR) $(flags) $(out),$(objs))
++	$(QUIET)$(TOOL_GCC32_AR) $(flags) $(out) $(objs)
 +	$(foreach lib,$(othersrc)\
 +		,$(NL)$(TAB)$(call MSG_AR_MERGE,$(target),$(out),$(lib)) \
 +		$(NL)$(TAB)$(QUIET)$(RM_EXT) -f $(dir $(outbase))ar.tmp.dir/* \
@@ -76,7 +76,7 @@ diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/GCC3.kmk kbuild-0.1.98svn2318/k
 -	$(QUIET)$(APPEND) $(out).ar-script 'SAVE'
 -	$(QUIET)$(APPEND) $(out).ar-script 'END'
 -	$(QUIET)$(REDIRECT) -rti $(out).ar-script -- $(TOOL_GCC3_AR) -M
-+	$(call xargs,$(QUIET)$(TOOL_GCC3_AR) $(flags) $(out),$(objs))
++	$(QUIET)$(TOOL_GCC3_AR) $(flags) $(out) $(objs)
 +	$(foreach lib,$(othersrc)\
 +		,$(NL)$(TAB)$(call MSG_AR_MERGE,$(target),$(out),$(lib)) \
 +		$(NL)$(TAB)$(QUIET)$(RM_EXT) -f $(dir $(outbase))ar.tmp.dir/* \
@@ -117,7 +117,7 @@ diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/GCC64.kmk kbuild-0.1.98svn2318/
 -	$(QUIET)$(APPEND) $(out).ar-script 'SAVE'
 -	$(QUIET)$(APPEND) $(out).ar-script 'END'
 -	$(QUIET)$(REDIRECT) -rti $(out).ar-script -- $(TOOL_GCC64_AR) -M
-+	$(call xargs,$(QUIET)$(TOOL_GCC64_AR) $(flags) $(out),$(objs))
++	$(QUIET)$(TOOL_GCC64_AR) $(flags) $(out) $(objs)
 +	$(foreach lib,$(othersrc)\
 +		,$(NL)$(TAB)$(call MSG_AR_MERGE,$(target),$(out),$(lib)) \
 +		$(NL)$(TAB)$(QUIET)$(RM_EXT) -f $(dir $(outbase))ar.tmp.dir/* \
@@ -158,7 +158,7 @@ diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/GXX32.kmk kbuild-0.1.98svn2318/
 -	$(QUIET)$(APPEND) $(out).ar-script 'SAVE'
 -	$(QUIET)$(APPEND) $(out).ar-script 'END'
 -	$(QUIET)$(REDIRECT) -rti $(out).ar-script -- $(TOOL_GXX32_AR) -M
-+	$(call xargs,$(QUIET)$(TOOL_GXX32_AR) $(flags) $(out),$(objs))
++	$(QUIET)$(TOOL_GXX32_AR) $(flags) $(out) $(objs)
 +	$(foreach lib,$(othersrc)\
 +		,$(NL)$(TAB)$(call MSG_AR_MERGE,$(target),$(out),$(lib)) \
 +		$(NL)$(TAB)$(QUIET)$(RM_EXT) -f $(dir $(outbase))ar.tmp.dir/* \
@@ -203,7 +203,7 @@ diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/GXX3.kmk kbuild-0.1.98svn2318/k
 -	$(QUIET)$(APPEND) $(out).ar-script 'SAVE'
 -	$(QUIET)$(APPEND) $(out).ar-script 'END'
 -	$(QUIET)$(REDIRECT) -rti $(out).ar-script -- $(TOOL_GXX3_AR) -M
-+	$(call xargs,$(QUIET)$(TOOL_GXX3_AR) $(flags) $(out),$(objs))
++	$(QUIET)$(TOOL_GXX3_AR) $(flags) $(out) $(objs)
 +	$(foreach lib,$(othersrc)\
 +		,$(NL)$(TAB)$(call MSG_AR_MERGE,$(target),$(out),$(lib)) \
 +		$(NL)$(TAB)$(QUIET)$(RM_EXT) -f $(dir $(outbase))ar.tmp.dir/* \
@@ -244,7 +244,7 @@ diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/GXX64.kmk kbuild-0.1.98svn2318/
 -	$(QUIET)$(APPEND) $(out).ar-script 'SAVE'
 -	$(QUIET)$(APPEND) $(out).ar-script 'END'
 -	$(QUIET)$(REDIRECT) -rti $(out).ar-script -- $(TOOL_GXX64_AR) -M
-+	$(call xargs,$(QUIET)$(TOOL_GXX64_AR) $(flags) $(out),$(objs))
++	$(QUIET)$(TOOL_GXX64_AR) $(flags) $(out) $(objs)
 +	$(foreach lib,$(othersrc)\
 +		,$(NL)$(TAB)$(call MSG_AR_MERGE,$(target),$(out),$(lib)) \
 +		$(NL)$(TAB)$(QUIET)$(RM_EXT) -f $(dir $(outbase))ar.tmp.dir/* \
@@ -285,7 +285,7 @@ diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/MINGW32.kmk kbuild-0.1.98svn231
 -	$(QUIET)$(APPEND) $(out).ar-script 'SAVE'
 -	$(QUIET)$(APPEND) $(out).ar-script 'END'
 -	$(QUIET)$(TOOL_MINGW32_AR) -M < $(out).ar-script
-+	$(call xargs,$(QUIET)$(TOOL_MINGW32_AR) $(flags) $(out),$(objs))
++	$(QUIET)$(TOOL_MINGW32_AR) $(flags) $(out) $(objs)
 +	$(foreach lib,$(othersrc)\
 +		,$(NL)$(TAB)$(call MSG_AR_MERGE,$(target),$(out),$(lib)) \
 +		$(NL)$(TAB)$(QUIET)$(RM_EXT) -f $(dir $(outbase))ar.tmp.dir/* \
@@ -326,7 +326,7 @@ diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/XGCCAMD64LINUX.kmk kbuild-0.1.9
 -	$(QUIET)$(APPEND) $(out).ar-script 'SAVE'
 -	$(QUIET)$(APPEND) $(out).ar-script 'END'
 -	$(QUIET)$(REDIRECT) -rti $(out).ar-script -- $(TOOL_XGCCAMD64LINUX_AR) -M
-+	$(call xargs,$(QUIET)$(TOOL_XGCCAMD64LINUX_AR) $(flags) $(out),$(objs))
++	$(QUIET)$(TOOL_XGCCAMD64LINUX_AR) $(flags) $(out) $(objs)
 +	$(foreach lib,$(othersrc)\
 +		,$(NL)$(TAB)$(call MSG_AR_MERGE,$(target),$(out),$(lib)) \
 +		$(NL)$(TAB)$(QUIET)$(RM_EXT) -f $(dir $(outbase))ar.tmp.dir/* \
