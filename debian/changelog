@@ -1,4 +1,4 @@
-kbuild (1:0.1.98svn2318-7) UNRELEASED; urgency=low
+kbuild (1:0.1.98svn2318-7) unstable; urgency=low
 
   [ Michael Meskes ]
   * Remove hppa workaround that is no longer needed.
@@ -10,7 +10,7 @@ kbuild (1:0.1.98svn2318-7) UNRELEASED; urgency=low
   * Add 07_special-chars-build-path.diff to fix FTBFS when the build path
     contains special characters.
 
- -- Felix Geyer <debfx-pkg@fobos.de>  Fri, 14 May 2010 01:42:43 +0200
+ -- Michael Meskes <meskes@debian.org>  Tue, 18 May 2010 17:41:46 +0200
 
 kbuild (1:0.1.98svn2318-6) unstable; urgency=low
 
