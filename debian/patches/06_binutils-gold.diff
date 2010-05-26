@@ -15,6 +15,6 @@ diff -Nur kbuild.orig/src/kmk/Makefile.kmk kbuild/src/kmk/Makefile.kmk
 +  endif
 +endif
 +
- kmk_LIBS.gnukfreebsd.amd64 = pthread
+ kmk_DEFS.gnukfreebsd = CONFIG_WITHOUT_THREADS
  kmk_LIBS.freebsd.amd64 = pthread
  

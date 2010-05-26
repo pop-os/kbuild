@@ -320,14 +320,12 @@ Index: kbuild-0.1.98svn2318/src/kmk/Makefile.kmk
  kmkmissing_SOURCES.linux += \
  	kmkbuiltin/strlcpy.c
 
-@@ -218,7 +221,10 @@
+@@ -218,7 +221,8 @@
  #kmk_LIBS.solaris = malloc
  #kmk_DEFS.solaris += HAVE_MALLINFO
 
-+kmk_LIBS.gnukfreebsd.amd64 = pthread
++kmk_DEFS.gnukfreebsd = CONFIG_WITHOUT_THREADS
  kmk_LIBS.freebsd.amd64 = pthread
-+
-+kmk_DEFS.gnukfreebsd.x86 = CONFIG_WITHOUT_THREADS
  kmk_DEFS.freebsd.x86 = CONFIG_WITHOUT_THREADS
 
  #

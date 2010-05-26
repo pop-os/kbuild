@@ -1,3 +1,9 @@
+kbuild (1:0.1.98svn2318-8) unstable; urgency=low
+
+  * Disable threads on 64bit kfreebsd systems.
+
+ -- Michael Meskes <meskes@debian.org>  Wed, 26 May 2010 16:53:48 +0200
+
 kbuild (1:0.1.98svn2318-7) unstable; urgency=low
 
   [ Michael Meskes ]
