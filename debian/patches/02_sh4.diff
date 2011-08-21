@@ -2,10 +2,9 @@ Description: Fix FTBFS on sh4
 Author: Nobuhiro Iwamatsu <iwamatsu@nigauri.org>
 Bug-Debian: http://bugs.debian.org/544974
 
-diff -urN a/kBuild/env.sh b/kBuild/env.sh
---- a/kBuild/env.sh	2009-04-09 23:40:04.000000000 +0000
-+++ b/kBuild/env.sh	2009-09-03 01:26:04.000000000 +0000
-@@ -364,6 +364,9 @@
+--- a/kBuild/env.sh
++++ b/kBuild/env.sh
+@@ -368,6 +368,9 @@ if test -z "$KBUILD_HOST_ARCH"; then
          alpha)
              KBUILD_HOST_ARCH='alpha'
              ;;
@@ -15,10 +14,9 @@ diff -urN a/kBuild/env.sh b/kBuild/env.sh
  
          *)  echo "$0: unknown cpu/arch - $KBUILD_HOST_ARCH" 1>&${ERR_REDIR}
              sleep 1
-diff -urN a/kBuild/header.kmk b/kBuild/header.kmk
---- a/kBuild/header.kmk	2009-04-09 23:40:04.000000000 +0000
-+++ b/kBuild/header.kmk	2009-09-03 07:43:32.000000000 +0000
-@@ -177,7 +177,7 @@
+--- a/kBuild/header.kmk
++++ b/kBuild/header.kmk
+@@ -189,7 +189,7 @@ KBUILD_BLD_TYPES := release profile debu
  # build types. (PORTME)
  #
  KBUILD_OSES   := darwin dos dragonfly freebsd gnukfreebsd l4 linux netbsd nt openbsd os2 solaris win os-agnostic
@@ -27,10 +25,9 @@ diff -urN a/kBuild/header.kmk b/kBuild/header.kmk
  
  
  #
-diff -urN a/src/lib/k/kDefs.h b/src/lib/k/kDefs.h
---- a/src/lib/k/kDefs.h	2009-04-09 23:38:32.000000000 +0000
-+++ b/src/lib/k/kDefs.h	2009-09-03 07:24:33.000000000 +0000
-@@ -162,6 +162,8 @@
+--- a/src/lib/k/kDefs.h
++++ b/src/lib/k/kDefs.h
+@@ -166,6 +166,8 @@
  #define K_ARCH_SPARC_32         (17 | K_ARCH_BIT_32 | K_ARCH_END_BIG)
  /** 64-bit SPARC. */
  #define K_ARCH_SPARC_64         (18 | K_ARCH_BIT_64 | K_ARCH_END_BI)
@@ -39,7 +36,7 @@ diff -urN a/src/lib/k/kDefs.h b/src/lib/k/kDefs.h
  /** The end of the valid architecture values (exclusive). */
  #define K_ARCH_MAX              (19)
  /** @} */
-@@ -202,6 +204,8 @@
+@@ -206,6 +208,8 @@
  #  define K_ARCH    K_ARCH_S390_64
  # elif defined(__s390__)
  #  define K_ARCH    K_ARCH_S390_32

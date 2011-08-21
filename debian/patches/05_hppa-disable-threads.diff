@@ -1,10 +1,9 @@
 Description: Fix FTBFS on hppa by disabling threads.
 Author: Felix Geyer <debfx-pkg@fobos.de>
 
-diff -Nur kbuild.orig/src/kmk/Makefile.kmk kbuild/src/kmk/Makefile.kmk
---- kbuild.orig/src/kmk/Makefile.kmk	2010-05-03 13:59:59.000000000 +0200
-+++ kbuild/src/kmk/Makefile.kmk	2010-05-03 14:28:01.815287097 +0200
-@@ -221,6 +221,9 @@
+--- a/src/kmk/Makefile.kmk
++++ b/src/kmk/Makefile.kmk
+@@ -227,6 +227,9 @@ kmk_SOURCES = \
  	vpath.c \
  	remote-stub.c
  

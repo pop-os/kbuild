@@ -4,10 +4,9 @@ Description: kBuild and any package using it FTBFS if the build path contains sp
 Author: Felix Geyer <debfx-pkg@fobos.de>
 Bug: http://svn.netlabs.org/kbuild/ticket/94
 
-diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/GCC32.kmk kbuild-0.1.98svn2318/kBuild/tools/GCC32.kmk
---- kbuild-0.1.98svn2318.orig/kBuild/tools/GCC32.kmk	2010-03-09 18:13:07.000000000 +0100
-+++ kbuild-0.1.98svn2318/kBuild/tools/GCC32.kmk	2010-05-14 01:37:44.304539222 +0200
-@@ -39,6 +39,7 @@
+--- a/kBuild/tools/GCC32.kmk
++++ b/kBuild/tools/GCC32.kmk
+@@ -39,6 +39,7 @@ TOOL_GCC32_CC  ?= gcc$(HOSTSUFF_EXE) -m3
  TOOL_GCC32_CXX ?= g++$(HOSTSUFF_EXE) -m32
  TOOL_GCC32_AS  ?= gcc$(HOSTSUFF_EXE) -m32
  TOOL_GCC32_AR  ?= ar$(HOSTSUFF_EXE)
@@ -15,7 +14,7 @@ diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/GCC32.kmk kbuild-0.1.98svn2318/
  TOOL_GCC32_LD  ?= gcc$(HOSTSUFF_EXE) -m32
  TOOL_GCC32_LD_SYSMOD ?= ld$(HOSTSUFF_EXE)
  ifndef TOOL_GCC32_LDFLAGS.$(KBUILD_TARGET)
-@@ -214,20 +215,21 @@
+@@ -226,20 +227,21 @@ endef
  # @param    $(deps)		Other dependencies.
  # @param    $(othersrc) Unhandled sources.
  # @param    $(outbase)  Output basename (full). Use this for list files and such.
@@ -48,10 +47,9 @@ diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/GCC32.kmk kbuild-0.1.98svn2318/
  endef
  
  
-diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/GCC3.kmk kbuild-0.1.98svn2318/kBuild/tools/GCC3.kmk
---- kbuild-0.1.98svn2318.orig/kBuild/tools/GCC3.kmk	2010-03-09 18:13:07.000000000 +0100
-+++ kbuild-0.1.98svn2318/kBuild/tools/GCC3.kmk	2010-05-14 01:37:34.553288952 +0200
-@@ -42,6 +42,7 @@
+--- a/kBuild/tools/GCC3.kmk
++++ b/kBuild/tools/GCC3.kmk
+@@ -42,6 +42,7 @@ ifeq ($(KBUILD_TARGET),solaris) ## @todo
  else
   TOOL_GCC3_AR ?= ar$(HOSTSUFF_EXE)
  endif
@@ -59,7 +57,7 @@ diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/GCC3.kmk kbuild-0.1.98svn2318/k
  ifeq ($(KBUILD_TARGET),os2)
   TOOL_GCC3_AR_IMP ?= emximp$(HOSTSTUFF_EXE)
  else
-@@ -218,21 +219,21 @@
+@@ -229,21 +230,21 @@ endef
  # @param    $(deps)		Other dependencies.
  # @param    $(othersrc) Unhandled sources.
  # @param    $(outbase)  Output basename (full). Use this for list files and such.
@@ -93,10 +91,9 @@ diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/GCC3.kmk kbuild-0.1.98svn2318/k
  endef
  
  
-diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/GCC64.kmk kbuild-0.1.98svn2318/kBuild/tools/GCC64.kmk
---- kbuild-0.1.98svn2318.orig/kBuild/tools/GCC64.kmk	2010-03-09 18:13:07.000000000 +0100
-+++ kbuild-0.1.98svn2318/kBuild/tools/GCC64.kmk	2010-05-14 01:37:52.123293038 +0200
-@@ -39,6 +39,7 @@
+--- a/kBuild/tools/GCC64.kmk
++++ b/kBuild/tools/GCC64.kmk
+@@ -39,6 +39,7 @@ TOOL_GCC64_CC  ?= gcc$(HOSTSUFF_EXE) -m6
  TOOL_GCC64_CXX ?= g++$(HOSTSUFF_EXE) -m64
  TOOL_GCC64_AS  ?= gcc$(HOSTSUFF_EXE) -m64
  TOOL_GCC64_AR  ?= ar$(HOSTSUFF_EXE)
@@ -104,7 +101,7 @@ diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/GCC64.kmk kbuild-0.1.98svn2318/
  TOOL_GCC64_LD  ?= gcc$(HOSTSUFF_EXE) -m64
  TOOL_GCC64_LD_SYSMOD ?= ld$(HOSTSUFF_EXE)
  ifndef TOOL_GCC64_LDFLAGS.$(KBUILD_TARGET)
-@@ -214,17 +215,21 @@
+@@ -225,17 +226,21 @@ endef
  # @param    $(deps)		Other dependencies.
  # @param    $(othersrc) Unhandled sources.
  # @param    $(outbase)  Output basename (full). Use this for list files and such.
@@ -134,10 +131,9 @@ diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/GCC64.kmk kbuild-0.1.98svn2318/
  endef
  
  
-diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/GXX32.kmk kbuild-0.1.98svn2318/kBuild/tools/GXX32.kmk
---- kbuild-0.1.98svn2318.orig/kBuild/tools/GXX32.kmk	2010-03-09 18:13:07.000000000 +0100
-+++ kbuild-0.1.98svn2318/kBuild/tools/GXX32.kmk	2010-05-14 01:38:07.492263847 +0200
-@@ -39,6 +39,7 @@
+--- a/kBuild/tools/GXX32.kmk
++++ b/kBuild/tools/GXX32.kmk
+@@ -39,6 +39,7 @@ TOOL_GXX32_CC  ?= gcc$(HOSTSUFF_EXE) -m3
  TOOL_GXX32_CXX ?= g++$(HOSTSUFF_EXE) -m32
  TOOL_GXX32_AS  ?= gcc$(HOSTSUFF_EXE) -m32
  TOOL_GXX32_AR  ?= ar$(HOSTSUFF_EXE)
@@ -145,7 +141,7 @@ diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/GXX32.kmk kbuild-0.1.98svn2318/
  TOOL_GXX32_LD  ?= g++$(HOSTSUFF_EXE) -m32
  TOOL_GXX32_LD_SYSMOD ?= ld$(HOSTSUFF_EXE)
  ifndef TOOL_GXX32_LDFLAGS.$(KBUILD_TARGET)
-@@ -213,20 +214,21 @@
+@@ -225,20 +226,21 @@ endef
  # @param    $(deps)		Other dependencies.
  # @param    $(othersrc) Unhandled sources.
  # @param    $(outbase)  Output basename (full). Use this for list files and such.
@@ -178,10 +174,9 @@ diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/GXX32.kmk kbuild-0.1.98svn2318/
  endef
  
  
-diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/GXX3.kmk kbuild-0.1.98svn2318/kBuild/tools/GXX3.kmk
---- kbuild-0.1.98svn2318.orig/kBuild/tools/GXX3.kmk	2010-03-09 18:13:07.000000000 +0100
-+++ kbuild-0.1.98svn2318/kBuild/tools/GXX3.kmk	2010-05-14 01:37:58.274466970 +0200
-@@ -42,6 +42,7 @@
+--- a/kBuild/tools/GXX3.kmk
++++ b/kBuild/tools/GXX3.kmk
+@@ -42,6 +42,7 @@ ifeq ($(KBUILD_TARGET),solaris)
  else
   TOOL_GXX3_AR ?= ar$(HOSTSUFF_EXE)
  endif
@@ -189,7 +184,7 @@ diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/GXX3.kmk kbuild-0.1.98svn2318/k
  ifeq ($(KBUILD_TARGET),os2)
   TOOL_GXX3_AR_IMP ?= emximp$(HOSTSTUFF_EXE)
  else
-@@ -218,21 +219,21 @@
+@@ -229,21 +230,21 @@ endef
  # @param    $(deps)		Other dependencies.
  # @param    $(othersrc) Unhandled sources.
  # @param    $(outbase)  Output basename (full). Use this for list files and such.
@@ -223,10 +218,9 @@ diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/GXX3.kmk kbuild-0.1.98svn2318/k
  endef
  
  
-diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/GXX64.kmk kbuild-0.1.98svn2318/kBuild/tools/GXX64.kmk
---- kbuild-0.1.98svn2318.orig/kBuild/tools/GXX64.kmk	2010-03-09 18:13:07.000000000 +0100
-+++ kbuild-0.1.98svn2318/kBuild/tools/GXX64.kmk	2010-05-14 01:38:16.490789670 +0200
-@@ -39,6 +39,7 @@
+--- a/kBuild/tools/GXX64.kmk
++++ b/kBuild/tools/GXX64.kmk
+@@ -39,6 +39,7 @@ TOOL_GXX64_CC  ?= gcc$(HOSTSUFF_EXE) -m6
  TOOL_GXX64_CXX ?= g++$(HOSTSUFF_EXE) -m64
  TOOL_GXX64_AS  ?= gcc$(HOSTSUFF_EXE) -m64
  TOOL_GXX64_AR  ?= ar$(HOSTSUFF_EXE)
@@ -234,7 +228,7 @@ diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/GXX64.kmk kbuild-0.1.98svn2318/
  TOOL_GXX64_LD  ?= g++$(HOSTSUFF_EXE) -m64
  TOOL_GXX64_LD_SYSMOD ?= ld$(HOSTSUFF_EXE)
  ifndef TOOL_GXX64_LDFLAGS.$(KBUILD_TARGET)
-@@ -213,17 +214,21 @@
+@@ -225,17 +226,21 @@ endef
  # @param    $(deps)		Other dependencies.
  # @param    $(othersrc) Unhandled sources.
  # @param    $(outbase)  Output basename (full). Use this for list files and such.
@@ -264,10 +258,9 @@ diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/GXX64.kmk kbuild-0.1.98svn2318/
  endef
  
  
-diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/MINGW32.kmk kbuild-0.1.98svn2318/kBuild/tools/MINGW32.kmk
---- kbuild-0.1.98svn2318.orig/kBuild/tools/MINGW32.kmk	2010-03-09 18:13:07.000000000 +0100
-+++ kbuild-0.1.98svn2318/kBuild/tools/MINGW32.kmk	2010-05-14 01:38:49.021059125 +0200
-@@ -81,6 +81,7 @@
+--- a/kBuild/tools/MINGW32.kmk
++++ b/kBuild/tools/MINGW32.kmk
+@@ -81,6 +81,7 @@ TOOL_MINGW32_CC  ?= $(TOOL_MINGW32_PREFI
  TOOL_MINGW32_CXX ?= $(TOOL_MINGW32_PREFIX)g++$(TOOL_MINGW32_HOSTSUFF_EXE)
  TOOL_MINGW32_AS  ?= $(TOOL_MINGW32_PREFIX)gcc$(TOOL_MINGW32_HOSTSUFF_EXE)
  TOOL_MINGW32_AR  ?= $(TOOL_MINGW32_PREFIX)ar$(TOOL_MINGW32_HOSTSUFF_EXE)
@@ -275,7 +268,7 @@ diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/MINGW32.kmk kbuild-0.1.98svn231
  ifndef TOOL_MINGW32_XCOMPILE# The gentoo package doesn't have g++.
  TOOL_MINGW32_LD  ?= $(TOOL_MINGW32_PREFIX)g++$(TOOL_MINGW32_HOSTSUFF_EXE)
  else
-@@ -200,17 +201,21 @@
+@@ -200,17 +201,21 @@ endef
  # @param    $(deps)     Other dependencies.
  #
  # @param    $(outbase)  Output basename (full). Use this for list files and such.
@@ -305,10 +298,9 @@ diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/MINGW32.kmk kbuild-0.1.98svn231
  endef
  
  
-diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/XGCCAMD64LINUX.kmk kbuild-0.1.98svn2318/kBuild/tools/XGCCAMD64LINUX.kmk
---- kbuild-0.1.98svn2318.orig/kBuild/tools/XGCCAMD64LINUX.kmk	2010-03-09 18:13:07.000000000 +0100
-+++ kbuild-0.1.98svn2318/kBuild/tools/XGCCAMD64LINUX.kmk	2010-05-14 01:39:16.453288930 +0200
-@@ -71,6 +71,7 @@
+--- a/kBuild/tools/XGCCAMD64LINUX.kmk
++++ b/kBuild/tools/XGCCAMD64LINUX.kmk
+@@ -71,6 +71,7 @@ TOOL_XGCCAMD64LINUX_CC  ?= $(TOOL_XGCCAM
  TOOL_XGCCAMD64LINUX_CXX ?= $(TOOL_XGCCAMD64LINUX_PREFIX)g++$(TOOL_XGCCAMD64LINUX_HOSTSUFF_EXE)
  TOOL_XGCCAMD64LINUX_AS  ?= $(TOOL_XGCCAMD64LINUX_PREFIX)gcc$(TOOL_XGCCAMD64LINUX_HOSTSUFF_EXE)
  TOOL_XGCCAMD64LINUX_AR  ?= $(TOOL_XGCCAMD64LINUX_PREFIX)ar$(TOOL_XGCCAMD64LINUX_HOSTSUFF_EXE)
@@ -316,7 +308,7 @@ diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/XGCCAMD64LINUX.kmk kbuild-0.1.9
  TOOL_XGCCAMD64LINUX_LD  ?= $(TOOL_XGCCAMD64LINUX_PREFIX)g++$(TOOL_XGCCAMD64LINUX_HOSTSUFF_EXE)
  TOOL_XGCCAMD64LINUX_LD_SYSMOD ?= $(TOOL_XGCCAMD64LINUX_PREFIX)ld$(TOOL_XGCCAMD64LINUX_HOSTSUFF_EXE)
  
-@@ -197,17 +198,21 @@
+@@ -197,17 +198,21 @@ endef
  # @param    $(deps)		Other dependencies.
  # @param    $(othersrc) Unhandled sources.
  # @param    $(outbase)  Output basename (full). Use this for list files and such.

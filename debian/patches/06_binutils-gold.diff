@@ -2,10 +2,9 @@ Description: Fix FTBFS with binutils-gold
 Author: Felix Geyer <debfx-pkg@fobos.de>
 Bug-Debian: http://bugs.debian.org/554937
 
-diff -Nur kbuild.orig/src/kmk/Makefile.kmk kbuild/src/kmk/Makefile.kmk
---- kbuild.orig/src/kmk/Makefile.kmk	2010-05-03 13:59:59.000000000 +0200
-+++ kbuild/src/kmk/Makefile.kmk	2010-05-03 14:28:01.815287097 +0200
-@@ -224,6 +224,12 @@
+--- a/src/kmk/Makefile.kmk
++++ b/src/kmk/Makefile.kmk
+@@ -230,6 +230,12 @@ kmk_SOURCES = \
  kmk_DEFS.hppa32 = CONFIG_WITHOUT_THREADS
  kmk_DEFS.hppa64 = CONFIG_WITHOUT_THREADS
  
