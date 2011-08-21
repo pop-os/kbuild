@@ -1,10 +1,10 @@
-/* $Id: kbuild.c 2248 2009-01-19 04:34:56Z bird $ */
+/* $Id: kbuild.c 2540 2011-08-02 20:13:24Z bird $ */
 /** @file
  * kBuild specific make functionality.
  */
 
 /*
- * Copyright (c) 2006-2009 knut st. osmundsen <bird-kBuild-spamix@anduin.net>
+ * Copyright (c) 2006-2010 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
  *
  * This file is part of kBuild.
  *
@@ -154,7 +154,7 @@ void init_kbuild(int argc, char **argv)
                     memcpy(szTmp, pszImageName, cchImageName + 1);
                     rc = 0;
                 }
-            }    
+            }
 
         }
 # endif
@@ -2109,22 +2109,33 @@ func_kbuild_source_one(char *o, char **argv, const char *pszFuncName)
     memcpy(pszDst, "_CMDS_", sizeof("_CMDS_"));
     pVar = kbuild_get_recursive_variable(pszSrcVar);
     do_variable_definition_2(NILF, pszDstVar, pVar->value, pVar->value_length,
-                             !pVar->recursive, 0, o_file, f_simple, 0 /* !target_var */);
+                             !pVar->recursive, 0, o_local, f_simple, 0 /* !target_var */);
+    do_variable_definition_2(NILF, "kbsrc_cmds", pVar->value, pVar->value_length,
+                             !pVar->recursive, 0, o_local, f_simple, 0 /* !target_var */);
 
     memcpy(pszSrc, "_OUTPUT", sizeof("_OUTPUT"));
     memcpy(pszDst, "_OUTPUT_", sizeof("_OUTPUT_"));
     pVar = kbuild_get_recursive_variable(pszSrcVar);
     pOutput = do_variable_definition_2(NILF, pszDstVar, pVar->value, pVar->value_length,
-                                       !pVar->recursive, 0, o_file, f_simple, 0 /* !target_var */);
+                                       !pVar->recursive, 0, o_local, f_simple, 0 /* !target_var */);
+    pOutput = do_variable_definition_2(NILF, "kbsrc_output", pVar->value, pVar->value_length,
+                                       !pVar->recursive, 0, o_local, f_simple, 0 /* !target_var */);
 
     memcpy(pszSrc, "_OUTPUT_MAYBE", sizeof("_OUTPUT_MAYBE"));
     memcpy(pszDst, "_OUTPUT_MAYBE_", sizeof("_OUTPUT_MAYBE_"));
     pVar = kbuild_query_recursive_variable(pszSrcVar);
     if (pVar)
+    {
         pOutputMaybe = do_variable_definition_2(NILF, pszDstVar, pVar->value, pVar->value_length,
-                                                !pVar->recursive, 0, o_file, f_simple, 0 /* !target_var */);
+                                                !pVar->recursive, 0, o_local, f_simple, 0 /* !target_var */);
+        pOutputMaybe = do_variable_definition_2(NILF, "kbsrc_output_maybe", pVar->value, pVar->value_length,
+                                                !pVar->recursive, 0, o_local, f_simple, 0 /* !target_var */);
+    }
     else
-        pOutputMaybe = do_variable_definition_2(NILF, pszDstVar, "", 0, 1, 0, o_file, f_simple, 0 /* !target_var */);
+    {
+        pOutputMaybe = do_variable_definition_2(NILF, pszDstVar, "", 0, 1, 0, o_local, f_simple, 0 /* !target_var */);
+        pOutputMaybe = do_variable_definition_2(NILF, "kbsrc_output_maybe", "", 0, 1, 0, o_local, f_simple, 0 /* !target_var */);
+    }
 
     memcpy(pszSrc, "_DEPEND", sizeof("_DEPEND"));
     memcpy(pszDst, "_DEPEND_", sizeof("_DEPEND_"));
@@ -2137,7 +2148,10 @@ func_kbuild_source_one(char *o, char **argv, const char *pszFuncName)
     memcpy(psz, pSource->value, pSource->value_length + 1);
     do_variable_definition_2(NILF, pszDstVar, pszVal, pVar->value_length + 1 + pDeps->value_length + 1 + pSource->value_length,
                              !pVar->recursive && !pDeps->recursive && !pSource->recursive,
-                             pszVal, o_file, f_simple, 0 /* !target_var */);
+                             NULL, o_local, f_simple, 0 /* !target_var */);
+    do_variable_definition_2(NILF, "kbsrc_depend", pszVal, pVar->value_length + 1 + pDeps->value_length + 1 + pSource->value_length,
+                             !pVar->recursive && !pDeps->recursive && !pSource->recursive,
+                             pszVal, o_local, f_simple, 0 /* !target_var */);
 
     memcpy(pszSrc, "_DEPORD", sizeof("_DEPORD"));
     memcpy(pszDst, "_DEPORD_", sizeof("_DEPORD_"));
@@ -2151,7 +2165,11 @@ func_kbuild_source_one(char *o, char **argv, const char *pszFuncName)
     do_variable_definition_2(NILF, pszDstVar, pszVal,
                              pVar->value_length + 1 + pDirDep->value_length + 1 + pOrderDeps->value_length,
                              !pVar->recursive && !pDirDep->recursive && !pOrderDeps->recursive,
-                             pszVal, o_file, f_simple, 0 /* !target_var */);
+                             NULL, o_local, f_simple, 0 /* !target_var */);
+    do_variable_definition_2(NILF, "kbsrc_depord", pszVal,
+                             pVar->value_length + 1 + pDirDep->value_length + 1 + pOrderDeps->value_length,
+                             !pVar->recursive && !pDirDep->recursive && !pOrderDeps->recursive,
+                             pszVal, o_local, f_simple, 0 /* !target_var */);
 
     /*
     _OUT_FILES      += $($(target)_$(source)_OUTPUT_) $($(target)_$(source)_OUTPUT_MAYBE_)
@@ -2472,16 +2490,19 @@ func_kbuild_expand_template(char *o, char **argv, const char *pszFuncName)
     aKeys[0].cch = 0;
     aKeys[0].psz = NULL;
 
+    /* .$(bld_type) */
     aKeys[1].cch = cchBldType + 1;
     aKeys[1].psz = xmalloc (aKeys[1].cch + 1);
     aKeys[1].psz[0] = '.';
     memcpy(aKeys[1].psz + 1, pszBldType, cchBldType + 1);
 
+    /* .$(bld_trg) */
     aKeys[2].cch = cchBldTrg + 1;
     aKeys[2].psz = xmalloc (aKeys[2].cch + 1);
     aKeys[2].psz[0] = '.';
     memcpy(aKeys[2].psz + 1, pszBldTrg, cchBldTrg + 1);
 
+    /* .$(bld_trg).$(bld_trg_arch) */
     aKeys[3].cch = cchBldTrg + 1 + cchBldTrgArch + 1;
     aKeys[3].psz = xmalloc (aKeys[3].cch + 1);
     aKeys[3].psz[0] = '.';
@@ -2489,11 +2510,13 @@ func_kbuild_expand_template(char *o, char **argv, const char *pszFuncName)
     aKeys[3].psz[1 + cchBldTrg] = '.';
     memcpy(aKeys[3].psz + 1 + cchBldTrg + 1, pszBldTrgArch, cchBldTrgArch + 1);
 
+    /* .$(bld_trg_cpu) */
     aKeys[4].cch = cchBldTrgCpu + 1;
     aKeys[4].psz = xmalloc (aKeys[4].cch + 1);
     aKeys[4].psz[0] = '.';
     memcpy(aKeys[4].psz + 1, pszBldTrgCpu, cchBldTrgCpu + 1);
 
+    /* .$(bld_trg_arch) */
     aKeys[5].cch = cchBldTrgArch + 1;
     aKeys[5].psz = xmalloc (aKeys[5].cch + 1);
     aKeys[5].psz[0] = '.';

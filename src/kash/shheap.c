@@ -1,10 +1,10 @@
-/* $Id: shheap.c 2308 2009-03-01 10:01:02Z bird $ */
+/* $Id: shheap.c 2416 2010-09-14 00:30:30Z bird $ */
 /** @file
  * The shell memory heap methods.
  */
 
 /*
- * Copyright (c) 2009  knut st. osmundsen <bird-kBuild-spamix@anduin.net>
+ * Copyright (c) 2009-2010 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
  *
  *
  * This file is part of kBuild.
@@ -94,7 +94,7 @@ typedef struct shmemchunk
 *******************************************************************************/
 #define SHHEAP_ALIGN(sz)        (((sz) + 31) & ~(size_t)31)
 #define SHHEAP_CHUNK_ALIGN(sz)  (((sz) + 0xffff) & ~(size_t)0xffff)
-#define SHHEAP_MIN_CHUNK        0x10000 //(1024*1024)
+#define SHHEAP_MIN_CHUNK        0x80000 //(1024*1024)
 #ifdef NDEBUG
 # define SHHEAP_CHECK()         do { } while (0)
 # define SHHEAP_CHECK_2()       do { } while (0)
@@ -122,12 +122,13 @@ static shmemchunk  *g_sh_heap;
 #endif
 
 
-int shheap_init(void)
+int shheap_init(void *phead)
 {
     int rc;
 #ifdef SHHEAP_IN_USE
     SHHEAP_ASSERT(SHHEAP_ALIGN(sizeof(shmemhdr)) == sizeof(shmemhdr));
     rc = shmtx_init(&g_sh_heap_mtx);
+    g_sh_heap = (shmemchunk *)phead; /* non-zero on fork() */
 #else
     rc = 0;
 #endif
@@ -137,6 +138,17 @@ int shheap_init(void)
 #ifdef SHHEAP_IN_USE
 
 # if K_OS == K_OS_WINDOWS
+
+/**
+ * Get the head so the child can pass it to shheap_init() after fork().
+ *
+ * @returns g_sh_heap.
+ */
+void *shheap_get_head(void)
+{
+    return g_sh_heap;
+}
+
 /**
  * Copies the heap into the child process.
  *
@@ -160,7 +172,7 @@ int shheap_fork_copy_to_child(void *hChild)
         if (chld_chnk != chunk)
         {
             err = GetLastError();
-            fprintf(stderr, "shfork: VirtualAllocEx(,%p,%p,) -> %d\n", chunk, chunk->size, err);
+            fprintf(stderr, "shfork: VirtualAllocEx(,%p,%p,) -> %p/%d\n", chunk, chunk->size, chld_chnk, err);
             break;
         }
 
@@ -179,8 +191,8 @@ int shheap_fork_copy_to_child(void *hChild)
     errno = EINVAL;
     return -1;
 }
-# endif
 
+# endif /* K_OS == K_OS_WINDOWS */
 
 /**
  * Checks a heap chunk.

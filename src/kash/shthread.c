@@ -1,9 +1,9 @@
-/* $Id: shthread.c 2312 2009-03-02 01:14:43Z bird $ */
+/* $Id: shthread.c 2498 2011-07-22 12:05:57Z bird $ */
 /** @file
  *
  * Shell Thread Management.
  *
- * Copyright (c) 2007-2009  knut st. osmundsen <bird-kBuild-spamix@anduin.net>
+ * Copyright (c) 2007-2010 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
  *
  *
  * This file is part of kBuild.
@@ -101,7 +101,7 @@ struct shinstance *shthread_get_shell(void)
 #if K_OS == K_OS_WINDOWS
     psh = (shinstance *)TlsGetValue(sh_tls);
 #elif K_OS == K_OS_OS2
-    psh = (shinstance *)__libc_TLSGet(iTls)
+    psh = (shinstance *)__libc_TLSGet(sh_tls);
 #else
     psh = (shinstance *)pthread_getspecific(sh_tls);
 #endif

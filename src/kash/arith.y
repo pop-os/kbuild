@@ -56,6 +56,13 @@ void yyerror(const char *);
 #ifdef TESTARITH
 int main(int , char *[]);
 int error(char *);
+#else
+# undef  malloc
+# define malloc(cb)        sh_malloc(NULL, (cb))
+# undef  realloc
+# define realloc(pv,cb)    sh_realloc(NULL, (pv), (cb))
+# undef  free
+# define free(pv)          sh_free(NULL, (pv))
 #endif
 
 %}
@@ -190,8 +197,10 @@ error(s)
 void
 yyerror(const char *s)
 {
-   shinstance *psh = arith_psh;
+    shinstance *psh = arith_psh;
+#ifndef YYBISON /* yyerrok references yyerrstatus which is a local variable in yyparse().*/
 	yyerrok;
+#endif
 	yyclearin;
 	arith_lex_reset();	/* reprime lex */
 /** @todo unlock */

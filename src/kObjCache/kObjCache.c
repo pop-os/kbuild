@@ -1,10 +1,10 @@
-/* $Id: kObjCache.c 2243 2009-01-10 02:24:02Z bird $ */
+/* $Id: kObjCache.c 2463 2011-07-08 11:54:37Z bird $ */
 /** @file
  * kObjCache - Object Cache.
  */
 
 /*
- * Copyright (c) 2007-2009 knut st. osmundsen <bird-kBuild-spamix@anduin.net>
+ * Copyright (c) 2007-2011 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
  *
  * This file is part of kBuild.
  *
@@ -49,6 +49,7 @@
 # ifdef __OS2__
 #  include <unistd.h>
 #  include <sys/wait.h>
+#  include <sys/time.h>
 # endif
 # if defined(_MSC_VER)
 #  include <direct.h>
@@ -63,12 +64,14 @@
 #else
 # include <unistd.h>
 # include <sys/wait.h>
+# include <sys/time.h>
 # ifndef O_BINARY
 #  define O_BINARY 0
 # endif
 #endif
 #if defined(__WIN__)
 # include <Windows.h>
+# include "quoted_spawn.h"
 #endif
 
 #include "crc32.h"
@@ -233,9 +236,15 @@ void *xrealloc(void *pvOld, size_t cb)
 
 char *xstrdup(const char *pszIn)
 {
-    char *psz = strdup(pszIn);
-    if (!psz)
-        FatalDie("out of memory (%d)\n", (int)strlen(pszIn));
+    char *psz;
+    if (pszIn)
+    {
+        psz = strdup(pszIn);
+        if (!psz)
+            FatalDie("out of memory (%d)\n", (int)strlen(pszIn));
+    }
+    else
+        psz = NULL;
     return psz;
 }
 #endif
@@ -250,6 +259,27 @@ void *xmallocz(size_t cb)
 
 
 
+
+
+/**
+ * Returns a millisecond timestamp.
+ *
+ * @returns Millisecond timestamp.
+ */
+static uint32_t NowMs(void)
+{
+#if defined(__WIN__)
+    return GetTickCount();
+#else
+    int             iSavedErrno = errno;
+    struct timeval  tv          = {0, 0};
+
+    gettimeofday(&tv, NULL);
+    errno = iSavedErrno;
+
+    return tv.tv_sec * 1000 + tv.tv_usec / 1000;
+#endif
+}
 
 
 /**
@@ -324,9 +354,51 @@ static char *MakePathFromDirAndFile(const char *pszName, const char *pszDir)
  * @returns 1 if equal, 0 otherwise.
  * @param   pszPath1    The first path.
  * @param   pszPath2    The second path.
+ */
+static int ArePathsIdentical(const char *pszPath1, const char *pszPath2)
+{
+#if defined(__OS2__) || defined(__WIN__)
+    if (stricmp(pszPath1, pszPath2))
+    {
+        /* Slashes may differ, compare char by char. */
+        const char *psz1 = pszPath1;
+        const char *psz2 = pszPath2;
+        for (;;)
+        {
+            if (*psz1 != *psz2)
+            {
+                if (    tolower(*psz1) != tolower(*psz2)
+                    &&  toupper(*psz1) != toupper(*psz2)
+                    &&  *psz1 != '/'
+                    &&  *psz1 != '\\'
+                    &&  *psz2 != '/'
+                    &&  *psz2 != '\\')
+                    return 0;
+            }
+            if (!*psz1)
+                break;
+            psz1++;
+            psz2++;
+        }
+    }
+    return 1;
+#else
+    return !strcmp(pszPath1, pszPath2);
+#endif
+}
+
+/**
+ * Compares two path strings to see if they are identical.
+ *
+ * This doesn't do anything fancy, just the case ignoring and
+ * slash unification.
+ *
+ * @returns 1 if equal, 0 otherwise.
+ * @param   pszPath1    The first path.
+ * @param   pszPath2    The second path.
  * @param   cch         The number of characters to compare.
  */
-static int ArePathsIdentical(const char *pszPath1, const char *pszPath2, size_t cch)
+static int ArePathsIdenticalN(const char *pszPath1, const char *pszPath2, size_t cch)
 {
 #if defined(__OS2__) || defined(__WIN__)
     if (strnicmp(pszPath1, pszPath2, cch))
@@ -334,7 +406,7 @@ static int ArePathsIdentical(const char *pszPath1, const char *pszPath2, size_t 
         /* Slashes may differ, compare char by char. */
         const char *psz1 = pszPath1;
         const char *psz2 = pszPath2;
-        for (;cch; psz1++, psz2++, cch--)
+        for ( ; cch; psz1++, psz2++, cch--)
         {
             if (*psz1 != *psz2)
             {
@@ -371,7 +443,7 @@ static char *CalcRelativeName(const char *pszPath, const char *pszDir)
     /*
      * This is indeed a bit tricky, so we'll try the easy way first...
      */
-    if (ArePathsIdentical(pszPath, pszDir, cchDir))
+    if (ArePathsIdenticalN(pszPath, pszDir, cchDir))
     {
         if (pszPath[cchDir])
             pszRet = (char *)pszPath + cchDir;
@@ -381,7 +453,7 @@ static char *CalcRelativeName(const char *pszPath, const char *pszDir)
     else
     {
         pszAbsPath = AbsPath(pszPath);
-        if (ArePathsIdentical(pszAbsPath, pszDir, cchDir))
+        if (ArePathsIdenticalN(pszAbsPath, pszDir, cchDir))
         {
             if (pszPath[cchDir])
                 pszRet = pszAbsPath + cchDir;
@@ -1007,6 +1079,9 @@ typedef struct KOCENTRY
     unsigned fPipedPreComp;
     /** Whether the compiler runs in piped mode (precompiler output on stdin). */
     unsigned fPipedCompile;
+    /** The name of the pipe that we're feeding the precompiled output to the
+     *  compiler via.  This is a Windows thing. */
+    char *pszNmPipeCompile;
     /** Cache entry key that's used for some quick digest validation. */
     uint32_t uKey;
 
@@ -1021,6 +1096,9 @@ typedef struct KOCENTRY
         size_t cbCpp;
         /** The precompiler output checksums that will produce the cached object. */
         KOCSUM SumHead;
+        /** The number of milliseconds spent precompiling. */
+        uint32_t cMsCpp;
+
         /** The object filename (relative to the cache file). */
         char *pszObjName;
         /** The compile argument vector used to build the object. */
@@ -1029,6 +1107,10 @@ typedef struct KOCENTRY
         unsigned cArgvCompile;
         /** The checksum of the compiler argument vector. */
         KOCSUM SumCompArgv;
+        /** The number of milliseconds spent compiling. */
+        uint32_t cMsCompile;
+        /** @todo need a list of additional output files for MSC. */
+
         /** The target os/arch identifier. */
         char *pszTarget;
     }
@@ -1088,8 +1170,10 @@ static PKOCENTRY kOCEntryCreate(const char *pszFilename)
  */
 static void kOCEntryDestroy(PKOCENTRY pEntry)
 {
+    /** @todo free pEntry->pszName? */
     free(pEntry->pszDir);
     free(pEntry->pszAbsPath);
+    free(pEntry->pszNmPipeCompile);
 
     kOCSumDeleteChain(&pEntry->New.SumHead);
     kOCSumDeleteChain(&pEntry->Old.SumHead);
@@ -1143,7 +1227,7 @@ static void kOCEntryCalcArgvSum(PKOCENTRY pEntry, const char * const *papszArgv,
     {
         size_t cch = strlen(papszArgv[i]);
         if (    cch < cchIgnorePath
-            ||  !ArePathsIdentical(papszArgv[i] + cch - cchIgnorePath, pszIgnorePath, cch))
+            ||  !ArePathsIdenticalN(papszArgv[i] + cch - cchIgnorePath, pszIgnorePath, cch))
             kOCSumUpdate(pSum, &Ctx, papszArgv[i], cch + 1);
     }
     kOCSumFinalize(pSum, &Ctx);
@@ -1169,7 +1253,9 @@ static void kOCEntryRead(PKOCENTRY pEntry)
          * Check the magic.
          */
         if (    !fgets(g_szLine, sizeof(g_szLine), pFile)
-            ||  strcmp(g_szLine, "magic=kObjCacheEntry-v0.1.0\n"))
+            ||  (   strcmp(g_szLine, "magic=kObjCacheEntry-v0.1.0\n")
+                 && strcmp(g_szLine, "magic=kObjCacheEntry-v0.1.1\n"))
+           )
         {
             InfoMsg(2, "bad cache file (magic)\n");
             pEntry->fNeedCompiling = 1;
@@ -1226,6 +1312,15 @@ static void kOCEntryRead(PKOCENTRY pEntry)
                         break;
                     kOCSumAdd(&pEntry->Old.SumHead, &Sum);
                 }
+                else if (!strcmp(g_szLine, "cpp-ms"))
+                {
+                    char *pszNext;
+                    if ((fBad = pEntry->Old.cMsCpp != 0))
+                        break;
+                    pEntry->Old.cMsCpp = strtoul(pszVal, &pszNext, 0);
+                    if ((fBad = pszNext && *pszNext))
+                        break;
+                }
                 else if (!strcmp(g_szLine, "cc-argc"))
                 {
                     if ((fBad = pEntry->Old.papszArgvCompile != NULL))
@@ -1246,6 +1341,15 @@ static void kOCEntryRead(PKOCENTRY pEntry)
                     if ((fBad = !kOCSumIsEmpty(&pEntry->Old.SumCompArgv)))
                         break;
                     if ((fBad = kOCSumInitFromString(&pEntry->Old.SumCompArgv, pszVal)))
+                        break;
+                }
+                else if (!strcmp(g_szLine, "cc-ms"))
+                {
+                    char *pszNext;
+                    if ((fBad = pEntry->Old.cMsCompile != 0))
+                        break;
+                    pEntry->Old.cMsCompile = strtoul(pszVal, &pszNext, 0);
+                    if ((fBad = pszNext && *pszNext))
                         break;
                 }
                 else if (!strcmp(g_szLine, "target"))
@@ -1361,12 +1465,14 @@ static void kOCEntryWrite(PKOCENTRY pEntry)
 #define CHECK_LEN(expr) \
         do { int cch = expr; if (cch >= KOBJCACHE_MAX_LINE_LEN) FatalDie("Line too long: %d (max %d)\nexpr: %s\n", cch, KOBJCACHE_MAX_LINE_LEN, #expr); } while (0)
 
-    fprintf(pFile, "magic=kObjCacheEntry-v0.1.0\n");
+    fprintf(pFile, "magic=kObjCacheEntry-v0.1.1\n");
     CHECK_LEN(fprintf(pFile, "target=%s\n", pEntry->New.pszTarget ? pEntry->New.pszTarget : pEntry->Old.pszTarget));
     CHECK_LEN(fprintf(pFile, "key=%lu\n", (unsigned long)pEntry->uKey));
-    CHECK_LEN(fprintf(pFile, "obj=%s\n", pEntry->New.pszObjName ? pEntry->New.pszObjName : pEntry->Old.pszObjName));
-    CHECK_LEN(fprintf(pFile, "cpp=%s\n", pEntry->New.pszCppName ? pEntry->New.pszCppName : pEntry->Old.pszCppName));
-    CHECK_LEN(fprintf(pFile, "cpp-size=%lu\n", pEntry->New.pszCppName ? pEntry->New.cbCpp : pEntry->Old.cbCpp));
+    CHECK_LEN(fprintf(pFile, "obj=%s\n",        pEntry->New.pszObjName ? pEntry->New.pszObjName : pEntry->Old.pszObjName));
+    CHECK_LEN(fprintf(pFile, "cpp=%s\n",        pEntry->New.pszCppName ? pEntry->New.pszCppName : pEntry->Old.pszCppName));
+    CHECK_LEN(fprintf(pFile, "cpp-size=%lu\n",  pEntry->New.pszCppName ? pEntry->New.cbCpp      : pEntry->Old.cbCpp));
+    CHECK_LEN(fprintf(pFile, "cpp-ms=%lu\n",    pEntry->New.pszCppName ? pEntry->New.cMsCpp     : pEntry->Old.cMsCpp));
+    CHECK_LEN(fprintf(pFile, "cc-ms=%lu\n",     pEntry->New.pszCppName ? pEntry->New.cMsCompile : pEntry->Old.cMsCompile));
 
     if (!kOCSumIsEmpty(&pEntry->New.SumCompArgv))
     {
@@ -1541,11 +1647,15 @@ static void kOCEntrySetCppName(PKOCENTRY pEntry, const char *pszCppName)
  * @param   pEntry                  The cache entry.
  * @param   fRedirPreCompStdOut     Whether the precompiler is in piped mode.
  * @param   fRedirCompileStdIn      Whether the compiler is in piped mode.
+ * @param   pszNmPipeCompile        The name of the named pipe to use to feed
+ *                                  the microsoft compiler.
  */
-static void kOCEntrySetPipedMode(PKOCENTRY pEntry, int fRedirPreCompStdOut, int fRedirCompileStdIn)
+static void kOCEntrySetPipedMode(PKOCENTRY pEntry, int fRedirPreCompStdOut, int fRedirCompileStdIn,
+                                 const char *pszNmPipeCompile)
 {
     pEntry->fPipedPreComp = fRedirPreCompStdOut;
-    pEntry->fPipedCompile = fRedirCompileStdIn;
+    pEntry->fPipedCompile = fRedirCompileStdIn || pszNmPipeCompile;
+    pEntry->pszNmPipeCompile = xstrdup(pszNmPipeCompile);
 }
 
 
@@ -1554,9 +1664,14 @@ static void kOCEntrySetPipedMode(PKOCENTRY pEntry, int fRedirPreCompStdOut, int 
  * Terminating on failure.
  *
  * @param   papszArgv       Argument vector. The cArgv element is NULL.
+ * @param   pcMs            The cache entry member use for time keeping.  This
+ *                          will be set to the current timestamp.
  * @param   cArgv           The number of arguments in the vector.
+ * @param   pszMsg          Which operation this is, for use in messages.
+ * @param   pszStdOut       Where to redirect standard out.
  */
-static void kOCEntrySpawn(PCKOCENTRY pEntry, const char * const *papszArgv, unsigned cArgv, const char *pszMsg, const char *pszStdOut)
+static void kOCEntrySpawn(PCKOCENTRY pEntry, uint32_t *pcMs, const char * const *papszArgv, unsigned cArgv,
+                          const char *pszMsg, const char *pszStdOut)
 {
 #if defined(__OS2__) || defined(__WIN__)
     intptr_t rc;
@@ -1579,13 +1694,19 @@ static void kOCEntrySpawn(PCKOCENTRY pEntry, const char * const *papszArgv, unsi
         }
     }
 
+    *pcMs = NowMs();
     errno = 0;
+# ifdef __WIN__
+    rc = quoted_spawnvp(_P_WAIT, papszArgv[0], papszArgv);
+# else
     rc = _spawnvp(_P_WAIT, papszArgv[0], papszArgv);
+# endif
+    *pcMs = NowMs() - *pcMs;
     if (rc < 0)
         FatalDie("%s - _spawnvp failed (rc=0x%p): %s\n", pszMsg, rc, strerror(errno));
     if (rc > 0)
         FatalDie("%s - failed rc=%d\n", pszMsg, (int)rc);
-    if (fdStdOut)
+    if (fdStdOut != -1)
     {
         close(STDOUT_FILENO);
         fdStdOut = dup2(fdStdOut, STDOUT_FILENO);
@@ -1595,7 +1716,10 @@ static void kOCEntrySpawn(PCKOCENTRY pEntry, const char * const *papszArgv, unsi
 #else
     int iStatus;
     pid_t pidWait;
-    pid_t pid = fork();
+    pid_t pid;
+
+    *pcMs = NowMs();
+    pid = fork();
     if (!pid)
     {
         if (pszStdOut)
@@ -1625,6 +1749,7 @@ static void kOCEntrySpawn(PCKOCENTRY pEntry, const char * const *papszArgv, unsi
     pidWait = waitpid(pid, &iStatus, 0);
     while (pidWait < 0 && errno == EINTR)
         pidWait = waitpid(pid, &iStatus, 0);
+    *pcMs = NowMs() - *pcMs;
     if (pidWait != pid)
         FatalDie("%s - waitpid failed rc=%d: %s\n",
                  pszMsg, pidWait, strerror(errno));
@@ -1642,13 +1767,16 @@ static void kOCEntrySpawn(PCKOCENTRY pEntry, const char * const *papszArgv, unsi
  * Spawns child with optional redirection of stdin and stdout.
  *
  * @param   pEntry          The cache entry.
+ * @param   pcMs            The cache entry member use for time keeping.  This
+ *                          will be set to the current timestamp.
  * @param   papszArgv       Argument vector. The cArgv element is NULL.
  * @param   cArgv           The number of arguments in the vector.
  * @param   fdStdIn         Child stdin, -1 if it should inherit our stdin. Will be closed.
  * @param   fdStdOut        Child stdout, -1 if it should inherit our stdout. Will be closed.
  * @param   pszMsg          Message to start the info/error messages with.
  */
-static pid_t kOCEntrySpawnChild(PCKOCENTRY pEntry, const char * const *papszArgv, unsigned cArgv, int fdStdIn, int fdStdOut, const char *pszMsg)
+static pid_t kOCEntrySpawnChild(PCKOCENTRY pEntry, uint32_t *pcMs, const char * const *papszArgv, unsigned cArgv,
+                                int fdStdIn, int fdStdOut, const char *pszMsg)
 {
     pid_t pid;
     int fdSavedStdOut = -1;
@@ -1681,9 +1809,14 @@ static pid_t kOCEntrySpawnChild(PCKOCENTRY pEntry, const char * const *papszArgv
     /*
      * Create the child process.
      */
+    *pcMs = NowMs();
 #if defined(__OS2__) || defined(__WIN__)
     errno = 0;
+# ifdef __WIN__
+    pid = quoted_spawnvp(_P_NOWAIT, papszArgv[0], papszArgv);
+# else
     pid = _spawnvp(_P_NOWAIT, papszArgv[0], papszArgv);
+# endif
     if (pid == -1)
         FatalDie("precompile - _spawnvp failed: %s\n", strerror(errno));
 
@@ -1725,10 +1858,12 @@ static pid_t kOCEntrySpawnChild(PCKOCENTRY pEntry, const char * const *papszArgv
  * Waits for a child and exits fatally if the child failed in any way.
  *
  * @param   pEntry      The cache entry.
+ * @param   pcMs        The millisecond timestamp that should be convert to
+ *                      elapsed time.
  * @param   pid         The child to wait for.
  * @param   pszMsg      Message to start the info/error messages with.
  */
-static void kOCEntryWaitChild(PCKOCENTRY pEntry, pid_t pid, const char *pszMsg)
+static void kOCEntryWaitChild(PCKOCENTRY pEntry, uint32_t *pcMs, pid_t pid, const char *pszMsg)
 {
     int iStatus = -1;
     pid_t pidWait;
@@ -1736,6 +1871,7 @@ static void kOCEntryWaitChild(PCKOCENTRY pEntry, pid_t pid, const char *pszMsg)
 
 #ifdef __WIN__
     pidWait = _cwait(&iStatus, pid, _WAIT_CHILD);
+    *pcMs = NowMs() - *pcMs;
     if (pidWait == -1)
         FatalDie("%s - waitpid failed: %s\n", pszMsg, strerror(errno));
     if (iStatus)
@@ -1744,6 +1880,7 @@ static void kOCEntryWaitChild(PCKOCENTRY pEntry, pid_t pid, const char *pszMsg)
     pidWait = waitpid(pid, &iStatus, 0);
     while (pidWait < 0 && errno == EINTR)
         pidWait = waitpid(pid, &iStatus, 0);
+    *pcMs = NowMs() - *pcMs;
     if (pidWait != pid)
         FatalDie("%s - waitpid failed rc=%d: %s\n", pidWait, strerror(errno));
     if (!WIFEXITED(iStatus))
@@ -1761,12 +1898,31 @@ static void kOCEntryWaitChild(PCKOCENTRY pEntry, pid_t pid, const char *pszMsg)
  * @param   pEntry          The cache entry.
  * @param   pFDs            Where to store the two file descriptors.
  * @param   pszMsg          The operation message for info/error messages.
+ * @param   pszPipeName     The pipe name if it is supposed to be named. (Windows only.)
  */
-static void kOCEntryCreatePipe(PKOCENTRY pEntry, int *pFDs, const char *pszMsg)
+static void kOCEntryCreatePipe(PKOCENTRY pEntry, int *pFDs, const char *pszPipeName, const char *pszMsg)
 {
     pFDs[0] = pFDs[1] = -1;
 #if defined(__WIN__)
-    if (_pipe(pFDs, 0, _O_NOINHERIT | _O_BINARY) < 0)
+    if (pszPipeName)
+    {
+        HANDLE hPipe = CreateNamedPipeA(pszPipeName,
+                                       /*PIPE_ACCESS_OUTBOUND*/ PIPE_ACCESS_DUPLEX,
+                                       PIPE_READMODE_BYTE | PIPE_WAIT,
+                                       10 /* nMaxInstances */,
+                                       0x10000 /* nOutBuffer */,
+                                       0x10000 /* nInBuffer */,
+                                       NMPWAIT_WAIT_FOREVER,
+                                       NULL /* pSecurityAttributes */);
+
+        if (hPipe == INVALID_HANDLE_VALUE)
+            FatalDie("%s - CreateNamedPipe(%s) failed: %d\n", pszMsg, pszPipeName, GetLastError());
+
+        pFDs[1 /* write */] = _open_osfhandle((intptr_t)hPipe, _O_WRONLY | _O_TEXT | _O_NOINHERIT);
+        if (pFDs[1 /* write */] == -1)
+            FatalDie("%s - _open_osfhandle failed: %d\n", pszMsg, strerror(errno));
+    }
+    else if (_pipe(pFDs, 0, _O_NOINHERIT | _O_BINARY) < 0)
 #else
     if (pipe(pFDs) < 0)
 #endif
@@ -1795,17 +1951,17 @@ static void kOCEntrySpawnProducer(PKOCENTRY pEntry, const char * const *papszArg
     int fds[2];
     pid_t pid;
 
-    kOCEntryCreatePipe(pEntry, fds, pszMsg);
-    pid = kOCEntrySpawnChild(pEntry, papszArgv, cArgv, -1, fds[1 /* write */], pszMsg);
+    kOCEntryCreatePipe(pEntry, fds, NULL, pszMsg);
+    pid = kOCEntrySpawnChild(pEntry, &pEntry->New.cMsCpp, papszArgv, cArgv, -1, fds[1 /* write */], pszMsg);
 
     pfnConsumer(pEntry, fds[0 /* read */]);
 
-    kOCEntryWaitChild(pEntry, pid, pszMsg);
+    kOCEntryWaitChild(pEntry, &pEntry->New.cMsCpp, pid, pszMsg);
 }
 
 
 /**
- * Spawns a child that consumes input on stdin.
+ * Spawns a child that consumes input on stdin or via a named pipe.
  *
  * @param   papszArgv       Argument vector. The cArgv element is NULL.
  * @param   cArgv           The number of arguments in the vector.
@@ -1819,12 +1975,16 @@ static void kOCEntrySpawnConsumer(PKOCENTRY pEntry, const char * const *papszArg
     int fds[2];
     pid_t pid;
 
-    kOCEntryCreatePipe(pEntry, fds, pszMsg);
-    pid = kOCEntrySpawnChild(pEntry, papszArgv, cArgv, fds[0 /* read */], -1, pszMsg);
+    kOCEntryCreatePipe(pEntry, fds, pEntry->pszNmPipeCompile, pszMsg);
+    pid = kOCEntrySpawnChild(pEntry, &pEntry->New.cMsCompile, papszArgv, cArgv, fds[0 /* read */], -1, pszMsg);
+#ifdef __WIN__
+    if (pEntry->pszNmPipeCompile && !ConnectNamedPipe((HANDLE)_get_osfhandle(fds[1 /* write */]), NULL))
+        FatalDie("compile - ConnectNamedPipe failed: %d\n", GetLastError());
+#endif
 
     pfnProducer(pEntry, fds[1 /* write */]);
 
-    kOCEntryWaitChild(pEntry, pid, pszMsg);
+    kOCEntryWaitChild(pEntry, &pEntry->New.cMsCompile, pid, pszMsg);
 }
 
 
@@ -1849,15 +2009,15 @@ static void kOCEntrySpawnTee(PKOCENTRY pEntry, const char * const *papszProdArgv
     /*
      * The producer.
      */
-    kOCEntryCreatePipe(pEntry, fds, pszMsg);
-    pidConsumer = kOCEntrySpawnChild(pEntry, papszProdArgv, cProdArgv, -1, fds[1 /* write */], pszMsg);
+    kOCEntryCreatePipe(pEntry, fds, NULL, pszMsg);
+    pidConsumer = kOCEntrySpawnChild(pEntry, &pEntry->New.cMsCpp, papszProdArgv, cProdArgv, -1, fds[1 /* write */], pszMsg);
     fdIn = fds[0 /* read */];
 
     /*
      * The consumer.
      */
-    kOCEntryCreatePipe(pEntry, fds, pszMsg);
-    pidProducer = kOCEntrySpawnChild(pEntry, papszConsArgv, cConsArgv, fds[0 /* read */], -1, pszMsg);
+    kOCEntryCreatePipe(pEntry, fds, pEntry->pszNmPipeCompile, pszMsg);
+    pidProducer = kOCEntrySpawnChild(pEntry, &pEntry->New.cMsCompile, papszConsArgv, cConsArgv, fds[0 /* read */], -1, pszMsg);
     fdOut = fds[1 /* write */];
 
     /*
@@ -1868,8 +2028,8 @@ static void kOCEntrySpawnTee(PKOCENTRY pEntry, const char * const *papszProdArgv
     /*
      * Reap the children.
      */
-    kOCEntryWaitChild(pEntry, pidProducer, pszMsg);
-    kOCEntryWaitChild(pEntry, pidConsumer, pszMsg);
+    kOCEntryWaitChild(pEntry, &pEntry->New.cMsCpp, pidProducer, pszMsg);
+    kOCEntryWaitChild(pEntry, &pEntry->New.cMsCompile, pidConsumer, pszMsg);
 }
 
 
@@ -1962,8 +2122,8 @@ static void kOCEntryPreCompileConsumer(PKOCENTRY pEntry, int fdIn)
         if (cbLeft <= 1)
         {
             size_t off = psz - pEntry->New.pszCppMapping;
-            cbLeft = 4*1024*1024;
-            cbAlloc += cbLeft;
+            cbLeft  += 4*1024*1024;
+            cbAlloc += 4*1024*1024;
             pEntry->New.pszCppMapping = xrealloc(pEntry->New.pszCppMapping, cbAlloc);
             psz = pEntry->New.pszCppMapping + off;
         }
@@ -2020,7 +2180,7 @@ static void kOCEntryPreCompile(PKOCENTRY pEntry, const char * const *papszArgvPr
          * Precompile it and calculate the checksum on the output.
          */
         InfoMsg(3, "precompiling -> '%s'...\n", pEntry->New.pszCppName);
-        kOCEntrySpawn(pEntry, papszArgvPreComp, cArgvPreComp, "precompile", NULL);
+        kOCEntrySpawn(pEntry, &pEntry->New.cMsCpp, papszArgvPreComp, cArgvPreComp, "precompile", NULL);
         kOCEntryReadCppOutput(pEntry, &pEntry->New, 0 /* fatal */);
         kOCEntryCalcChecksum(pEntry);
     }
@@ -2107,7 +2267,19 @@ static void kOCEntryCompileProducer(PKOCENTRY pEntry, int fdOut)
         {
             if (errno == EINTR)
                 continue;
+#ifdef __WIN__ /* HACK */
+            if (   errno == EINVAL
+                && pEntry->pszNmPipeCompile
+                && DisconnectNamedPipe((HANDLE)_get_osfhandle(fdOut))
+                && ConnectNamedPipe((HANDLE)_get_osfhandle(fdOut), NULL))
+            {
+                psz = pEntry->New.pszCppMapping;
+                cbLeft = (long)pEntry->New.cbCpp;
+            }
+            FatalDie("compile - write(%d,,%ld) failed: %s - _doserrno=%d\n", fdOut, cbLeft, strerror(errno), _doserrno);
+#else
             FatalDie("compile - write(%d,,%ld) failed: %s\n", fdOut, cbLeft, strerror(errno));
+#endif
         }
         psz += cbWritten;
         cbLeft -= cbWritten;
@@ -2150,15 +2322,16 @@ static void kOCEntryCompileIt(PKOCENTRY pEntry)
             &&  !pEntry->New.pszCppMapping)
             kOCEntryReadCppOutput(pEntry, &pEntry->New, 0 /* fatal */);
         InfoMsg(3, "compiling -> '%s'...\n", pEntry->New.pszObjName);
-        kOCEntrySpawnConsumer(pEntry, (const char * const *)pEntry->New.papszArgvCompile, pEntry->New.cArgvCompile,
-                              "compile", kOCEntryCompileProducer);
+        kOCEntrySpawnConsumer(pEntry, (const char * const *)pEntry->New.papszArgvCompile,
+                              pEntry->New.cArgvCompile, "compile", kOCEntryCompileProducer);
     }
     else
     {
         if (pEntry->fPipedPreComp)
             kOCEntryWriteCppOutput(pEntry, 1 /* free it */);
         InfoMsg(3, "compiling -> '%s'...\n", pEntry->New.pszObjName);
-        kOCEntrySpawn(pEntry, (const char * const *)pEntry->New.papszArgvCompile, pEntry->New.cArgvCompile, "compile", NULL);
+        kOCEntrySpawn(pEntry, &pEntry->New.cMsCompile, (const char * const *)pEntry->New.papszArgvCompile,
+                      pEntry->New.cArgvCompile, "compile", NULL);
     }
 }
 
@@ -2175,6 +2348,9 @@ static void kOCEntryCompileIt(PKOCENTRY pEntry)
  */
 static void kOCEntryTeeConsumer(PKOCENTRY pEntry, int fdIn, int fdOut)
 {
+#ifdef __WIN__
+    unsigned fConnectedToCompiler = fdOut == -1 || pEntry->pszNmPipeCompile == NULL;
+#endif
     KOCSUMCTX Ctx;
     long cbLeft;
     long cbAlloc;
@@ -2207,6 +2383,11 @@ static void kOCEntryTeeConsumer(PKOCENTRY pEntry, int fdIn, int fdOut)
          */
         psz[cbRead] = '\0';
         kOCSumUpdate(&pEntry->New.SumHead, &Ctx, psz, cbRead);
+#ifdef __WIN__
+        if (   !fConnectedToCompiler
+            && !(fConnectedToCompiler = ConnectNamedPipe((HANDLE)_get_osfhandle(fdOut), NULL)))
+            FatalDie("precompile|compile - ConnectNamedPipe failed: %d\n", GetLastError());
+#endif
         do
         {
             long cbWritten = write(fdOut, psz, cbRead);
@@ -3489,7 +3670,7 @@ static void kObjCacheRemoveEntry(PKOBJCACHE pCache, PCKOCENTRY pEntry)
     {
         PKOCDIGEST pDigest = &pCache->paDigests[i];
         if (ArePathsIdentical(kOCDigestAbsPath(pDigest, pCache->pszDir),
-                              kOCEntryAbsPath(pEntry), ~0U))
+                              kOCEntryAbsPath(pEntry)))
         {
             unsigned cLeft;
             kOCDigestPurge(pDigest);
@@ -3643,7 +3824,7 @@ static int usage(FILE *pOut)
             "             | [-n|--name <name-in-cache>] [[-d|--cache-dir <cache-dir>]] >\n"
             "            <-f|--file <local-cache-file>>\n"
             "            <-t|--target <target-name>>\n"
-            "            [-r|--redir-stdout] [-p|--passthru]\n"
+            "            [-r|--redir-stdout] [-p|--passthru] [--named-pipe-compile <pipename>]\n"
             "            --kObjCache-cpp <filename> <precompiler + args>\n"
             "            --kObjCache-cc <object> <compiler + args>\n"
             "            [--kObjCache-both [args]]\n"
@@ -3681,6 +3862,7 @@ int main(int argc, char **argv)
     unsigned cArgvCompile = 0;
     const char *pszObjName = NULL;
     int fRedirCompileStdIn = 0;
+    const char *pszNmPipeCompile = NULL;
 
     const char *pszTarget = NULL;
 
@@ -3779,6 +3961,13 @@ int main(int argc, char **argv)
                 return SyntaxError("%s requires a target platform/arch name!\n", argv[i]);
             pszTarget = argv[++i];
         }
+        else if (!strcmp(argv[i], "--named-pipe-compile"))
+        {
+            if (i + 1 >= argc)
+                return SyntaxError("%s requires a pipe name!\n", argv[i]);
+            pszNmPipeCompile = argv[++i];
+            fRedirCompileStdIn = 0;
+        }
         else if (!strcmp(argv[i], "-p") || !strcmp(argv[i], "--passthru"))
             fRedirPreCompStdOut = fRedirCompileStdIn = 1;
         else if (!strcmp(argv[i], "-r") || !strcmp(argv[i], "--redir-stdout"))
@@ -3795,8 +3984,8 @@ int main(int argc, char **argv)
         }
         else if (!strcmp(argv[i], "-V") || !strcmp(argv[i], "--version"))
         {
-            printf("kObjCache - kBuild version %d.%d.%d ($Revision: 2243 $)\n"
-                   "Copyright (c) 2007-2009  knut st. osmundsen\n",
+            printf("kObjCache - kBuild version %d.%d.%d ($Revision: 2463 $)\n"
+                   "Copyright (c) 2007-2011 knut st. osmundsen\n",
                    KBUILD_VERSION_MAJOR, KBUILD_VERSION_MINOR, KBUILD_VERSION_PATCH);
             return 0;
         }
@@ -3851,7 +4040,7 @@ int main(int argc, char **argv)
     kOCEntrySetCompileArgv(pEntry, papszArgvCompile, cArgvCompile);
     kOCEntrySetTarget(pEntry, pszTarget);
     kOCEntrySetCppName(pEntry, pszPreCompName);
-    kOCEntrySetPipedMode(pEntry, fRedirPreCompStdOut, fRedirCompileStdIn);
+    kOCEntrySetPipedMode(pEntry, fRedirPreCompStdOut, fRedirCompileStdIn, pszNmPipeCompile);
 
     /*
      * Open (& lock) the two files and do validity checks and such.

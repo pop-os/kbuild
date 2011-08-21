@@ -1,9 +1,9 @@
-/* $Id: shfile.h 2307 2009-03-01 09:48:04Z bird $ */
+/* $Id: shfile.h 2498 2011-07-22 12:05:57Z bird $ */
 /** @file
  *
  * File management.
  *
- * Copyright (c) 2007-2009  knut st. osmundsen <bird-kBuild-spamix@anduin.net>
+ * Copyright (c) 2007-2010 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
  *
  *
  * This file is part of kBuild.
@@ -38,7 +38,7 @@
 # if !defined(__sun__)
 #  include <paths.h>
 # endif
-# ifdef _PATH_DEVNULL
+# ifndef _PATH_DEVNULL
 #  define _PATH_DEVNULL "/dev/null"
 # endif
 # ifndef _PATH_DEFPATH
@@ -131,6 +131,7 @@ typedef struct shfdtab
 int shfile_init(shfdtab *, shfdtab *);
 void shfile_fork_win(shfdtab *pfdtab, int set, intptr_t *hndls);
 void *shfile_exec_win(shfdtab *pfdtab, int prepare, unsigned short *sizep, intptr_t *hndls);
+int shfile_exec_unix(shfdtab *pfdtab);
 
 int shfile_open(shfdtab *, const char *, unsigned, mode_t);
 int shfile_pipe(shfdtab *, int [2]);
@@ -140,6 +141,8 @@ long shfile_write(shfdtab *, int, const void *, size_t);
 long shfile_lseek(shfdtab *, int, long, int);
 int shfile_fcntl(shfdtab *, int fd, int cmd, int arg);
 int shfile_dup(shfdtab *, int fd);
+int shfile_movefd(shfdtab *, int fdfrom, int fdto);
+int shfile_movefd_above(shfdtab *, int fdfrom, int fdmin);
 
 int shfile_stat(shfdtab *, const char *, struct stat *);
 int shfile_lstat(shfdtab *, const char *, struct stat *);
@@ -149,7 +152,7 @@ int shfile_access(shfdtab *, const char *, int);
 int shfile_isatty(shfdtab *, int);
 int shfile_cloexec(shfdtab *, int, int);
 int shfile_ioctl(shfdtab *, int, unsigned long, void *);
-#ifdef _MSC_VER
+#if defined(_MSC_VER) || defined(__OS2__)
 # define TIOCGWINSZ         0x4201
 typedef struct sh_winsize
 {
@@ -172,9 +175,14 @@ typedef struct sh_dirent
 
 typedef struct shdir
 {
-    shfdtab    *shfdtab;
+    shfdtab    *pfdtab;
     void       *native;
     shdirent    ent;
+#if K_OS == K_OS_WINDOWS
+    size_t      off;
+    size_t      cb;
+    char        buf[32768 - sizeof(void *) * 2 - sizeof(shdirent) * 2];
+#endif
 } shdir;
 
 shdir *shfile_opendir(shfdtab *, const char *);

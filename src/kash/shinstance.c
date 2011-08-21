@@ -1,10 +1,10 @@
-/* $Id: shinstance.c 2311 2009-03-02 00:46:13Z bird $ */
+/* $Id: shinstance.c 2423 2010-10-17 23:43:35Z bird $ */
 /** @file
  * The shell instance methods.
  */
 
 /*
- * Copyright (c) 2007-2009  knut st. osmundsen <bird-kBuild-spamix@anduin.net>
+ * Copyright (c) 2007-2010 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
  *
  *
  * This file is part of kBuild.
@@ -41,7 +41,7 @@
 
 #if K_OS == K_OS_WINDOWS
 # include <Windows.h>
-extern pid_t shfork_do_it(shinstance *psh); /* shforkA-win.asm */
+extern pid_t shfork_do(shinstance *psh); /* shforkA-win.asm */
 #endif
 
 
@@ -478,7 +478,7 @@ static void sh_sig_common_handler(int signo)
 {
     shinstance *psh;
 
-    fprintf(stderr, "sh_sig_common_handler: signo=%d:%s\n", signo, sys_signame[signo]);
+/*    fprintf(stderr, "sh_sig_common_handler: signo=%d:%s\n", signo, sys_signame[signo]); */
 
     /*
      * No need to take locks if there is only one shell.
@@ -800,7 +800,7 @@ int sh_kill(shinstance *psh, pid_t pid, int signo)
     errno = ENOSYS;
     rc = -1;
 # else
-    fprintf(stderr, "kill(%d, %d)\n", pid, signo);
+/*    fprintf(stderr, "kill(%d, %d)\n", pid, signo);*/
     rc = kill(pid, signo);
 # endif
 
@@ -897,7 +897,7 @@ pid_t sh_fork(shinstance *psh)
     TRACE2((psh, "sh_fork\n"));
 
 #if K_OS == K_OS_WINDOWS //&& defined(SH_FORKED_MODE)
-    pid = shfork_do_it(psh);
+    pid = shfork_do(psh);
 
 #elif defined(SH_FORKED_MODE)
 # ifdef _MSC_VER
@@ -1079,8 +1079,11 @@ int sh_execve(shinstance *psh, const char *exe, const char * const *argv, const 
         }
     }
     rc = -1;
+
 # else
-    rc = execve(exe, (char **)argv, (char **)envp);
+    rc = shfile_exec_unix(&psh->fdtab);
+    if (!rc)
+        rc = execve(exe, (char **)argv, (char **)envp);
 # endif
 
 #else
@@ -1119,7 +1122,7 @@ int sh_execve(shinstance *psh, const char *exe, const char * const *argv, const 
         cmdline_size = 2;
         for (i = 0; argv[i]; i++)
             cmdline_size += strlen(argv[i]) + 3;
-        cmdline = p = sh_malloc(psh, env_size);
+        cmdline = p = sh_malloc(psh, cmdline_size);
         for (i = 0; argv[i]; i++)
         {
             size_t len = strlen(argv[i]);
@@ -1140,6 +1143,7 @@ int sh_execve(shinstance *psh, const char *exe, const char * const *argv, const 
         StrtInfo.cb = sizeof(StrtInfo);
 
         /* File handles. */
+        StrtInfo.dwFlags   |= STARTF_USESTDHANDLES;
         StrtInfo.lpReserved2 = shfile_exec_win(&psh->fdtab, 1 /* prepare */, &StrtInfo.cbReserved2, hndls);
         StrtInfo.hStdInput  = (HANDLE)hndls[0];
         StrtInfo.hStdOutput = (HANDLE)hndls[1];

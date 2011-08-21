@@ -1,10 +1,10 @@
-/* $Id: md5sum.c 2243 2009-01-10 02:24:02Z bird $ */
+/* $Id: md5sum.c 2414 2010-09-12 18:42:06Z bird $ */
 /** @file
  * md5sum.
  */
 
 /*
- * Copyright (c) 2007-2009 knut st. osmundsen <bird-kBuild-spamix@anduin.net>
+ * Copyright (c) 2007-2010 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
  *
  * This file is part of kBuild.
  *
@@ -169,8 +169,8 @@ static void *open_file(const char *pszFilename, unsigned fText)
 #elif defined(_O_SEQUENTIAL)
     fFlags |= _O_SEQUENTIAL;
 #endif
-#ifdef _O_BINARY
-    if (!fText)     fFlags |= _O_BINARY;
+#ifdef O_BINARY
+    if (!fText)     fFlags |= O_BINARY;
 #elif defined(_O_BINARY)
     if (!fText)     fFlags |= _O_BINARY;
 #endif

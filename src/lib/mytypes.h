@@ -1,10 +1,10 @@
-/* $Id: mytypes.h 2243 2009-01-10 02:24:02Z bird $ */
+/* $Id: mytypes.h 2442 2011-07-06 12:19:16Z bird $ */
 /** @file
  * mytypes - wrapper that ensures the necessary uintXY_t types are defined.
  */
 
 /*
- * Copyright (c) 2007-2009 knut st. osmundsen <bird-kBuild-spamix@anduin.net>
+ * Copyright (c) 2007-2010 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
  *
  * This file is part of kBuild.
  *
@@ -27,6 +27,7 @@
 #define ___mytypes_h__
 
 #include <stdlib.h>
+#include <stddef.h> /* MSC: intptr_t */
 #include <sys/types.h>
 
 #if defined(_MSC_VER)

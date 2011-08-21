@@ -1,10 +1,10 @@
-/* $Id: shheap.h 2293 2009-02-28 07:25:12Z bird $ */
+/* $Id: shheap.h 2416 2010-09-14 00:30:30Z bird $ */
 /** @file
  * The shell memory heap methods.
  */
 
 /*
- * Copyright (c) 2009  knut st. osmundsen <bird-kBuild-spamix@anduin.net>
+ * Copyright (c) 2009-2010 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
  *
  *
  * This file is part of kBuild.
@@ -31,7 +31,8 @@
 #include "shtypes.h"
 
 /* heap */
-int shheap_init(void);
+int shheap_init(void *phead);
+void *shheap_get_head(void);
 int shheap_fork_copy_to_child(void *);
 
 void *sh_malloc(shinstance *, size_t);

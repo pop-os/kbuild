@@ -1,10 +1,10 @@
-# $Id: bootstrap.gmk 2243 2009-01-10 02:24:02Z bird $
+# $Id: bootstrap.gmk 2421 2010-10-17 21:27:53Z bird $
 ## @file
 # GNU Make Compatible bootstrap Makefile.
 #
 
 #
-# Copyright (c) 2007-2009 knut st. osmundsen <bird-kBuild-spamix@anduin.net>
+# Copyright (c) 2007-2010 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
 #
 # This file is part of kBuild.
 #
@@ -40,6 +40,9 @@
 #
 # Note to self on bootstrapping solaris.sparc64:
 #   SED_MAKE_DEFS="SED=gsed" AUTOPOINT=true ACLOCAL=aclocal-1.10 AUTOMAKE=automake-1.10 nice ./kBuild/env.sh --full gmake -f bootstrap.gmk
+#
+# Note to self on bootstrapping openbsd:
+#   AUTOCONF_VERSION=2.59 AUTOMAKE_VERSION=1.9 ./kBuild/env.sh --full gmake -f bootstrap.gmk
 #
 
 #
@@ -215,11 +218,11 @@ $(OUTDIR)/ts-stage2-build: \
 		$(SRCDIR)/src/kmk/config.h.$(KBUILD_TARGET) \
                 $(SRCDIR)/src/sed/config.h.$(KBUILD_TARGET) \
 		$(OUTDIR)/kmk/kmk
-	$(OUTDIR)/kmk/kmk -C $(SRCDIR) KBUILD_BOOTSTRAP=1
+	KBUILD_BIN_PATH=$(OUTDIR)/kmk $(OUTDIR)/kmk/kmk -C $(SRCDIR) KBUILD_BOOTSTRAP=1
 	echo done > $@
 
 $(OUTDIR)/ts-stage2-install: $(OUTDIR)/ts-stage2-build
-	$(OUTDIR)/kmk/kmk -C $(SRCDIR) KBUILD_BOOTSTRAP=1 PATH_INS=$(SRCDIR) install
+	KBUILD_BIN_PATH=$(OUTDIR)/kmk $(OUTDIR)/kmk/kmk -C $(SRCDIR) KBUILD_BOOTSTRAP=1 PATH_INS=$(SRCDIR) install
 	echo done > $@
 
 

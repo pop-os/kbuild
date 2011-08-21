@@ -1,10 +1,10 @@
-; $Id: shforkA-win.asm 2314 2009-03-02 01:31:03Z bird $
+; $Id: shforkA-win.asm 2416 2010-09-14 00:30:30Z bird $
 ;; @file
 ; shforkA-win.asm - assembly routines used when forking on Windows.
 ;
 
 ;
-; Copyright (c) 2009 knut st. osmundsen <bird-kBuild-spamix@anduin.net>
+; Copyright (c) 2009-2010 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
 ;
 ; This file is part of kBuild.
 ;
@@ -120,7 +120,7 @@ global NAME(main)
         mov     rdx, [rbp - 10h]        ; argv
         mov     r8,  [rbp - 18h]        ; envp
 
-        lea     rsp, [eax - 40h]        ; Switch!
+        lea     rsp, [rax - 40h]        ; Switch!
 %else
         mov     [esp + 18h], eax
         mov     [eax - 4], esp

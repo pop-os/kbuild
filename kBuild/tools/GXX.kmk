@@ -1,10 +1,10 @@
-# $Id: GXX.kmk 2243 2009-01-10 02:24:02Z bird $
+# $Id: GXX.kmk 2541 2011-08-03 09:51:30Z bird $
 ## @file
 # kBuild Tool Config - Generic GCC using the system GCC, for building C++ code.
 #
 
 #
-# Copyright (c) 2004-2009 knut st. osmundsen <bird-kBuild-spamix@anduin.net>
+# Copyright (c) 2004-2010 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
 #
 # This file is part of kBuild.
 #
@@ -101,6 +101,7 @@ define TOOL_GXX_COMPILE_C_CMDS
 		-Wp,-MD,$(dep) -Wp,-MT,$(obj) \
 		-o $(obj)\
 		$(abspath $(source))
+	$(QUIET)$(APPEND) -n "$(dep)" "" "$(source):" ""
 endef
 
 
@@ -126,6 +127,7 @@ define TOOL_GXX_COMPILE_CXX_CMDS
 		-Wp,-MD,$(dep) -Wp,-MT,$(obj) \
 		-o $(obj)\
 		$(abspath $(source))
+	$(QUIET)$(APPEND) -n "$(dep)" "" "$(source):" ""
 endef
 
 
@@ -151,6 +153,7 @@ define TOOL_GXX_COMPILE_AS_CMDS
 		-Wp,-MD,$(dep) -Wp,-MT,$(obj) \
 		-o $(obj)\
 		$(abspath $(source))
+	$(QUIET)$(APPEND) -n "$(dep)" "" "$(source):" ""
 endef
 
 
@@ -202,6 +205,9 @@ TOOL_GXX_LINK_PROGRAM_DEPORD =
 define TOOL_GXX_LINK_PROGRAM_CMDS
 	$(QUIET)$(TOOL_GXX_LD) $(flags) -o $(out) $(objs) \
 		$(foreach lib,$(libs), $(if $(findstring $(lib),$(subst /,x,$(lib))), -l$(patsubst lib%,%,$(lib)), $(lib)))
+if1of ($(ld_debug), split)
+ $(warning kBuild: Debug splitting is requested for $(target), but this feature is not supported by GXX.)
+endif
 endef
 
 
@@ -224,5 +230,8 @@ TOOL_GXX_LINK_DLL_DEPORD =
 define TOOL_GXX_LINK_DLL_CMDS
 	$(QUIET)$(TOOL_GXX_LD) $(TOOL_GXX_LDFLAGS.dll) $(flags) -o $(out) $(objs) \
 		$(foreach lib,$(libs), $(if $(findstring $(lib),$(subst /,x,$(lib))), -l$(patsubst lib%,%,$(lib)), $(lib)))
+if1of ($(ld_debug), split)
+ $(warning kBuild: Debug splitting is requested for $(target), but this feature is not supported by GXX.)
+endif
 endef
 

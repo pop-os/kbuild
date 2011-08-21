@@ -1,10 +1,10 @@
-/* $Id: nt_fullpath.c 2243 2009-01-10 02:24:02Z bird $ */
+/* $Id: nt_fullpath.c 2455 2011-07-07 23:16:02Z bird $ */
 /** @file
  * fixcase - fixes the case of paths, windows specific.
  */
 
 /*
- * Copyright (c) 2004-2009 knut st. osmundsen <bird-kBuild-spamix@anduin.net>
+ * Copyright (c) 2004-2010 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
  *
  * This file is part of kBuild.
  *
@@ -283,14 +283,14 @@ typedef struct MY_FILE_FS_DEVICE_INFORMATION
 #define MY_FILE_DEVICE_VIRTUAL_DISK     36
 
 
-typedef struct _IO_STATUS_BLOCK
+typedef struct
 {
     union
     {
-        LONG Status;
-        PVOID Pointer;
+        LONG    Status;
+        PVOID   Pointer;
     };
-    ULONG_PTR Information;
+    ULONG_PTR   Information;
 } MY_IO_STATUS_BLOCK, *PMY_IO_STATUS_BLOCK;
 
 static BOOL                             g_fInitialized = FALSE;

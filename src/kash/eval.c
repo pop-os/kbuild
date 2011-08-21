@@ -44,6 +44,10 @@ __RCSID("$NetBSD: eval.c,v 1.84 2005/06/23 23:05:29 christos Exp $");
 #include <stdio.h>
 #include <sys/types.h>
 #ifdef HAVE_SYSCTL_H
+# ifdef __OpenBSD__ /* joyful crap */
+#  include <sys/param.h>
+#  undef psh
+# endif
 # include <sys/sysctl.h>
 #endif
 
@@ -506,16 +510,12 @@ evalpipe(shinstance *psh, union node *n)
 		if (forkshell(psh, jp, lp->n, n->npipe.backgnd ? FORK_BG : FORK_FG) == 0) {
 			INTON;
 			if (prevfd > 0) {
-				shfile_close(&psh->fdtab, 0);
-				copyfd(psh, prevfd, 0);
-				shfile_close(&psh->fdtab, prevfd);
+				movefd(psh, prevfd, 0);
 			}
 			if (pip[1] >= 0) {
 				shfile_close(&psh->fdtab, pip[0]);
 				if (pip[1] != 1) {
-					shfile_close(&psh->fdtab, 1);
-					copyfd(psh, pip[1], 1);
-					shfile_close(&psh->fdtab, pip[1]);
+					movefd(psh, pip[1], 1);
 				}
 			}
 			evaltree(psh, lp->n, EV_EXIT);
@@ -577,9 +577,7 @@ evalbackcmd(shinstance *psh, union node *n, struct backcmd *result)
 			FORCEINTON;
 			shfile_close(&psh->fdtab, pip[0]);
 			if (pip[1] != 1) {
-				shfile_close(&psh->fdtab, 1);
-				copyfd(psh, pip[1], 1);
-				shfile_close(&psh->fdtab, pip[1]);
+				movefd(psh, pip[1], 1);
 			}
 			eflag(psh) = 0;
 			evaltree(psh, n, EV_EXIT);
@@ -705,7 +703,7 @@ evalcommand(shinstance *psh, union node *cmd, int flags, struct backcmd *backcmd
 	/* First expand the arguments. */
 	TRACE((psh, "evalcommand(0x%lx, %d) called\n", (long)cmd, flags));
 	setstackmark(psh, &smark);
-	psh->exitstatus = 0;
+	psh->back_exitstatus = 0;
 
 	arglist.lastp = &arglist.list;
 	varflag = 1;
@@ -906,9 +904,7 @@ normal_fork:
 			}
 			shfile_close(&psh->fdtab, pip[0]);
 			if (pip[1] != 1) {
-				shfile_close(&psh->fdtab, 1);
-				copyfd(psh, pip[1], 1);
-				shfile_close(&psh->fdtab, pip[1]);
+				movefd(psh, pip[1], 1);
 			}
 		}
 		flags |= EV_EXIT;
@@ -1130,7 +1126,7 @@ bltincmd(shinstance *psh, int argc, char **argv)
 	 * Preserve psh->exitstatus of a previous possible redirection
 	 * as POSIX mandates
 	 */
-	return psh->exitstatus;
+	return psh->back_exitstatus;
 }
 
 
@@ -1167,7 +1163,20 @@ breakcmd(shinstance *psh, int argc, char **argv)
 int
 returncmd(shinstance *psh, int argc, char **argv)
 {
+#if 0
 	int ret = argc > 1 ? number(psh, argv[1]) : psh->exitstatus;
+#else
+	int ret;
+	if (argc > 1)  {
+		/* make return -1 and VSC lite work ... */
+    		if (argv[1][0] != '-' || !is_number(&argv[1][1]))
+			ret = number(psh, argv[1]);
+		else
+			ret = -number(psh, &argv[1][1]) & 255; /* take the bash approach */
+	} else {
+    		ret = psh->exitstatus;
+	}
+#endif
 
 	if (psh->funcnest) {
 		psh->evalskip = SKIPFUNC;

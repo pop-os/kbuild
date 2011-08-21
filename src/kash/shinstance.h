@@ -1,10 +1,10 @@
-/* $Id: shinstance.h 2298 2009-03-01 05:18:30Z bird $ */
+/* $Id: shinstance.h 2498 2011-07-22 12:05:57Z bird $ */
 /** @file
  * The shell instance and it's methods.
  */
 
 /*
- * Copyright (c) 2007-2009  knut st. osmundsen <bird-kBuild-spamix@anduin.net>
+ * Copyright (c) 2007-2010 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
  *
  *
  * This file is part of kBuild.
@@ -32,6 +32,7 @@
 #include <signal.h> /* NSIG */
 #ifndef _MSC_VER
 # include <termios.h>
+# include <sys/types.h>
 # include <sys/ioctl.h>
 # include <sys/resource.h>
 #endif
@@ -364,13 +365,22 @@ const char *sh_gethomedir(shinstance *, const char *);
 #   define SIG_BLOCK         1
 #   define SIG_UNBLOCK       2
 #   define SIG_SETMASK       3
-#   define SIGHUP            5
-#   define SIGQUIT           9
-#   define SIGPIPE          12
-#   define SIGTTOU          17
-#   define SIGTSTP          18
-#   define SIGTTIN          19
+
+#   define SIGHUP            1          /* _SIGHUP_IGNORE */
+/*# define SIGINT            2 */
+#   define SIGQUIT           3          /* _SIGQUIT_IGNORE */
+/*# define SIGILL            4 */
+/*# define SIGFPE            8 */
+/*# define SIGSEGV          11 */
+#   define SIGPIPE          13          /* _SIGPIPE_IGNORE */
+/*# define SIGTERM          15 */
+#   define SIGTTIN          16          /* _SIGIOINT_IGNORE */
+#   define SIGTSTP          17          /* _SIGSTOP_IGNORE */
+#   define SIGTTOU          18
 #   define SIGCONT          20
+/*# define SIGBREAK         21 */
+/*# define SIGABRT          22 */
+
 #   define sys_siglist      sys_signame
 #endif /* _MSC_VER */
 #ifdef __sun__

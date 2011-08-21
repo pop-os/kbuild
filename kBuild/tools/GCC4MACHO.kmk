@@ -1,10 +1,10 @@
-# $Id: GCC4MACHO.kmk 2243 2009-01-10 02:24:02Z bird $
+# $Id: GCC4MACHO.kmk 2535 2011-08-02 19:05:34Z bird $
 ## @file
 # kBuild Tool Config - GCC v4 targeting Darwin (Mac OS X) Mach-o.
 #
 
 #
-# Copyright (c) 2004-2009 knut st. osmundsen <bird-kBuild-spamix@anduin.net>
+# Copyright (c) 2004-2010 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
 #
 # This file is part of kBuild.
 #
@@ -34,12 +34,15 @@
 TOOL_GCC4MACHO := GCC v4 targeting Darwin (Mac OS X) Mach-o.
 
 # Tool Specific Properties
-TOOL_GCC4MACHO_CC  ?= gcc$(HOSTSUFF_EXE)
-TOOL_GCC4MACHO_CXX ?= g++$(HOSTSUFF_EXE)
-TOOL_GCC4MACHO_OBJC?= gcc$(HOSTSUFF_EXE)
-TOOL_GCC4MACHO_AS  ?= gcc$(HOSTSUFF_EXE)
-TOOL_GCC4MACHO_LD  ?= gcc$(HOSTSUFF_EXE)
-TOOL_GCC4MACHO_LD_SYSMOD ?= gcc$(HOSTSUFF_EXE)
+TOOL_GCC4MACHO_PREFIX    ?=
+TOOL_GCC4MACHO_SUFFIX    ?= $(HOSTSUFF_EXE)
+TOOL_GCC4MACHO_CC        ?= $(TOOL_GCC4MACHO_PREFIX)gcc$(TOOL_GCC4MACHO_SUFFIX)
+TOOL_GCC4MACHO_CXX       ?= $(TOOL_GCC4MACHO_PREFIX)g++$(TOOL_GCC4MACHO_SUFFIX)
+TOOL_GCC4MACHO_OBJC      ?= $(TOOL_GCC4MACHO_PREFIX)gcc$(TOOL_GCC4MACHO_SUFFIX)
+TOOL_GCC4MACHO_OBJCXX    ?= $(TOOL_GCC4MACHO_PREFIX)gcc$(TOOL_GCC4MACHO_SUFFIX)
+TOOL_GCC4MACHO_AS        ?= $(TOOL_GCC4MACHO_PREFIX)gcc$(TOOL_GCC4MACHO_SUFFIX)
+TOOL_GCC4MACHO_LD        ?= $(TOOL_GCC4MACHO_PREFIX)gcc$(TOOL_GCC4MACHO_SUFFIX)
+TOOL_GCC4MACHO_LD_SYSMOD ?= $(TOOL_GCC4MACHO_PREFIX)gcc$(TOOL_GCC4MACHO_SUFFIX)
 ifndef TOOL_GCC4MACHO_LDFLAGS.$(KBUILD_TARGET)
 TOOL_GCC4MACHO_LDFLAGS.dll ?= -dynamiclib
 else
@@ -47,11 +50,13 @@ TOOL_GCC4MACHO_LDFLAGS.dll ?= $(TOOL_GCC4MACHO_LDFLAGS.$(KBUILD_TARGET))
 endif
 TOOL_GCC4MACHO_LDFLAGS.sysmod ?= -r
 #TOOL_GCC4MACHO_LD_SONAME = -Wl,-dylib_install_name $(firstword $($(1)_SONAME.$(KBUILD_TARGET).$(KBUILD_TYPE)) $($(1)_SONAME.$(KBUILD_TARGET)) $($(1)_SONAME.$(KBUILD_TYPE)) $($(1)_SONAME) $(notdir $(2)))
+TOOL_GCC4MACHO_DSYMUTIL  ?= dsymutil
 
 ifdef SLKRUNS
-TOOL_GCC4MACHO_CC  += -fmessage-length=0
-TOOL_GCC4MACHO_CXX += -fmessage-length=0
-TOOL_GCC4MACHO_OBJC+= -fmessage-length=0
+TOOL_GCC4MACHO_CC        += -fmessage-length=0
+TOOL_GCC4MACHO_CXX       += -fmessage-length=0
+TOOL_GCC4MACHO_OBJC      += -fmessage-length=0
+TOOL_GCC4MACHO_OBJCXX    += -fmessage-length=0
 endif
 
 # General Properties used by kBuild
@@ -64,7 +69,6 @@ TOOL_GCC4MACHO_CINCS            ?=
 TOOL_GCC4MACHO_CDEFS            ?=
 
 TOOL_GCC4MACHO_CXXOBJSUFF       ?= .o
-TOOL_GCC4MACHO_CXXOBJSUFF       ?= .o
 TOOL_GCC4MACHO_CXXFLAGS         ?=
 TOOL_GCC4MACHO_CXXFLAGS.debug   ?= -g
 TOOL_GCC4MACHO_CXXFLAGS.profile ?= -g -O2 #-pg
@@ -73,13 +77,20 @@ TOOL_GCC4MACHO_CXXINCS          ?=
 TOOL_GCC4MACHO_CXXDEFS          ?=
 
 TOOL_GCC4MACHO_OBJCOBJSUFF      ?= .o
-TOOL_GCC4MACHO_OBJCOBJSUFF      ?= .o
 TOOL_GCC4MACHO_OBJCFLAGS        ?=
 TOOL_GCC4MACHO_OBJCFLAGS.debug  ?= -g
 TOOL_GCC4MACHO_OBJCFLAGS.profile?= -O2 #-g -pg
 TOOL_GCC4MACHO_OBJCFLAGS.release?= -O2
 TOOL_GCC4MACHO_OBJCINCS         ?=
 TOOL_GCC4MACHO_OBJCDEFS         ?=
+
+TOOL_GCC4MACHO_OBJCXXOBJSUFF        ?= .o
+TOOL_GCC4MACHO_OBJCXXFLAGS          ?=
+TOOL_GCC4MACHO_OBJCXXFLAGS.debug    ?= -g
+TOOL_GCC4MACHO_OBJCXXFLAGS.profile  ?= -O2 #-g -pg
+TOOL_GCC4MACHO_OBJCXXFLAGS.release  ?= -O2
+TOOL_GCC4MACHO_OBJCXXINCS           ?=
+TOOL_GCC4MACHO_OBJCXXDEFS           ?=
 
 TOOL_GCC4MACHO_ASFLAGS          ?= -x assembler-with-cpp
 TOOL_GCC4MACHO_ASFLAGS.debug    ?= -g
@@ -93,6 +104,39 @@ TOOL_GCC4MACHO_ARLIBSUFF        ?= .a
 TOOL_GCC4MACHO_LDFLAGS          ?=
 TOOL_GCC4MACHO_LDFLAGS.debug    ?= -g
 TOOL_GCC4MACHO_LDFLAGS.profile  ?= -g
+
+TOOL_GCC4MACHO_STRIP_PROGRAM    ?= strip -SXxru
+TOOL_GCC4MACHO_STRIP_DLL        ?= strip -Sxru
+TOOL_GCC4MACHO_STRIP_SYSMOD     ?= strip -Sru
+
+
+##
+# Calculate the files in the debug bundle.
+# @param    1           The whole output filename.
+# @param    2   	The output filename sans suffix.
+TOOL_GCC4MACHO_DEBUG_BUNDLE_FN = \
+    $(1).dSYM/ \
+    $(1).dSYM/Contents/ \
+    $(1).dSYM/Contents/Resources/ \
+    $(1).dSYM/Contents/Resources/DWARF/ \
+    $(1).dSYM/Contents/Info.plist \
+    $(1).dSYM/Contents/Resources/DWARF/$(notdir $(1))
+
+##
+# Calculate the files in the debug bundle.
+# @param    1           The whole linker output filename.
+# @param    2   	The linker output filename sans suffix.
+# @param    3           The desired install name (no dir slash).
+# @remarks  The Info.plist has some reference to the original name, but gdb
+#           does not care and only check for a symbol file in the DWARF
+#           directory with the same name as the debugged module.
+TOOL_GCC4MACHO_DEBUG_INSTALL_FN= \
+    $(3).dSYM/ \
+    $(3).dSYM/Contents/ \
+    $(3).dSYM/Contents/Resources/ \
+    $(3).dSYM/Contents/Resources/DWARF/ \
+    $(1).dSYM/Contents/Info.plist=>$(3).dSYM/Contents/Info.plist \
+    $(1).dSYM/Contents/Resources/DWARF/$(notdir $(1))=>$(3).dSYM/Contents/Resources/DWARF/$(notdir $(3))
 
 
 ## Compile C source.
@@ -125,6 +169,7 @@ define TOOL_GCC4MACHO_COMPILE_C_CMDS
 		$(flags) -fpreprocessed -x c\
 		-o $(obj)\
 		-
+	$(QUIET)$(APPEND) -n "$(dep)" "" "$(source):" ""
 endef
 else  # !KBUILD_USE_KOBJCACHE
 TOOL_GCC4MACHO_COMPILE_C_OUTPUT =
@@ -134,6 +179,7 @@ define TOOL_GCC4MACHO_COMPILE_C_CMDS
 		-Wp,-MD,$(dep) -Wp,-MT,$(obj) -Wp,-MP\
 		-o $(obj)\
 		$(abspath $(source))
+	$(QUIET)$(APPEND) -n "$(dep)" "" "$(source):" ""
 endef
 endif # !KUSE_OBJCACHE
 
@@ -167,6 +213,7 @@ define TOOL_GCC4MACHO_COMPILE_CXX_CMDS
 		$(flags) -fpreprocessed -x c++\
 		-o $(obj)\
 		-
+	$(QUIET)$(APPEND) -n "$(dep)" "" "$(source):" ""
 endef
 else  # !KBUILD_USE_KOBJCACHE
 TOOL_GCC4MACHO_COMPILE_CXX_OUTPUT =
@@ -176,6 +223,7 @@ define TOOL_GCC4MACHO_COMPILE_CXX_CMDS
 		-Wp,-MD,$(dep) -Wp,-MT,$(obj) -Wp,-MP\
 		-o $(obj)\
 		$(abspath $(source))
+	$(QUIET)$(APPEND) -n "$(dep)" "" "$(source):" ""
 endef
 endif # !KBUILD_USE_KOBJCACHE
 
@@ -209,6 +257,7 @@ define TOOL_GCC4MACHO_COMPILE_OBJC_CMDS
 		$(flags) -fpreprocessed -x cbjective-c\
 		-o $(obj)\
 		-
+	$(QUIET)$(APPEND) -n "$(dep)" "" "$(source):" ""
 endef
 else  # !KBUILD_USE_KOBJCACHE
 TOOL_GCC4MACHO_COMPILE_OBJC_OUTPUT =
@@ -218,6 +267,51 @@ define TOOL_GCC4MACHO_COMPILE_OBJC_CMDS
 		-Wp,-MD,$(dep) -Wp,-MT,$(obj) -Wp,-MP\
 		-o $(obj)\
 		$(abspath $(source))
+	$(QUIET)$(APPEND) -n "$(dep)" "" "$(source):" ""
+endef
+endif # !KBUILD_USE_KOBJCACHE
+
+
+## Compile Objective-C++ source.
+# @param    $(target)   Normalized main target name.
+# @param    $(source)   Source filename (relative).
+# @param    $(obj)      Object file name. This shall be (re)created by the compilation.
+# @param    $(dep)	    Dependcy file. This shall be (re)created by the compilation.
+# @param    $(flags)    Flags.
+# @param    $(defs)     Definitions. No -D or something.
+# @param    $(incs)     Includes. No -I or something.
+# @param    $(dirdep)   Directory creation dependency.
+# @param    $(deps)		Other dependencies.
+# @param    $(outbase)  Output basename (full). Use this for list files and such.
+# @param    $(objsuff)  Object suffix.
+TOOL_GCC4MACHO_COMPILE_OBJCXX_DEPEND =
+TOOL_GCC4MACHO_COMPILE_OBJCXX_DEPORD =
+ifdef KBUILD_USE_KOBJCACHE
+TOOL_GCC4MACHO_COMPILE_OBJCXX_USES_KOBJCACHE = 1
+TOOL_GCC4MACHO_COMPILE_OBJCXX_OUTPUT = $(outbase).mii
+define TOOL_GCC4MACHO_COMPILE_OBJCXX_CMDS
+	$(QUIET)$(KOBJCACHE) -f $(outbase).koc -d $(PATH_OBJCACHE) -t $(bld_trg).$(bld_trg_arch) -p\
+		--kObjCache-cpp $(outbase).mii\
+		$(TOOL_GCC4MACHO_OBJCXX) -E -o -\
+		$(flags) $(addprefix -I, $(incs)) $(addprefix -D, $(defs))\
+		-Wp,-MD,$(dep) -Wp,-MT,$(obj) -Wp,-MP\
+		$(abspath $(source))\
+		--kObjCache-cc $(obj)\
+		$(TOOL_GCC4MACHO_OBJCXX) -c\
+		$(flags) -fpreprocessed -x objective-c++\
+		-o $(obj)\
+		-
+	$(QUIET)$(APPEND) -n "$(dep)" "" "$(source):" ""
+endef
+else  # !KBUILD_USE_KOBJCACHE
+TOOL_GCC4MACHO_COMPILE_OBJCXX_OUTPUT =
+define TOOL_GCC4MACHO_COMPILE_OBJCXX_CMDS
+	$(QUIET)$(TOOL_GCC4MACHO_OBJCXX) -c\
+		$(flags) $(addprefix -I, $(incs)) $(addprefix -D, $(defs))\
+		-Wp,-MD,$(dep) -Wp,-MT,$(obj) -Wp,-MP\
+		-o $(obj)\
+		$(abspath $(source))
+	$(QUIET)$(APPEND) -n "$(dep)" "" "$(source):" ""
 endef
 endif # !KBUILD_USE_KOBJCACHE
 
@@ -244,6 +338,7 @@ define TOOL_GCC4MACHO_COMPILE_AS_CMDS
 		-Wp,-MD,$(dep) -Wp,-MT,$(obj) -Wp,-MP\
 		-o $(obj)\
 		$(abspath $(source))
+	$(QUIET)$(APPEND) -n "$(dep)" "" "$(source):" ""
 endef
 
 
@@ -288,6 +383,8 @@ endef
 # @param    $(custom_post)  Custom step invoked after linking.
 # @param    $(outbase)  Output basename (full). Use this for list files and such.
 TOOL_GCC4MACHO_LINK_PROGRAM_OUTPUT = $(outbase).rsp
+TOOL_GCC4MACHO_LINK_PROGRAM_OUTPUT_DEBUG = $(call TOOL_GCC4MACHO_DEBUG_BUNDLE_FN,$(out))
+TOOL_GCC4MACHO_LINK_PROGRAM_DEBUG_INSTALL_FN = $(TOOL_GCC4MACHO_DEBUG_INSTALL_FN)
 TOOL_GCC4MACHO_LINK_PROGRAM_DEPEND = $(foreach lib,$(libs),$(if $(findstring $(lib),$(subst /,x,$(lib))),, $(lib)))
 TOOL_GCC4MACHO_LINK_PROGRAM_DEPORD =
 define TOOL_GCC4MACHO_LINK_PROGRAM_CMDS
@@ -296,7 +393,12 @@ define TOOL_GCC4MACHO_LINK_PROGRAM_CMDS
 		-filelist $(outbase).rsp\
 		$(foreach p,$(libpath), -L$(p))\
 		$(foreach lib,$(libs), $(if $(findstring $(lib),$(subst /,x,$(lib))), -l$(patsubst lib%,%,$(lib)), $(lib)))
+ ifeq ($(ld_debug),split)
+	$(QUIET)$(TOOL_GCC4MACHO_DSYMUTIL) -o $(out).dSYM/ $(out)
+	$(QUIET)$(TOOL_GCC4MACHO_STRIP_PROGRAM) $(out)
+ endif
 endef
+
 
 
 ## Link DLL
@@ -313,6 +415,8 @@ endef
 # @param    $(custom_post)  Custom step invoked after linking.
 # @param    $(outbase)  Output basename (full). Use this for list files and such.
 TOOL_GCC4MACHO_LINK_DLL_OUTPUT = $(outbase).rsp
+TOOL_GCC4MACHO_LINK_DLL_OUTPUT_DEBUG = $(call TOOL_GCC4MACHO_DEBUG_BUNDLE_FN,$(out))
+TOOL_GCC4MACHO_LINK_DLL_DEBUG_INSTALL_FN = $(TOOL_GCC4MACHO_DEBUG_INSTALL_FN)
 TOOL_GCC4MACHO_LINK_DLL_DEPEND = $(foreach lib,$(libs),$(if $(findstring $(lib),$(subst /,x,$(lib))),, $(lib)))
 TOOL_GCC4MACHO_LINK_DLL_DEPORD =
 define TOOL_GCC4MACHO_LINK_DLL_CMDS
@@ -322,6 +426,10 @@ define TOOL_GCC4MACHO_LINK_DLL_CMDS
 		-filelist $(outbase).rsp\
 		$(foreach p,$(libpath), -L$(p))\
 		$(foreach lib,$(libs), $(if $(findstring $(lib),$(subst /,x,$(lib))), -l$(patsubst lib%,%,$(lib)), $(lib)))
+ ifeq ($(ld_debug),split)
+	$(QUIET)$(TOOL_GCC4MACHO_DSYMUTIL) -o $(out).dSYM/ $(out)
+	$(QUIET)$(TOOL_GCC4MACHO_STRIP_DLL) $(out)
+ endif
 endef
 
 
@@ -339,6 +447,8 @@ endef
 # @param    $(custom_post)  Custom step invoked after linking.
 # @param    $(outbase)  Output basename (full). Use this for list files and such.
 TOOL_GCC4MACHO_LINK_SYSMOD_OUTPUT = $(outbase).rsp
+TOOL_GCC4MACHO_LINK_SYSMOD_OUTPUT_DEBUG = $(call TOOL_GCC4MACHO_DEBUG_BUNDLE_FN,$(out))
+TOOL_GCC4MACHO_LINK_SYSMOD_DEBUG_INSTALL_FN = $(TOOL_GCC4MACHO_DEBUG_INSTALL_FN)
 TOOL_GCC4MACHO_LINK_SYSMOD_DEPEND = $(foreach lib,$(libs),$(if $(findstring $(lib),$(subst /,x,$(lib))),, $(lib)))
 TOOL_GCC4MACHO_LINK_SYSMOD_DEPORD =
 define TOOL_GCC4MACHO_LINK_SYSMOD_CMDS
@@ -347,5 +457,9 @@ define TOOL_GCC4MACHO_LINK_SYSMOD_CMDS
 		-filelist $(outbase).rsp\
 		$(foreach p,$(libpath), -L$(p))\
 		$(foreach lib,$(libs), $(if $(findstring $(lib),$(subst /,x,$(lib))), -l$(patsubst lib%,%,$(lib)), $(lib)))
+ ifeq ($(ld_debug),split)
+	$(QUIET)$(TOOL_GCC4MACHO_DSYMUTIL) -o $(out).dSYM/ $(out)
+	$(QUIET)$(TOOL_GCC4MACHO_STRIP_SYSMOD) $(out)
+ endif
 endef
 
