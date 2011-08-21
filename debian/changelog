@@ -1,6 +1,7 @@
 kbuild (1:0.1.98svn2318-9) UNRELEASED; urgency=low
 
   * Switch to source format 3.0 (quilt).
+    - Add unapply-patches and abort-on-upstream-changes to local-options.
   * Convert package from cdbs to dh(1).
 
  -- Felix Geyer <debfx-pkg@fobos.de>  Sat, 20 Aug 2011 16:04:33 +0200
