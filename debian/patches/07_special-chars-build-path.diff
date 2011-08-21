@@ -15,7 +15,7 @@ diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/GCC32.kmk kbuild-0.1.98svn2318/
  TOOL_GCC32_LD  ?= gcc$(HOSTSUFF_EXE) -m32
  TOOL_GCC32_LD_SYSMOD ?= ld$(HOSTSUFF_EXE)
  ifndef TOOL_GCC32_LDFLAGS.$(KBUILD_TARGET)
-@@ -214,17 +215,21 @@
+@@ -214,20 +215,21 @@
  # @param    $(deps)		Other dependencies.
  # @param    $(othersrc) Unhandled sources.
  # @param    $(outbase)  Output basename (full). Use this for list files and such.
@@ -27,7 +27,10 @@ diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/GCC32.kmk kbuild-0.1.98svn2318/
 -	$(QUIET)$(APPEND) $(out).ar-script 'CREATE $(out)'
 -	$(QUIET)$(APPEND) -n $(out).ar-script \
 -		$(foreach o,$(objs), 'ADDMOD $(o)') \
--		$(foreach o,$(othersrc), 'ADDLIB $(o)')
+-		$(foreach o,$(filter-out %.def %.imp,$(othersrc)), 'ADDLIB $(o)')
+-	$(if $(filter %.def %.imp,$(othersrc))\
+-		,$(TOOL_GCC32_AR_IMP) -o $(outbase).imp.a $(filter %.def %.imp,$(othersrc))\
+-		 $(NL)$(TAB)$(QUIET)$(APPEND) $(out).ar-script 'ADDLIB $(outbase).imp.a')
 -	$(QUIET)$(APPEND) $(out).ar-script 'SAVE'
 -	$(QUIET)$(APPEND) $(out).ar-script 'END'
 -	$(QUIET)$(REDIRECT) -rti $(out).ar-script -- $(TOOL_GCC32_AR) -M
@@ -142,7 +145,7 @@ diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/GXX32.kmk kbuild-0.1.98svn2318/
  TOOL_GXX32_LD  ?= g++$(HOSTSUFF_EXE) -m32
  TOOL_GXX32_LD_SYSMOD ?= ld$(HOSTSUFF_EXE)
  ifndef TOOL_GXX32_LDFLAGS.$(KBUILD_TARGET)
-@@ -213,17 +214,21 @@
+@@ -213,20 +214,21 @@
  # @param    $(deps)		Other dependencies.
  # @param    $(othersrc) Unhandled sources.
  # @param    $(outbase)  Output basename (full). Use this for list files and such.
@@ -154,7 +157,10 @@ diff -Nur kbuild-0.1.98svn2318.orig/kBuild/tools/GXX32.kmk kbuild-0.1.98svn2318/
 -	$(QUIET)$(APPEND) $(out).ar-script 'CREATE $(out)'
 -	$(QUIET)$(APPEND) -n $(out).ar-script \
 -		$(foreach o,$(objs), 'ADDMOD $(o)') \
--		$(foreach o,$(othersrc), 'ADDLIB $(o)')
+-		$(foreach o,$(filter-out %.def %.imp,$(othersrc)), 'ADDLIB $(o)')
+-	$(if $(filter %.def %.imp,$(othersrc))\
+-		,$(TOOL_GXX3_AR_IMP) -o $(outbase).imp.a $(filter %.def %.imp,$(othersrc))\
+-		 $(NL)$(TAB)$(QUIET)$(APPEND) $(out).ar-script 'ADDLIB $(outbase).imp.a')
 -	$(QUIET)$(APPEND) $(out).ar-script 'SAVE'
 -	$(QUIET)$(APPEND) $(out).ar-script 'END'
 -	$(QUIET)$(REDIRECT) -rti $(out).ar-script -- $(TOOL_GXX32_AR) -M

@@ -243,11 +243,11 @@ Index: kbuild-0.1.98svn2318/src/ash/Makefile.kmk
 +	HAVE_SYSCTL_H
  kmk_ash_DEFS.freebsd = \
  	HAVE_SYS_SIGNAME HAVE_SYSCTL_H HAVE_SETPROGNAME
- kmk_ash_INCS = $(PATH_kmk_ash) . # (the last is because of error.h)
+ kmk_ash_DEFS.openbsd = \
 @@ -79,6 +81,10 @@
- 	$(PATH_kmk_ash)/builtins.c \
- 	$(PATH_kmk_ash)/init.c \
- 	$(PATH_kmk_ash)/nodes.c
+ 	$(kmk_ash_0_OUTDIR)/builtins.c \
+ 	$(kmk_ash_0_OUTDIR)/init.c \
+ 	$(kmk_ash_0_OUTDIR)/nodes.c
 +kmk_ash_SOURCES.gnukfreebsd = \
 +	sys_signame.c \
 +	strlcpy.c \
@@ -267,7 +267,7 @@ Index: kbuild-0.1.98svn2318/src/kash/Makefile.kmk
 +	HAVE_SYSCTL_H
  kash_DEFS.freebsd = \
  	HAVE_SYS_SIGNAME HAVE_SYSCTL_H HAVE_SETPROGNAME
- kash_INCS = $(PATH_kash) . # (the last is because of error.h)
+ kash_DEFS.openbsd = \
 @@ -96,6 +98,9 @@
  	shheap.c \
  	shthread.c \
@@ -320,15 +320,14 @@ Index: kbuild-0.1.98svn2318/src/kmk/Makefile.kmk
  kmkmissing_SOURCES.linux += \
  	kmkbuiltin/strlcpy.c
 
-@@ -218,7 +221,8 @@
- #kmk_LIBS.solaris = malloc
- #kmk_DEFS.solaris += HAVE_MALLINFO
-
+@@ -218,6 +221,7 @@
+ 	vpath.c \
+ 	remote-stub.c
+ 
 +kmk_DEFS.gnukfreebsd = CONFIG_WITHOUT_THREADS
- kmk_LIBS.freebsd.amd64 = pthread
  kmk_DEFS.freebsd.x86 = CONFIG_WITHOUT_THREADS
-
- #
+ 
+ #kmk_LIBS.solaris = malloc
 Index: kbuild-0.1.98svn2318/src/kmk/file.c
 ===================================================================
 --- kbuild-0.1.98svn2318.orig/src/kmk/file.c	2009-08-06 18:51:39.000000000 +0200
