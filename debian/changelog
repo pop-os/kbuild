@@ -1,5 +1,6 @@
-kbuild (1:0.1.98svn2318-9) UNRELEASED; urgency=low
+kbuild (1:0.1.9998svn2543-1) UNRELEASED; urgency=low
 
+  * New upstream snapshot.
   * Switch to source format 3.0 (quilt).
     - Add unapply-patches and abort-on-upstream-changes to local-options.
   * Convert package from cdbs to dh(1).
