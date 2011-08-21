@@ -5,15 +5,13 @@ Maintainer: Debian Virtualbox Team <pkg-virtualbox-devel@lists.alioth.debian.org
 Uploaders: Michael Meskes <meskes@debian.org>,
            Felix Geyer <debfx-pkg@fobos.de>
 Build-Depends:
- debhelper (>= 7),
+ debhelper (>= 7.0.50~),
  autoconf,
  automake,
  autopoint,
  byacc,
- cdbs,
  flex,
- libacl1-dev,
- quilt (>= 0.40)
+ libacl1-dev
 Standards-Version: 3.8.4
 Homepage: http://svn.netlabs.org/kbuild
 Vcs-Browser: http://git.debian.org/?p=pkg-virtualbox/kbuild.git
