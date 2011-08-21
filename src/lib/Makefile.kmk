@@ -1,10 +1,10 @@
-# $Id: Makefile.kmk 2243 2009-01-10 02:24:02Z bird $
+# $Id: Makefile.kmk 2469 2011-07-12 12:52:34Z bird $
 ## @file
 # Sub-makefile for various libraries and stuff.
 #
 
 #
-# Copyright (c) 2006-2009 knut st. osmundsen <bird-kBuild-spamix@anduin.net>
+# Copyright (c) 2006-2010 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
 #
 # This file is part of kBuild.
 #
@@ -37,7 +37,13 @@ LIBRARIES += kUtil
 kUtil_TEMPLATE = LIB
 kUtil_DEFS.win = __WIN__
 kUtil_SOURCES = crc32.c md5.c
-kUtil_SOURCES.win = nt_fullpath.c
+kUtil_SOURCES.win = \
+	nt_fullpath.c \
+	quoted_spawn.c
+kUtil_SOURCES.solaris = \
+	restartable-syscall-wrappers.c
+#kUtil_SOURCES.linux = \
+#	restartable-syscall-wrappers.c
 kUtil_NOINST = 1
 
 LIBRARIES.win += kWinStartup

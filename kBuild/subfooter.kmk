@@ -1,10 +1,10 @@
-# $Id: subfooter.kmk 2242 2009-01-10 02:16:34Z bird $
+# $Id: subfooter.kmk 2443 2011-07-06 12:19:50Z bird $
 ## @file
 # kBuild - File included at bottom of a makefile or sub-makefile.
 #
 
 #
-# Copyright (c) 2006-2009 knut st. osmundsen <bird-kBuild-spamix@anduin.net>
+# Copyright (c) 2006-2010 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
 #
 # This file is part of kBuild.
 #
@@ -43,12 +43,10 @@ endif
 #
 define def_subheader
  ifndef $(target)_PATH
-  ifdef $(target)_DEFPATH
-   $(target)_PATH := $($(target)_DEFPATH)
-  else
-   $(target)_PATH := $(PATH_SUB_CURRENT)
+  ifndef $(target)_DEFPATH
    $(target)_DEFPATH := $(PATH_SUB_CURRENT)
   endif
+  $(call KB_FN_ASSIGN_DEPRECATED,$(target)_PATH,$($(target)_DEFPATH),$(target)_DEFPATH)
  else ifndef $(target)_DEFPATH
   $(target)_DEFPATH := $($(target)_PATH)
  endif
@@ -57,7 +55,7 @@ define def_subheader
  endif
  ifndef $(target)_0_OUTDIR
   $(target)_0_OUTDIR := $(call TARGET_PATH,$(target))
-  PATH_$(target) := $($(target)_0_OUTDIR)
+  $(call KB_FN_ASSIGN_DEPRECATED,PATH_$(target),$($(target)_0_OUTDIR),$(target)_0_OUTDIR)
  endif
 endef
 

@@ -1,10 +1,10 @@
-/* $Id: append.c 2243 2009-01-10 02:24:02Z bird $ */
+/* $Id: append.c 2466 2011-07-12 09:52:39Z bird $ */
 /** @file
  * kMk Builtin command - append text to file.
  */
 
 /*
- * Copyright (c) 2005-2009 knut st. osmundsen <bird-kBuild-spamix@anduin.net>
+ * Copyright (c) 2005-2010 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
  *
  * This file is part of kBuild.
  *
@@ -177,7 +177,7 @@ int kmk_builtin_append(int argc, char **argv, char **envp)
     iFile = i;
     pFile = fopen(argv[i], fTruncate ? "w" : "a");
     if (!pFile)
-        return err(1, "failed to open '%s'.", argv[i]);
+        return err(1, "failed to open '%s'", argv[i]);
 
     /*
      * Start define?

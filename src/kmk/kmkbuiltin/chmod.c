@@ -67,7 +67,7 @@ extern void * bsd_setmode(const char *p);
 extern mode_t bsd_getmode(const void *bbox, mode_t omode);
 extern void bsd_strmode(mode_t mode, char *p);
 
-#if defined(__APPLE__) && !defined(_DARWIN_FEATURE_UNIX_CONFORMANCE)
+#if (defined(__APPLE__) && !defined(_DARWIN_FEATURE_UNIX_CONFORMANCE)) || defined(__OpenBSD__)
 extern int lchmod(const char *, mode_t);
 #endif
 
@@ -195,12 +195,12 @@ done:	argv += optind;
 				fts_set(ftsp, p, FTS_SKIP);
 			continue;
 		case FTS_DNR:			/* Warn, chmod, continue. */
-			warnx("%s: %s", p->fts_path, strerror(p->fts_errno));
+			warnx("fts: %s: %s", p->fts_path, strerror(p->fts_errno));
 			rval = 1;
 			break;
 		case FTS_ERR:			/* Warn, continue. */
 		case FTS_NS:
-			warnx("%s: %s", p->fts_path, strerror(p->fts_errno));
+			warnx("fts: %s: %s", p->fts_path, strerror(p->fts_errno));
 			rval = 1;
 			continue;
 		case FTS_SL:			/* Ignore. */
@@ -221,7 +221,7 @@ done:	argv += optind;
 		if ((newmode & ALLPERMS) == (p->fts_statp->st_mode & ALLPERMS))
 			continue;
 		if ((*change_mode)(p->fts_accpath, newmode) && !fflag) {
-			warn("%s", p->fts_path);
+			warn("%schmod: %s", hflag ? "l" : "", p->fts_path);
 			rval = 1;
 		} else {
 			if (vflag) {

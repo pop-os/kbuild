@@ -1,10 +1,10 @@
-# $Id: qt4.kmk 2272 2009-02-19 01:22:28Z bird $
+# $Id: qt4.kmk 2479 2011-07-20 14:16:19Z bird $
 ## @file
 # Qt 4 unit.
 #
 
 #
-# Copyright (c) 2008-2009 knut st. osmundsen <bird-kBuild-spamix@anduin.net>
+# Copyright (c) 2008-2010 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
 #
 # This file is part of kBuild.
 #
@@ -146,7 +146,7 @@ ifndef PATH_SDK_QT4
 
      # And finally, the library path for KBUILD_TARGET.
      ifeq ($(PATH_SDK_QT4_LIB),)
-      PATH_SDK_QT4_LIB := $(PATH_SDK_QT4_LIB.$(KBUILD_TARGET))
+      PATH_SDK_QT4_LIB := $(PATH_SDK_QT4_LIB.$(KBUILD_TARGET_ARCH))
       ifeq ($(PATH_SDK_QT4_LIB),)
        PATH_SDK_QT4_LIB := $(patsubst %/libQtCore$(SUFF_DLL),%,$(firstword $(wildcard \
        	$(PATH_SDK_QT4)/lib/libQtCore$(SUFF_DLL) \
@@ -401,25 +401,25 @@ define TOOL_QT4_RCC_QRC_CMDS
 		$(flags)\
 		-o $(out)\
 		$(source)
-	$(APPEND) $(dep) '\'
-	$(APPEND) $(dep) '$(out): \'
-	$(APPEND) $(dep) '$(source) \'
-	$(SED) \
+	$(QUIET2)$(APPEND) $(dep) '\'
+	$(QUIET2)$(APPEND) $(dep) '$(out): \'
+	$(QUIET2)$(APPEND) $(dep) '$(source) \'
+	$(QUIET2)$(SED) \
 		-e '/^[[:blank:]]*<file[[:blank:]][^>]*>/!d' \
 		-e 's/^.*<file[[:blank:]][^>]*>\([^<]*\)<\/file>.*$$$$/\1/' \
 		-e 's|^[^/][^:]|$(abspathex $(dir $(source)),$(defpath))/&|' \
 		-e 's|$$$$| \\|' \
 		--append $(dep) \
 		$(source)
-	$(APPEND) $(dep)
-	$(SED) \
+	$(QUIET2)$(APPEND) $(dep)
+	$(QUIET2)$(SED) \
 		-e '/^[[:blank:]]*<file[[:blank:]][^>]*>/!d' \
 		-e 's/^.*<file[[:blank:]][^>]*>\([^<]*\)<\/file>.*$$$$/\1/' \
 		-e 's|^[^/][^:]|$(abspathex $(dir $(source)),$(defpath))/&|' \
 		-e 's|$$$$|:\n|' \
 		--append $(dep) \
 		$(source)
-	$(APPEND) $(dep)
+	$(QUIET2)$(APPEND) $(dep)
 endef
 
 ## Compile a Qt translation file (.ts).
@@ -956,6 +956,7 @@ local qt_infix := $(firstword \
 ifeq ($(bld_trg),darwin)
  # Adding -F to CXXFLAGS is necessary to make #include <QtCore/qstring.h> stuff work...
  $(eval $(target)_CXXFLAGS += -F$(PATH_SDK_QT4_LIB) )
+ $(eval $(target)_OBJCXXFLAGS += -F$(PATH_SDK_QT4_LIB) )
  $(eval $(target)_LDFLAGS  += -F$(PATH_SDK_QT4_LIB) $(foreach module,$(qt_modules), -framework $(qt_prefix)Qt$(module)$(qt_infix)) )
  $(eval $(target)_INCS     += $(foreach module,$(qt_modules), $(PATH_SDK_QT4_LIB)/$(qt_prefix)Qt$(module)$(qt_infix).framework/Versions/4/Headers) )
 else
@@ -1030,7 +1031,7 @@ local translations := \
  	$($(target)_QT_TRANSLATIONS.$(bld_type)) \
  	$($(target)_QT_TRANSLATIONS)
 ifneq ($(strip $(translations)),)
- local expr := _ALL_INSTALLS += $(target)-inst-nls
+ local expr := _ALL_INSTALLS_IMPLICIT += $(target)-inst-nls
  $(eval $(expr))
  ifdef $(target)_QT_TRANSLATIONS_TEMPLATE
   $(target)-inst-nls_TEMPLATE := $($(target)_QT_TRANSLATIONS_TEMPLATE)

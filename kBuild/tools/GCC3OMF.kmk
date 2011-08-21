@@ -1,10 +1,10 @@
-# $Id: GCC3OMF.kmk 2243 2009-01-10 02:24:02Z bird $
+# $Id: GCC3OMF.kmk 2534 2011-08-02 14:13:06Z bird $
 ## @file
 # kBuild Tool Config - GCC v3 targeting OS/2 OMF.
 #
 
 #
-# Copyright (c) 2004-2009 knut st. osmundsen <bird-kBuild-spamix@anduin.net>
+# Copyright (c) 2004-2010 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
 #
 # This file is part of kBuild.
 #
@@ -116,6 +116,7 @@ define TOOL_GCC3OMF_COMPILE_C_CMDS
 		$(flags) -fpreprocessed -x c\
 		-o $(obj)\
 		-
+	$(QUIET)$(APPEND) -n "$(dep)" "" "$(source):" ""
 endef
 else # !KBUILD_USE_KOBJCACHE
 TOOL_GCC3OMF_COMPILE_C_OUTPUT =
@@ -125,6 +126,7 @@ define TOOL_GCC3OMF_COMPILE_C_CMDS
 		-Wp,-MD,$(dep) -Wp,-MT,$(obj) -Wp,-MP \
 		-o $(obj)\
 		$(abspath $(source))
+	$(QUIET)$(APPEND) -n "$(dep)" "" "$(source):" ""
 endef
 endif # !KBUILD_USE_KOBJCACHE
 
@@ -159,6 +161,7 @@ define TOOL_GCC3OMF_COMPILE_CXX_CMDS
 		$(flags) -fpreprocessed -x c++\
 		-o $(obj)\
 		-
+	$(QUIET)$(APPEND) -n "$(dep)" "" "$(source):" ""
 endef
 else # !KBUILD_USE_KOBJCACHE
 TOOL_GCC3OMF_COMPILE_CXX_OUTPUT =
@@ -168,6 +171,7 @@ define TOOL_GCC3OMF_COMPILE_CXX_CMDS
 		-Wp,-MD,$(dep) -Wp,-MT,$(obj) -Wp,-MP \
 		-o $(obj)\
 		$(abspath $(source))
+	$(QUIET)$(APPEND) -n "$(dep)" "" "$(source):" ""
 endef
 endif # !KBUILD_USE_KOBJCACHE
 
@@ -194,6 +198,7 @@ define TOOL_GCC3OMF_COMPILE_AS_CMDS
 		-Wp,-MD,$(dep) -Wp,-MT,$(obj) -Wp,-MP\
 		-o $(obj)\
 		$(abspath $(source))
+	$(QUIET)$(APPEND) -n "$(dep)" "" "$(source):" ""
 endef
 
 
@@ -247,6 +252,9 @@ define TOOL_GCC3OMF_LINK_PROGRAM_CMDS
 		$(foreach lib,$(libs), $(if $(findstring $(lib),$(subst /,x,$(lib))), -l$(patsubst lib%,%,$(lib)), $(lib)))\
 		-Zmap=$(outbase).map
 	$(QUIET)$(TOOL_GCC3OMF_LD) @$(outbase).rsp
+if1of ($(ld_debug), split)
+ $(warning kBuild: Debug splitting is requrested for $(target), but this feature is not supported by GCC3OMF.)
+endif
 endef
 
 
@@ -278,6 +286,9 @@ define TOOL_GCC3OMF_LINK_DLL_CMDS
 		$(foreach lib,$(libs), $(if $(findstring $(lib),$(subst /,x,$(lib))), -l$(patsubst lib%,%,$(lib)), $(lib)))\
 		-Zmap=$(outbase).map
 	$(TOOL_GCC3OMF_LD) @$(outbase).rsp
+if1of ($(ld_debug), split)
+ $(warning kBuild: Debug splitting is requrested for $(target), but this feature is not supported by GCC3OMF.)
+endif
 endef
 
 
@@ -309,5 +320,8 @@ define TOOL_GCC3OMF_LINK_SYSMOD_CMDS
 		$(foreach lib,$(libs), $(if $(findstring $(lib),$(subst /,x,$(lib))), -l$(patsubst lib%,%,$(lib)), $(lib)))\
 		-Zmap=$(outbase).map
 	$(QUIET)$(TOOL_GCC3OMF_LD_SYSMOD) @$(outbase).rsp
+if1of ($(ld_debug), split)
+ $(warning kBuild: Debug splitting is requrested for $(target), but this feature is not supported by GCC3OMF.)
+endif
 endef
 

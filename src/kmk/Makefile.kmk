@@ -1,10 +1,10 @@
-# $Id: Makefile.kmk 2263 2009-01-23 00:22:47Z bird $
+# $Id: Makefile.kmk 2532 2011-08-02 13:05:37Z bird $
 ## @file
 # Sub-makefile for kmk / GNU Make.
 #
 
 #
-# Copyright (c) 2004-2009 knut st. osmundsen <bird-kBuild-spamix@anduin.net>
+# Copyright (c) 2004-2011 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
 #
 # This file is part of kBuild.
 #
@@ -31,39 +31,40 @@ include $(KBUILD_PATH)/subheader.kmk
 # Template for kmk and the kmk_* binaries in this makefile.
 #
 TEMPLATE_BIN-KMK = Template for src/gmake binaries
-TEMPLATE_BIN-KMK_EXTENDS = BIN
+TEMPLATE_BIN-KMK_EXTENDS = BIN-THREADED
 TEMPLATE_BIN-KMK_DEFS = \
 	HAVE_CONFIG_H \
 	$(TEMPLATE_BIN_DEFS) \
 	KBUILD_SVN_REV=$(KBUILD_SVN_REV) \
 	KBUILD_TYPE=\"$(KBUILD_TYPE)\"
 TEMPLATE_BIN-KMK_DEPS = \
-	$(PATH_kmk)/config.h \
-	$(PATH_kmk)/fts.h
+	$(kmk_0_OUTDIR)/config.h \
+	$(kmk_0_OUTDIR)/fts.h
 TEMPLATE_BIN-KMK_CLEAN = $(TEMPLATE_BIN-KMK_DEPS)
 TEMPLATE_BIN-KMK_DEPS.solaris = \
-	$(PATH_kmk)/paths.h
+	$(kmk_0_OUTDIR)/paths.h
 TEMPLATE_BIN-KMK_CLEAN.solaris = $(TEMPLATE_BIN-KMK_DEPS.solaris)
 TEMPLATE_BIN-KMK_DEPS.win     = \
-	$(PATH_kmk)/sysexits.h \
-	$(PATH_kmk)/unistd.h \
-	$(PATH_kmk)/paths.h \
-	$(PATH_kmk)/grp.h \
-	$(PATH_kmk)/pwd.h \
-	$(PATH_kmk)/inttypes.h
-TEMPLATE_BIN-KMK_CFLAGS.win.amd64 = $(TEMPLATE_BIN_CFLAGS.win.amd64) -wd4244 -wd4267
+	$(kmk_0_OUTDIR)/sysexits.h \
+	$(kmk_0_OUTDIR)/unistd.h \
+	$(kmk_0_OUTDIR)/paths.h \
+	$(kmk_0_OUTDIR)/grp.h \
+	$(kmk_0_OUTDIR)/pwd.h \
+	$(kmk_0_OUTDIR)/inttypes.h
+TEMPLATE_BIN-KMK_CFLAGS.win.amd64 = $(TEMPLATE_BIN-THREADED_CFLAGS.win.amd64) -wd4244 -wd4267
 TEMPLATE_BIN-KMK_CLEAN.win = $(TEMPLATE_BIN-KMK_DEPS.win)
-TEMPLATE_BIN-KMK_INCS = $(PATH_kmk) . $(TEMPLATE_BIN_INCS)
+TEMPLATE_BIN-KMK_INCS = $(kmk_0_OUTDIR) . $(TEMPLATE_BIN-THREADED_INCS)
 TEMPLATE_BIN-KMK_INCS.darwin = glob
 TEMPLATE_BIN-KMK_INCS.dragonfly = glob
 TEMPLATE_BIN-KMK_INCS.freebsd = glob
+TEMPLATE_BIN-KMK_INCS.openbsd = glob
 TEMPLATE_BIN-KMK_INCS.solaris = glob
-TEMPLATE_BIN-KMK_LIBS = $(TEMPLATE_BIN_LIBS) $(TARGET_kmkmissing) $(LIB_KUTIL)
+TEMPLATE_BIN-KMK_LIBS = $(TEMPLATE_BIN-THREADED_LIBS) $(kmkmissing_1_TARGET) $(LIB_KUTIL)
 ifdef ELECTRIC_HEAP # for electric heap (see electric.c) - windows only.
 ifeq ($(KBUILD_TARGET),win)
- TEMPLATE_BIN-KMK_CFLAGS = $(TEMPLATE_BIN_CFLAGS) /FI$(kmk_PATH)/electric.h -DELECTRIC_HEAP=1
+ TEMPLATE_BIN-KMK_CFLAGS = $(TEMPLATE_BIN-THREADED_CFLAGS) /FI$(kmk_DEFPATH)/electric.h -DELECTRIC_HEAP=1
 else
- TEMPLATE_BIN-KMK_CFLAGS = $(TEMPLATE_BIN_CFLAGS) -include $(kmk_PATH)/electric.h -DELECTRIC_HEAP=1
+ TEMPLATE_BIN-KMK_CFLAGS = $(TEMPLATE_BIN-THREADED_CFLAGS) -include $(kmk_DEFPATH)/electric.h -DELECTRIC_HEAP=1
 endif
 endif
 
@@ -102,6 +103,10 @@ kmkmissing_SOURCES.freebsd = \
 
 kmkmissing_SOURCES.linux += \
 	kmkbuiltin/strlcpy.c
+
+kmkmissing_SOURCES.openbsd = \
+	kmkbuiltin/openbsd.c \
+	glob/glob.c
 
 kmkmissing_SOURCES.solaris = \
 	kmkbuiltin/strlcpy.c \
@@ -148,29 +153,33 @@ kmk_DEFS = \
 	CONFIG_NO_DEFAULT_TERMINAL_RULES \
 	CONFIG_NO_DEFAULT_SUFFIX_RULES \
 	CONFIG_NO_DEFAULT_VARIABLES \
+	\
+	CONFIG_WITH_ABSPATHEX \
+	CONFIG_WITH_COMMANDS_FUNC \
+	CONFIG_WITH_DATE \
+	CONFIG_WITH_DEFINED_FUNCTIONS \
+	CONFIG_WITH_EVALPLUS \
+	CONFIG_WITH_FILE_SIZE \
+	CONFIG_WITH_LOOP_FUNCTIONS \
+	CONFIG_WITH_MATH \
+	CONFIG_WITH_NANOTS \
+	CONFIG_WITH_ROOT_FUNC \
+	CONFIG_WITH_RSORT \
+	CONFIG_WITH_STACK \
+	CONFIG_WITH_STRING_FUNCTIONS \
+	CONFIG_WITH_WHERE_FUNCTION \
+	CONFIG_WITH_WHICH \
+	CONFIG_WITH_XARGS \
+	\
 	CONFIG_WITH_EXTENDED_NOTPARALLEL \
 	CONFIG_WITH_INCLUDEDEP \
 	CONFIG_WITH_VALUE_LENGTH \
-	CONFIG_WITH_RSORT \
-	CONFIG_WITH_ABSPATHEX \
 	CONFIG_WITH_COMPARE \
-	CONFIG_WITH_STACK \
-	CONFIG_WITH_MATH \
-	CONFIG_WITH_XARGS \
-	CONFIG_WITH_NANOTS \
 	CONFIG_WITH_SET_CONDITIONALS \
 	CONFIG_WITH_IF_CONDITIONALS \
-	CONFIG_WITH_DATE \
-	CONFIG_WITH_FILE_SIZE \
-	CONFIG_WITH_WHICH \
 	CONFIG_WITH_PRINTF \
-	CONFIG_WITH_EVALPLUS \
 	CONFIG_WITH_MINIMAL_STATS \
-	CONFIG_WITH_COMMANDS_FUNC \
-	CONFIG_WITH_PRINTF \
-	CONFIG_WITH_STRING_FUNCTIONS \
-	CONFIG_WITH_LOOP_FUNCTIONS \
-	CONFIG_WITH_ROOT_FUNC \
+	\
 	CONFIG_PRETTY_COMMAND_PRINTING \
 	CONFIG_WITH_PRINT_STATS_SWITCH \
 	CONFIG_WITH_PRINT_TIME_SWITCH \
@@ -215,11 +224,10 @@ kmk_SOURCES = \
 	vpath.c \
 	remote-stub.c
 
+kmk_DEFS.freebsd.x86 = CONFIG_WITHOUT_THREADS
+
 #kmk_LIBS.solaris = malloc
 #kmk_DEFS.solaris += HAVE_MALLINFO
-
-kmk_LIBS.freebsd.amd64 = pthread
-kmk_DEFS.freebsd.x86 = CONFIG_WITHOUT_THREADS
 
 #
 # kmkbuiltin commands
@@ -401,9 +409,9 @@ PROGRAMS += kmk_gmake
 kmk_gmake_TEMPLATE = BIN-KMK
 kmk_gmake_DEFS = \
 	HAVE_CONFIG_H \
-	NO_ARCHIVES \
 	CONFIG_WITH_TOUPPER_TOLOWER \
 	EXPERIMENTAL
+#	NO_ARCHIVES
 
 kmk_gmake_SOURCES = \
 	main.c \
@@ -486,33 +494,33 @@ include $(FILE_KBUILD_SUB_FOOTER)
 #
 # Use checked in config.h instead of running ./Configure for it.
 #
-kmk_config.h.$(KBUILD_TARGET) := $(kmk_PATH)/config.h.$(KBUILD_TARGET)
-$(PATH_kmk)/config.h: $(kmk_config.h.$(KBUILD_TARGET))
+kmk_config.h.$(KBUILD_TARGET) := $(kmk_DEFPATH)/config.h.$(KBUILD_TARGET)
+$(kmk_0_OUTDIR)/config.h: $(kmk_config.h.$(KBUILD_TARGET))
 	$(MKDIR) -p $(dir $@)
 	$(CP) $^ $@
 
 #
 # Some missing headers.
 #
-$(PATH_kmk)/fts.h: $(kmk_PATH)/kmkbuiltin/ftsfake.h | $(call DIRDEP,$(PATH_kmk))
+$(kmk_0_OUTDIR)/fts.h: $(kmk_DEFPATH)/kmkbuiltin/ftsfake.h | $(call DIRDEP,$(kmk_0_OUTDIR))
 	$(CP) $^ $@
 
-$(PATH_kmk)/unistd.h: | $(call DIRDEP,$(PATH_kmk))
+$(kmk_0_OUTDIR)/unistd.h: | $(call DIRDEP,$(kmk_0_OUTDIR))
 	$(ECHO_EXT) > $@
 
-$(PATH_kmk)/sysexits.h: | $(call DIRDEP,$(PATH_kmk))
+$(kmk_0_OUTDIR)/sysexits.h: | $(call DIRDEP,$(kmk_0_OUTDIR))
 	$(ECHO_EXT) > $@
 
-$(PATH_kmk)/inttypes.h: | $(call DIRDEP,$(PATH_kmk))
+$(kmk_0_OUTDIR)/inttypes.h: | $(call DIRDEP,$(kmk_0_OUTDIR))
 	$(ECHO_EXT) > $@
 
-$(PATH_kmk)/paths.h: | $(call DIRDEP,$(PATH_kmk))
+$(kmk_0_OUTDIR)/paths.h: | $(call DIRDEP,$(kmk_0_OUTDIR))
 	$(ECHO_EXT) > $@
 
-$(PATH_kmk)/pwd.h: | $(call DIRDEP,$(PATH_kmk))
+$(kmk_0_OUTDIR)/pwd.h: | $(call DIRDEP,$(kmk_0_OUTDIR))
 	$(ECHO_EXT) > $@
 
-$(PATH_kmk)/grp.h: | $(call DIRDEP,$(PATH_kmk))
+$(kmk_0_OUTDIR)/grp.h: | $(call DIRDEP,$(kmk_0_OUTDIR))
 	$(ECHO_EXT) > $@
 
 
@@ -566,22 +574,25 @@ test_shell_newline:
 
 
 test_stack:
-	$(MAKE) -f $(kmk_PATH)/testcase-stack.kmk
+	$(MAKE) -f $(kmk_DEFPATH)/testcase-stack.kmk
 
 test_math:
-	$(MAKE) -f $(kmk_PATH)/testcase-math.kmk
+	$(MAKE) -f $(kmk_DEFPATH)/testcase-math.kmk
 
 test_if1of:
-	$(MAKE) -f $(kmk_PATH)/testcase-if1of.kmk
+	$(MAKE) -f $(kmk_DEFPATH)/testcase-if1of.kmk
 
 test_local:
-	$(MAKE) -f $(kmk_PATH)/testcase-local.kmk
+	$(MAKE) -f $(kmk_DEFPATH)/testcase-local.kmk
 
 test_includedep:
-	$(MAKE) -f $(kmk_PATH)/testcase-includedep.kmk
+	$(MAKE) -f $(kmk_DEFPATH)/testcase-includedep.kmk
+
+test_root:
+	$(MAKE) -f $(kmk_DEFPATH)/testcase-root.kmk
 
 test_2ndtargetexp:
-	$(MAKE) -f $(kmk_PATH)/testcase-2ndtargetexp.kmk
+	$(MAKE) -f $(kmk_DEFPATH)/testcase-2ndtargetexp.kmk
 
 test_30_continued_on_failure_worker:
 	this_executable_does_not_exist.exe
@@ -598,9 +609,19 @@ test_30_continued_on_failure:
 	fi
 
 test_lazy_deps_vars:
-	$(MAKE) -C $(kmk_PATH) -f testcase-lazy-deps-vars.kmk
+	$(MAKE) -C $(kmk_DEFPATH) -f testcase-lazy-deps-vars.kmk
 
 
-test_all:	test_math test_stack test_shell test_if1of test_local test_includedep test_2ndtargetexp test_30_continued_on_failure test_lazy_deps_vars
+test_all: \
+        test_math \
+        test_stack \
+        test_shell \
+        test_if1of \
+        test_local \
+        test_root \
+        test_includedep \
+        test_2ndtargetexp \
+        test_30_continued_on_failure \
+        test_lazy_deps_vars
 
 

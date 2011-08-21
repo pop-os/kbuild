@@ -38,7 +38,7 @@ static const char copyright[] =
 static char sccsid[] = "@(#)rm.c	8.5 (Berkeley) 4/18/94";
 #endif /* not lint */
 #include <sys/cdefs.h>
-//__FBSDID("$FreeBSD: src/bin/rm/rm.c,v 1.47 2004/04/06 20:06:50 markm Exp $");
+/*__FBSDID("$FreeBSD: src/bin/rm/rm.c,v 1.47 2004/04/06 20:06:50 markm Exp $");*/
 #endif
 
 #include "config.h"
@@ -119,6 +119,13 @@ static int	rm_overwrite(char *, struct stat *);
 static int	rm_tree(char **);
 static int	usage(FILE *);
 
+#if 1
+#define CUR_LINE_H2(x)  "[line " #x "]"
+#define CUR_LINE_H1(x)  CUR_LINE_H2(x)
+#define CUR_LINE()      CUR_LINE_H1(__LINE__)
+#else
+# define CUR_LINE()
+#endif
 
 
 /*
@@ -279,17 +286,18 @@ rm_tree(char **argv)
 		return err(1, "fts_open");
 	}
 	while ((p = fts_read(fts)) != NULL) {
+		const char *operation = "chflags";
 		switch (p->fts_info) {
 		case FTS_DNR:
 			if (!fflag || p->fts_errno != ENOENT) {
-				fprintf(stderr, "%s: %s: %s\n",
+				fprintf(stderr, "fts: %s: %s: %s" CUR_LINE() "\n",
 				        argv0, p->fts_path, strerror(p->fts_errno));
 				eval = 1;
 			}
 			continue;
 		case FTS_ERR:
 			fts_close(fts);
-			return errx(1, "%s: %s", p->fts_path, strerror(p->fts_errno));
+			return errx(1, "fts: %s: %s " CUR_LINE(), p->fts_path, strerror(p->fts_errno));
 		case FTS_NS:
 			/*
 			 * Assume that since fts_read() couldn't stat the
@@ -298,7 +306,7 @@ rm_tree(char **argv)
 			if (!needstat)
 				break;
 			if (!fflag || p->fts_errno != ENOENT) {
-				fprintf(stderr, "%s: %s: %s\n",
+				fprintf(stderr, "fts: %s: %s: %s " CUR_LINE() "\n",
 				        argv0, p->fts_path, strerror(p->fts_errno));
 				eval = 1;
 			}
@@ -362,6 +370,7 @@ rm_tree(char **argv)
 						    p->fts_path);
 					continue;
 				}
+				operation = "mkdir";
 				break;
 
 #ifdef FTS_W
@@ -373,6 +382,7 @@ rm_tree(char **argv)
 						    p->fts_path);
 					continue;
 				}
+				operation = "undelete";
 				break;
 #endif
 
@@ -402,16 +412,18 @@ rm_tree(char **argv)
 						    p->fts_path);
 					continue;
 				}
+				operation = "unlink";
+				break;
 			}
 		}
 #ifdef UF_APPEND
 err:
 #endif
-		fprintf(stderr, "%s: %s: %s\n", argv0, p->fts_path, strerror(errno));
+		fprintf(stderr, "%s: %s: %s: %s " CUR_LINE() "\n", operation, argv0, p->fts_path, strerror(errno));
 		eval = 1;
 	}
 	if (errno) {
-		fprintf(stderr, "%s: fts_read: %s\n", argv0, strerror(errno));
+		fprintf(stderr, "%s: fts_read: %s " CUR_LINE() "\n", argv0, strerror(errno));
 		eval = 1;
 	}
 	fts_close(fts);
@@ -439,6 +451,7 @@ rm_file(char **argv)
 	 * to remove a directory is an error, so must always stat the file.
 	 */
 	while ((f = *argv++) != NULL) {
+		const char *operation = "?";
 		/* Assume if can't stat the file, can't unlink it. */
 		if (lstat(f, &sb)) {
 #ifdef FTS_WHITEOUT
@@ -449,7 +462,7 @@ rm_file(char **argv)
 			{
 #endif
 				if (!fflag || errno != ENOENT) {
-					fprintf(stderr, "%s: %s: %s\n", argv0, f, strerror(errno));
+					fprintf(stderr, "lstat: %s: %s: %s " CUR_LINE() "\n", argv0, f, strerror(errno));
 					eval = 1;
 				}
 				continue;
@@ -477,11 +490,13 @@ rm_file(char **argv)
 			rval = chflags(f, sb.st_flags & ~(UF_APPEND|UF_IMMUTABLE));
 #endif
 		if (rval == 0) {
-			if (S_ISWHT(sb.st_mode))
+			if (S_ISWHT(sb.st_mode)) {
 				rval = undelete(f);
-			else if (S_ISDIR(sb.st_mode))
+				operation = "undelete";
+			} else if (S_ISDIR(sb.st_mode)) {
 				rval = rmdir(f);
-			else {
+				operation = "rmdir";
+			} else {
 				if (Pflag)
 					if (!rm_overwrite(f, &sb))
 						continue;
@@ -492,10 +507,11 @@ rm_file(char **argv)
 					rval = unlink(f);
 				}
 #endif
+				operation = "unlink";
 			}
 		}
 		if (rval && (!fflag || errno != ENOENT)) {
-			fprintf(stderr, "%s: %s: %s\n", argv0, f, strerror(errno));
+			fprintf(stderr, "%s: %s: %s: %s" CUR_LINE() "\n", operation, argv0, f, strerror(errno));
 			eval = 1;
 		}
 		if (vflag && rval == 0)
@@ -525,6 +541,7 @@ rm_overwrite(char *file, struct stat *sbp)
 	off_t len;
 	int bsize, fd, wlen;
 	char *buf = NULL;
+	const char *operation = "lstat";
 
 	fd = -1;
 	if (sbp == NULL) {
@@ -534,6 +551,7 @@ rm_overwrite(char *file, struct stat *sbp)
 	}
 	if (!S_ISREG(sbp->st_mode))
 		return (1);
+	operation = "open";
 	if ((fd = open(file, O_WRONLY, 0)) == -1)
 		goto err;
 #ifdef HAVE_FSTATFS
@@ -549,6 +567,7 @@ rm_overwrite(char *file, struct stat *sbp)
 		exit(err(1, "%s: malloc", file));
 
 #define	PASS(byte) {							\
+	operation = "write";    					\
 	memset(buf, byte, bsize);					\
 	for (len = sbp->st_size; len > 0; len -= wlen) {		\
 		wlen = len < bsize ? len : bsize;			\
@@ -557,9 +576,11 @@ rm_overwrite(char *file, struct stat *sbp)
 	}								\
 }
 	PASS(0xff);
+	operation = "fsync/lseek";
 	if (fsync(fd) || lseek(fd, (off_t)0, SEEK_SET))
 		goto err;
 	PASS(0x00);
+	operation = "fsync/lseek";
 	if (fsync(fd) || lseek(fd, (off_t)0, SEEK_SET))
 		goto err;
 	PASS(0xff);
@@ -567,13 +588,14 @@ rm_overwrite(char *file, struct stat *sbp)
 		free(buf);
 		return (1);
 	}
+	operation = "fsync/close";
 
 err:	eval = 1;
 	if (buf)
 		free(buf);
 	if (fd != -1)
 		close(fd);
-	fprintf(stderr, "%s: %s: %s\n", argv0, file, strerror(errno));
+	fprintf(stderr, "%s: %s: %s: %s" CUR_LINE() "\n", operation, argv0, file, strerror(errno));
 	return (0);
 }
 

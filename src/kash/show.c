@@ -272,8 +272,8 @@ indent(int amount, char *pfx, FILE *fp)
  * if it's NULL and returning (void) if that fails. */
 # define TRY_GET_PSH_OR_RETURN(psh)  \
 	if (!(psh)) { \
-		psh = shthread_get_shell(); \
-		if (!psh) \
+		(psh) = shthread_get_shell(); \
+		if (!(psh)) \
 			return; \
 	} else do { } while (0)
 
@@ -515,6 +515,7 @@ opentrace(shinstance *psh)
 			}
 			want_fd = ((want_fd + 1) / 2) - 1;
 		}
+		shfile_cloexec(&psh->fdtab, psh->tracefd, 1 /* close it */);
 	}
 	if (psh->tracefd == -1) {
 		fprintf(stderr, "Can't open %s\n", s);

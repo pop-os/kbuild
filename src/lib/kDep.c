@@ -1,10 +1,10 @@
-/* $Id: kDep.c 2270 2009-01-26 00:01:01Z bird $ */
+/* $Id: kDep.c 2413 2010-09-11 17:43:04Z bird $ */
 /** @file
  * kDep - Common Dependency Managemnt Code.
  */
 
 /*
- * Copyright (c) 2004-2009 knut st. osmundsen <bird-kBuild-spamix@anduin.net>
+ * Copyright (c) 2004-2010 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
  *
  * This file is part of kBuild.
  *
@@ -387,7 +387,8 @@ void depHexDump(const KU8 *pb, size_t cb, size_t offBase)
     while (off < cb)
     {
         unsigned i;
-        printf("%s%0*x %04x:", off ? "\n" : "", sizeof(pb) * 2, offBase + off, off);
+        printf("%s%0*lx %04lx:", off ? "\n" : "", (int)sizeof(pb) * 2,
+               (unsigned long)offBase + (unsigned long)off, (unsigned long)off);
         for (i = 0; i < cchWidth && off + i < cb ; i++)
             printf(off + i < cb ? !(i & 7) && i ? "-%02x" : " %02x" : "   ", pb[i]);
 

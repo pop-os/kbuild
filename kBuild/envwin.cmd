@@ -1,11 +1,11 @@
 @echo off
-REM $Id: $
+REM $Id: envwin.cmd 2413 2010-09-11 17:43:04Z bird $
 REM REM @file
 REM Environment setup script.
 REM
 
 REM
-REM Copyright (c) 2005-2009 knut st. osmundsen <bird-kBuild-spamix@anduin.net>
+REM Copyright (c) 2005-2010 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
 REM
 REM This file is part of kBuild.
 REM
@@ -393,7 +393,7 @@ goto try_by_pwd
 cd "%_KBUILD_SELF%\.."
 for /f "tokens=*" %%d in ('cd') do set _KBUILD_PATH=%%d
 cd "%_KBUILD_CURDIR%"
-if exist "%_KBUILD_PATH%\footer.kmk"      goto found_kbuild
+if exist "%_KBUILD_PATH%\footer.kmk"    goto found_kbuild
 
 REM Try relative to the current directory.
 :try_by_pwd

@@ -1,9 +1,9 @@
-/* $Id: shfile.c 2312 2009-03-02 01:14:43Z bird $ */
+/* $Id: shfile.c 2425 2010-10-18 08:52:22Z bird $ */
 /** @file
  *
  * File management.
  *
- * Copyright (c) 2007-2009  knut st. osmundsen <bird-kBuild-spamix@anduin.net>
+ * Copyright (c) 2007-2010 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
  *
  *
  * This file is part of kBuild.
@@ -31,6 +31,7 @@
 #include "shinstance.h" /* TRACE2 */
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <assert.h>
 
 #if K_OS == K_OS_WINDOWS
@@ -38,7 +39,13 @@
 # ifndef PIPE_BUF
 #  define PIPE_BUF 512
 # endif
+# include <ntstatus.h>
+# define WIN32_NO_STATUS
 # include <Windows.h>
+# if !defined(_WIN32_WINNT)
+#  define _WIN32_WINNT 0x0502 /* Windows Server 2003 */
+# endif
+# include <winternl.h> //NTSTATUS
 #else
 # include <unistd.h>
 # include <fcntl.h>
@@ -53,6 +60,7 @@
  * Whether the file descriptor table stuff is actually in use or not.
  */
 #if K_OS == K_OS_WINDOWS \
+ || K_OS == K_OS_OPENBSD /* because of ugly pthread library pipe hacks */ \
  || !defined(SH_FORKED_MODE)
 # define SHFILE_IN_USE
 #endif
@@ -85,9 +93,9 @@
 # define FTEXT              0x80
 
 # define MY_ObjectBasicInformation 0
-typedef LONG (NTAPI * PFN_NtQueryObject)(HANDLE, int, void *, size_t, size_t *);
+# define MY_FileNamesInformation 12
 
-typedef struct MY_OBJECT_BASIC_INFORMATION
+typedef struct
 {
     ULONG           Attributes;
 	ACCESS_MASK     GrantedAccess;
@@ -102,6 +110,46 @@ typedef struct MY_OBJECT_BASIC_INFORMATION
 	LARGE_INTEGER   CreateTime;
 } MY_OBJECT_BASIC_INFORMATION;
 
+#if 0
+typedef struct
+{
+    union
+    {
+        LONG    Status;
+        PVOID   Pointer;
+    };
+    ULONG_PTR   Information;
+} MY_IO_STATUS_BLOCK;
+#else
+typedef IO_STATUS_BLOCK MY_IO_STATUS_BLOCK;
+#endif
+typedef MY_IO_STATUS_BLOCK *PMY_IO_STATUS_BLOCK;
+
+typedef struct
+{
+    ULONG   NextEntryOffset;
+    ULONG   FileIndex;
+    ULONG   FileNameLength;
+    WCHAR   FileName[1];
+} MY_FILE_NAMES_INFORMATION, *PMY_FILE_NAMES_INFORMATION;
+
+typedef NTSTATUS (NTAPI * PFN_NtQueryObject)(HANDLE, int, void *, size_t, size_t *);
+typedef NTSTATUS (NTAPI * PFN_NtQueryDirectoryFile)(HANDLE, HANDLE, void *,  void *, PMY_IO_STATUS_BLOCK, void *,
+                                                    ULONG, int, int, PUNICODE_STRING, int);
+typedef NTSTATUS (NTAPI * PFN_RtlUnicodeStringToAnsiString)(PANSI_STRING, PCUNICODE_STRING, int);
+
+
+#endif /* K_OS_WINDOWS */
+
+
+/*******************************************************************************
+*   Global Variables                                                           *
+*******************************************************************************/
+#if K_OS == K_OS_WINDOWS
+static int                              g_shfile_globals_initialized = 0;
+static PFN_NtQueryObject                g_pfnNtQueryObject = NULL;
+static PFN_NtQueryDirectoryFile         g_pfnNtQueryDirectoryFile = NULL;
+static PFN_RtlUnicodeStringToAnsiString g_pfnRtlUnicodeStringToAnsiString = NULL;
 #endif /* K_OS_WINDOWS */
 
 
@@ -124,6 +172,46 @@ static void shfile_native_close(intptr_t native, unsigned flags)
     errno = s;
 #endif
     (void)flags;
+}
+
+/**
+ * Grows the descriptor table, making sure that it can hold @a fdMin,
+ *
+ * @returns The max(fdMin, fdFirstNew) on success, -1 on failure.
+ * @param   pfdtab      The table to grow.
+ * @param   fdMin       Grow to include this index.
+ */
+static int shfile_grow_tab_locked(shfdtab *pfdtab, int fdMin)
+{
+    /*
+     * Grow the descriptor table.
+     */
+    int         fdRet = -1;
+    shfile     *new_tab;
+    int         new_size = pfdtab->size + SHFILE_GROW;
+    while (new_size < fdMin)
+        new_size += SHFILE_GROW;
+    new_tab = sh_realloc(shthread_get_shell(), pfdtab->tab, new_size * sizeof(shfile));
+    if (new_tab)
+    {
+        int     i;
+        for (i = pfdtab->size; i < new_size; i++)
+        {
+            new_tab[i].fd = -1;
+            new_tab[i].oflags = 0;
+            new_tab[i].shflags = 0;
+            new_tab[i].native = -1;
+        }
+
+        fdRet = pfdtab->size;
+        if (fdRet < fdMin)
+            fdRet = fdMin;
+
+        pfdtab->tab = new_tab;
+        pfdtab->size = new_size;
+    }
+
+    return fdRet;
 }
 
 /**
@@ -154,6 +242,15 @@ static int shfile_insert(shfdtab *pfdtab, intptr_t native, unsigned oflags, unsi
         errno = EMFILE;
         return -1;
     }
+# if K_OS != K_OS_WINDOWS
+    if (fcntl((int)native, F_SETFD, fcntl((int)native, F_GETFD, 0) | FD_CLOEXEC) == -1)
+    {
+        int e = errno;
+        close((int)native);
+        errno = e;
+        return -1;
+    }
+# endif
 
     shmtx_enter(&pfdtab->mtx, &tmp);
 
@@ -161,41 +258,14 @@ static int shfile_insert(shfdtab *pfdtab, intptr_t native, unsigned oflags, unsi
      * Search for a fitting unused location.
      */
     fd = -1;
-    for (i = 0; (unsigned)i < pfdtab->size; i++)
-        if (    i >= fdMin
-            &&  pfdtab->tab[i].fd == -1)
+    for (i = fdMin >= 0 ? fdMin : 0; (unsigned)i < pfdtab->size; i++)
+        if (pfdtab->tab[i].fd == -1)
         {
             fd = i;
             break;
         }
     if (fd == -1)
-    {
-        /*
-         * Grow the descriptor table.
-         */
-        shfile     *new_tab;
-        int         new_size = pfdtab->size + SHFILE_GROW;
-        while (new_size < fdMin)
-            new_size += SHFILE_GROW;
-        new_tab = sh_realloc(shthread_get_shell(), pfdtab->tab, new_size * sizeof(shfile));
-        if (new_tab)
-        {
-            for (i = pfdtab->size; i < new_size; i++)
-            {
-                new_tab[i].fd = -1;
-                new_tab[i].oflags = 0;
-                new_tab[i].shflags = 0;
-                new_tab[i].native = -1;
-            }
-
-            fd = pfdtab->size;
-            if (fd < fdMin)
-                fd = fdMin;
-
-            pfdtab->tab = new_tab;
-            pfdtab->size = new_size;
-        }
-    }
+        fd = shfile_grow_tab_locked(pfdtab, fdMin);
 
     /*
      * Fill in the entry if we've found one.
@@ -217,6 +287,37 @@ static int shfile_insert(shfdtab *pfdtab, intptr_t native, unsigned oflags, unsi
     (void)who;
     return fd;
 }
+
+#if K_OS != K_OS_WINDOWS
+/**
+ * Makes a copy of the native file, closes the original, and inserts the copy
+ * into the descriptor table.
+ *
+ * If we're out of memory and cannot extend the table, we'll close the
+ * file, set errno to EMFILE and return -1.
+ *
+ * @returns The file descriptor number. -1 and errno on failure.
+ * @param   pfdtab      The file descriptor table.
+ * @param   pnative     The native file handle on input, -1 on output.
+ * @param   oflags      The flags the it was opened/created with.
+ * @param   shflags     The shell file flags.
+ * @param   fdMin       The minimum file descriptor number, pass -1 if any is ok.
+ * @param   who         Who we're doing this for (for logging purposes).
+ */
+static int shfile_copy_insert_and_close(shfdtab *pfdtab, int *pnative, unsigned oflags, unsigned shflags, int fdMin, const char *who)
+{
+    int fd          = -1;
+    int s           = errno;
+    int native_copy = fcntl(*pnative, F_DUPFD, SHFILE_UNIX_MIN_FD);
+    close(*pnative);
+    *pnative = -1;
+    errno = s;
+
+    if (native_copy != -1)
+        fd = shfile_insert(pfdtab, native_copy, oflags, shflags, fdMin, who);
+    return fd;
+}
+#endif /* !K_OS_WINDOWS */
 
 /**
  * Gets a file descriptor and lock the file descriptor table.
@@ -386,26 +487,37 @@ static int shfile_dos2errno(int err)
     return -1;
 }
 
+/**
+ * Converts an NT status code to errno,
+ * assigning it to errno.
+ *
+ * @returns -1
+ * @param   rcNt        The NT status code.
+ */
+static int shfile_nt2errno(NTSTATUS rcNt)
+{
+    switch (rcNt)
+    {
+        default:                            errno = EINVAL; break;
+    }
+    return -1;
+}
+
 DWORD shfile_query_handle_access_mask(HANDLE h, PACCESS_MASK pMask)
 {
-    static PFN_NtQueryObject        s_pfnNtQueryObject = NULL;
     MY_OBJECT_BASIC_INFORMATION     BasicInfo;
-    LONG                            Status;
+    NTSTATUS                        rcNt;
 
-    if (!s_pfnNtQueryObject)
-    {
-        s_pfnNtQueryObject = (PFN_NtQueryObject)GetProcAddress(GetModuleHandle("NTDLL"), "NtQueryObject");
-        if (!s_pfnNtQueryObject)
-            return ERROR_NOT_SUPPORTED;
-    }
+    if (!g_pfnNtQueryObject)
+        return ERROR_NOT_SUPPORTED;
 
-    Status = s_pfnNtQueryObject(h, MY_ObjectBasicInformation, &BasicInfo, sizeof(BasicInfo), NULL);
-    if (Status >= 0)
+    rcNt = g_pfnNtQueryObject(h, MY_ObjectBasicInformation, &BasicInfo, sizeof(BasicInfo), NULL);
+    if (rcNt >= 0)
     {
         *pMask = BasicInfo.GrantedAccess;
         return NO_ERROR;
     }
-    if (Status != STATUS_INVALID_HANDLE)
+    if (rcNt != STATUS_INVALID_HANDLE)
         return ERROR_GEN_FAILURE;
     return ERROR_INVALID_HANDLE;
 }
@@ -413,6 +525,28 @@ DWORD shfile_query_handle_access_mask(HANDLE h, PACCESS_MASK pMask)
 # endif /* K_OS == K_OS_WINDOWS */
 
 #endif /* SHFILE_IN_USE */
+
+/**
+ * Initializes the global variables in this file.
+ */
+static void shfile_init_globals(void)
+{
+#if K_OS == K_OS_WINDOWS
+    if (!g_shfile_globals_initialized)
+    {
+        HMODULE hNtDll = GetModuleHandle("NTDLL");
+        g_pfnNtQueryObject                = (PFN_NtQueryObject)       GetProcAddress(hNtDll, "NtQueryObject");
+        g_pfnNtQueryDirectoryFile         = (PFN_NtQueryDirectoryFile)GetProcAddress(hNtDll, "NtQueryDirectoryFile");
+        g_pfnRtlUnicodeStringToAnsiString = (PFN_RtlUnicodeStringToAnsiString)GetProcAddress(hNtDll, "RtlUnicodeStringToAnsiString");
+        if (   !g_pfnRtlUnicodeStringToAnsiString
+            || !g_pfnNtQueryDirectoryFile)
+        {
+            /* fatal error */
+        }
+        g_shfile_globals_initialized = 1;
+    }
+#endif
+}
 
 /**
  * Initializes a file descriptor table.
@@ -425,6 +559,8 @@ DWORD shfile_query_handle_access_mask(HANDLE h, PACCESS_MASK pMask)
 int shfile_init(shfdtab *pfdtab, shfdtab *inherit)
 {
     int rc;
+
+    shfile_init_globals();
 
     pfdtab->cwd  = NULL;
     pfdtab->size = 0;
@@ -547,13 +683,67 @@ int shfile_init(shfdtab *pfdtab, shfdtab *inherit)
                         HANDLE hFile = GetStdHandle(aStdHandles[i].dwStdHandle);
                         if (hFile != INVALID_HANDLE_VALUE)
                         {
-                            int fd2 = shfile_insert(pfdtab, (intptr_t)hFile, aStdHandles[i].fFlags, 0, i, "shtab_init");
+                            DWORD       dwType  = GetFileType(hFile);
+                            unsigned    fFlags  = aStdHandles[i].fFlags;
+                            unsigned    fFlags2;
+                            int         fd2;
+                            if (dwType == FILE_TYPE_CHAR)
+                                fFlags2 = SHFILE_FLAGS_TTY;
+                            else if (dwType == FILE_TYPE_PIPE)
+                                fFlags2 = SHFILE_FLAGS_PIPE;
+                            else
+                                fFlags2 = SHFILE_FLAGS_FILE;
+                            fd2 = shfile_insert(pfdtab, (intptr_t)hFile, fFlags, fFlags2, i, "shtab_init");
                             assert(fd2 == i); (void)fd2;
                             if (fd2 != i)
                                 rc = -1;
                         }
                     }
 # else
+                /*
+                 * Annoying...
+                 */
+                int fd;
+
+                for (fd = 0; fd < 10; fd++)
+                {
+                    int oflags = fcntl(fd, F_GETFL, 0);
+                    if (oflags != -1)
+                    {
+                        int cox = fcntl(fd, F_GETFD, 0);
+                        struct stat st;
+                        if (   cox != -1
+                            && fstat(fd, &st) != -1)
+                        {
+                            int native;
+                            int fd2;
+                            int fFlags2 = 0;
+                            if (cox & FD_CLOEXEC)
+                                fFlags2 |= SHFILE_FLAGS_CLOSE_ON_EXEC;
+                            if (S_ISREG(st.st_mode))
+                                fFlags2 |= SHFILE_FLAGS_FILE;
+                            else if (S_ISDIR(st.st_mode))
+                                fFlags2 |= SHFILE_FLAGS_DIR;
+                            else if (S_ISCHR(st.st_mode))
+                                fFlags2 |= SHFILE_FLAGS_TTY;
+                            else if (S_ISFIFO(st.st_mode))
+                                fFlags2 |= SHFILE_FLAGS_PIPE;
+                            else
+                                fFlags2 |= SHFILE_FLAGS_TTY;
+
+                            native = fcntl(fd, F_DUPFD, SHFILE_UNIX_MIN_FD);
+                            if (native == -1)
+                                native = fd;
+                            fd2 = shfile_insert(pfdtab, native, oflags, fFlags2, fd, "shtab_init");
+                            assert(fd2 == fd); (void)fd2;
+                            if (fd2 != fd)
+                                rc = -1;
+                            if (native != fd)
+                                close(fd);
+                        }
+                    }
+                }
+
 # endif
             }
             else
@@ -587,7 +777,7 @@ void shfile_fork_win(shfdtab *pfdtab, int set, intptr_t *hndls)
     DWORD fFlag = set ? HANDLE_FLAG_INHERIT : 0;
 
     shmtx_enter(&pfdtab->mtx, &tmp);
-    TRACE2((NULL, "shfile_fork_win:\n"));
+    TRACE2((NULL, "shfile_fork_win: set=%d\n", set));
 
     i = pfdtab->size;
     while (i-- > 0)
@@ -597,7 +787,7 @@ void shfile_fork_win(shfdtab *pfdtab, int set, intptr_t *hndls)
             HANDLE hFile = (HANDLE)pfdtab->tab[i].native;
             if (set)
                 TRACE2((NULL, "  #%d: native=%#x oflags=%#x shflags=%#x\n",
-                        i, pfdtab->tab[i].oflags, pfdtab->tab[i].shflags, hFile));
+                        i, hFile, pfdtab->tab[i].oflags, pfdtab->tab[i].shflags));
             if (!SetHandleInformation(hFile, HANDLE_FLAG_INHERIT, fFlag))
             {
                 DWORD err = GetLastError();
@@ -611,10 +801,12 @@ void shfile_fork_win(shfdtab *pfdtab, int set, intptr_t *hndls)
         for (i = 0; i < 3; i++)
         {
             if (    pfdtab->size > i
-                &&  pfdtab->tab[i].fd == 0)
+                &&  pfdtab->tab[i].fd == i)
                 hndls[i] = pfdtab->tab[i].native;
             else
                 hndls[i] = (intptr_t)INVALID_HANDLE_VALUE;
+            TRACE2((NULL, "shfile_fork_win: i=%d size=%d fd=%d native=%d hndls[%d]=%p\n",
+                    i, pfdtab->size, pfdtab->tab[i].fd, pfdtab->tab[i].native, i, hndls[i]));
         }
     }
 
@@ -643,12 +835,12 @@ void *shfile_exec_win(shfdtab *pfdtab, int prepare, unsigned short *sizep, intpt
     unsigned    i;
 
     shmtx_enter(&pfdtab->mtx, &tmp);
-    TRACE2((NULL, "shfile_fork_win:\n"));
+    TRACE2((NULL, "shfile_exec_win: prepare=%p\n", prepare));
 
     count  = pfdtab->size < (0x10000-4) / (1 + sizeof(HANDLE))
            ? pfdtab->size
            : (0x10000-4) / (1 + sizeof(HANDLE));
-    while (count > 3 && pfdtab->tab[count].fd == -1)
+    while (count > 3 && pfdtab->tab[count - 1].fd == -1)
         count--;
 
     if (prepare)
@@ -668,7 +860,7 @@ void *shfile_exec_win(shfdtab *pfdtab, int prepare, unsigned short *sizep, intpt
             {
                 HANDLE hFile = (HANDLE)pfdtab->tab[i].native;
                 TRACE2((NULL, "  #%d: native=%#x oflags=%#x shflags=%#x\n",
-                        i, pfdtab->tab[i].oflags, pfdtab->tab[i].shflags, hFile));
+                        i, hFile, pfdtab->tab[i].oflags, pfdtab->tab[i].shflags));
 
                 if (!SetHandleInformation(hFile, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT))
                 {
@@ -696,11 +888,13 @@ void *shfile_exec_win(shfdtab *pfdtab, int prepare, unsigned short *sizep, intpt
 
         for (i = 0; i < 3; i++)
         {
-            if (    count > i
-                &&  pfdtab->tab[i].fd == 0)
+            if (    i < count
+                &&  pfdtab->tab[i].fd == i)
                 hndls[i] = pfdtab->tab[i].native;
             else
                 hndls[i] = (intptr_t)INVALID_HANDLE_VALUE;
+            TRACE2((NULL, "shfile_exec_win: i=%d count=%d fd=%d native=%d hndls[%d]=\n",
+                    i, count, pfdtab->tab[i].fd, pfdtab->tab[i].native, i, hndls[i]));
         }
 
         *sizep = (unsigned short)cbData;
@@ -733,6 +927,38 @@ void *shfile_exec_win(shfdtab *pfdtab, int prepare, unsigned short *sizep, intpt
 
 #endif /* K_OS_WINDOWS */
 
+#if K_OS != K_OS_WINDOWS
+/**
+ * Prepare file handles for inherting before a execve call.
+ *
+ * This is only used in the normal mode, so we've forked and need not worry
+ * about cleaning anything up after us.  Nor do we need think about locking.
+ *
+ * @returns 0 on success, -1 on failure.
+ */
+int shfile_exec_unix(shfdtab *pfdtab)
+{
+    int rc = 0;
+# ifdef SHFILE_IN_USE
+    unsigned fd;
+
+    for (fd = 0; fd < pfdtab->size; fd++)
+    {
+        if (   pfdtab->tab[fd].fd != -1
+            && !(pfdtab->tab[fd].shflags & SHFILE_FLAGS_CLOSE_ON_EXEC) )
+        {
+            TRACE2((NULL, "shfile_exec_unix: %d => %d\n", pfdtab->tab[fd].native, fd));
+            if (dup2(pfdtab->tab[fd].native, fd) < 0)
+            {
+                /* fatal_error(NULL, "shfile_exec_unix: failed to move %d to %d", pfdtab->tab[fd].fd, fd); */
+                rc = -1;
+            }
+        }
+    }
+# endif
+    return rc;
+}
+#endif /* !K_OS_WINDOWS */
 
 /**
  * open().
@@ -815,18 +1041,9 @@ int shfile_open(shfdtab *pfdtab, const char *name, unsigned flags, mode_t mode)
     fd = shfile_make_path(pfdtab, name, &absname[0]);
     if (!fd)
     {
-        fd = open(absname, flag, mode);
+        fd = open(absname, flags, mode);
         if (fd != -1)
-        {
-            int native = fcntl(fd, F_DUPFD, SHFILE_UNIX_MIN_FD);
-            int s = errno;
-            close(fd);
-            errno = s;
-            if (native != -1)
-                fd = shfile_insert(pfdtab, native, flags, 0, -1, "shfile_open");
-            else
-                fd = -1;
-        }
+            fd = shfile_copy_insert_and_close(pfdtab, &fd, flags, 0, -1, "shfile_open");
     }
 
 # endif /* K_OS != K_OS_WINDOWS */
@@ -841,7 +1058,7 @@ int shfile_open(shfdtab *pfdtab, const char *name, unsigned flags, mode_t mode)
 
 int shfile_pipe(shfdtab *pfdtab, int fds[2])
 {
-    int rc;
+    int rc = -1;
 #ifdef SHFILE_IN_USE
 # if K_OS == K_OS_WINDOWS
     HANDLE hRead  = INVALID_HANDLE_VALUE;
@@ -869,10 +1086,10 @@ int shfile_pipe(shfdtab *pfdtab, int fds[2])
     fds[1] = fds[0] = -1;
     if (!pipe(native_fds))
     {
-        fds[0] = shfile_insert(pfdtab, native_fds[0], O_RDONLY, SHFILE_FLAGS_PIPE, -1, "shfile_pipe");
+        fds[0] = shfile_copy_insert_and_close(pfdtab, &native_fds[0], O_RDONLY, SHFILE_FLAGS_PIPE, -1, "shfile_pipe");
         if (fds[0] != -1)
         {
-            fds[1] = shfile_insert(pfdtab, native_fds[1], O_WRONLY, SHFILE_FLAGS_PIPE, -1, "shfile_pipe");
+            fds[1] = shfile_copy_insert_and_close(pfdtab, &native_fds[1], O_WRONLY, SHFILE_FLAGS_PIPE, -1, "shfile_pipe");
             if (fds[1] != -1)
                 rc = 0;
         }
@@ -926,6 +1143,122 @@ int shfile_pipe(shfdtab *pfdtab, int fds[2])
 int shfile_dup(shfdtab *pfdtab, int fd)
 {
     return shfile_fcntl(pfdtab,fd, F_DUPFD, 0);
+}
+
+/**
+ * Move the file descriptor, closing any existing descriptor at @a fdto.
+ *
+ * @returns fdto on success, -1 and errno on failure.
+ * @param   pfdtab          The file descriptor table.
+ * @param   fdfrom          The descriptor to move.
+ * @param   fdto            Where to move it.
+ */
+int shfile_movefd(shfdtab *pfdtab, int fdfrom, int fdto)
+{
+#ifdef SHFILE_IN_USE
+    int         rc;
+    shmtxtmp    tmp;
+    shfile     *file = shfile_get(pfdtab, fdfrom, &tmp);
+    if (file)
+    {
+        /* prepare the new entry */
+        if (fdto >= (int)pfdtab->size)
+            shfile_grow_tab_locked(pfdtab, fdto);
+        if (fdto < (int)pfdtab->size)
+        {
+            if (pfdtab->tab[fdto].fd != -1)
+                shfile_native_close(pfdtab->tab[fdto].native, pfdtab->tab[fdto].oflags);
+
+            /* setup the target. */
+            pfdtab->tab[fdto].fd      = fdto;
+            pfdtab->tab[fdto].oflags  = file->oflags;
+            pfdtab->tab[fdto].shflags = file->shflags;
+            pfdtab->tab[fdto].native  = file->native;
+
+            /* close the source. */
+            file->fd        = -1;
+            file->oflags    = 0;
+            file->shflags   = 0;
+            file->native    = -1;
+
+            rc = fdto;
+        }
+        else
+        {
+            errno = EMFILE;
+            rc = -1;
+        }
+
+        shfile_put(pfdtab, file, &tmp);
+    }
+    else
+        rc = -1;
+    return rc;
+
+#else
+    return dup2(fdfrom, fdto);
+#endif
+}
+
+/**
+ * Move the file descriptor to somewhere at @a fdMin or above.
+ *
+ * @returns the new file descriptor success, -1 and errno on failure.
+ * @param   pfdtab          The file descriptor table.
+ * @param   fdfrom          The descriptor to move.
+ * @param   fdMin           The minimum descriptor.
+ */
+int shfile_movefd_above(shfdtab *pfdtab, int fdfrom, int fdMin)
+{
+#ifdef SHFILE_IN_USE
+    int         fdto;
+    shmtxtmp    tmp;
+    shfile     *file = shfile_get(pfdtab, fdfrom, &tmp);
+    if (file)
+    {
+        /* find a new place */
+        int i;
+        fdto = -1;
+        for (i = fdMin; (unsigned)i < pfdtab->size; i++)
+            if (pfdtab->tab[i].fd == -1)
+            {
+                fdto = i;
+                break;
+            }
+        if (fdto == -1)
+            fdto = shfile_grow_tab_locked(pfdtab, fdMin);
+        if (fdto != -1)
+        {
+            /* setup the target. */
+            pfdtab->tab[fdto].fd      = fdto;
+            pfdtab->tab[fdto].oflags  = file->oflags;
+            pfdtab->tab[fdto].shflags = file->shflags;
+            pfdtab->tab[fdto].native  = file->native;
+
+            /* close the source. */
+            file->fd        = -1;
+            file->oflags    = 0;
+            file->shflags   = 0;
+            file->native    = -1;
+        }
+        else
+        {
+            errno = EMFILE;
+            fdto = -1;
+        }
+
+        shfile_put(pfdtab, file, &tmp);
+    }
+    else
+        fdto = -1;
+    return fdto;
+
+#else
+    int fdnew = fcntl(fdfrom, F_DUPFD, fdMin);
+    if (fdnew >= 0)
+        close(fdfrom);
+    return fdnew;
+#endif
 }
 
 /**
@@ -1019,7 +1352,28 @@ long shfile_write(shfdtab *pfdtab, int fd, const void *buf, size_t len)
         rc = -1;
 
 #else
+    if (fd != shthread_get_shell()->tracefd)
+    {
+        struct stat s;
+        int x;
+        x = fstat(fd, &s);
+        TRACE2((NULL, "shfile_write(%d) - %lu bytes (%d) - pos %lu - before; %o\n",
+                fd, (long)s.st_size, x, (long)lseek(fd, 0, SEEK_CUR), s.st_mode ));
+        errno = 0;
+    }
+
     rc = write(fd, buf, len);
+#endif
+
+#ifdef DEBUG
+    if (fd != shthread_get_shell()->tracefd)
+    {
+        struct stat s;
+        int x;
+        TRACE2((NULL, "shfile_write(%d,,%d) -> %d [%d]\n", fd, len, rc, errno));
+        x=fstat(fd, &s);
+        TRACE2((NULL, "shfile_write(%d) - %lu bytes (%d) - pos %lu - after\n", fd, (long)s.st_size, x, (long)lseek(fd, 0, SEEK_CUR) ));
+    }
 #endif
     return rc;
 }
@@ -1095,7 +1449,7 @@ int shfile_fcntl(shfdtab *pfdtab, int fd, int cmd, int arg)
 # else
                     rc = fcntl(file->native, F_SETFL, arg);
                     if (rc != -1)
-                        file->flags = (file->flags & ~mask) | (arg & mask);
+                        file->oflags = (file->oflags & ~mask) | (arg & mask);
 # endif
                 }
                 break;
@@ -1116,9 +1470,11 @@ int shfile_fcntl(shfdtab *pfdtab, int fd, int cmd, int arg)
                 else
                     rc = shfile_dos2errno(GetLastError());
 # else
-                int nativeNew = fcntl(file->native F_DUPFD, SHFILE_UNIX_MIN_FD);
+                int nativeNew = fcntl(file->native, F_DUPFD, SHFILE_UNIX_MIN_FD);
                 if (nativeNew != -1)
                     rc = shfile_insert(pfdtab, nativeNew, file->oflags, file->shflags, arg, "shfile_fcntl");
+                else
+                    rc = -1;
 # endif
                 break;
             }
@@ -1196,9 +1552,9 @@ int shfile_lstat(shfdtab *pfdtab, const char *path, struct stat *pst)
  */
 int shfile_chdir(shfdtab *pfdtab, const char *path)
 {
-    shinstance *psh = shthread_get_shell();
     int         rc;
 #ifdef SHFILE_IN_USE
+    shinstance *psh = shthread_get_shell();
     char        abspath[SHFILE_MAX_PATH];
 
     rc = shfile_make_path(pfdtab, path, &abspath[0]);
@@ -1225,7 +1581,7 @@ int shfile_chdir(shfdtab *pfdtab, const char *path)
     rc = chdir(path);
 #endif
 
-    TRACE2((psh, "shfile_chdir(,%s) -> %d [%d]\n", path, rc, errno));
+    TRACE2((NULL, "shfile_chdir(,%s) -> %d [%d]\n", path, rc, errno));
     return rc;
 }
 
@@ -1256,7 +1612,7 @@ char *shfile_getcwd(shfdtab *pfdtab, char *buf, int size)
         }
         else
         {
-            if (size < cwd_size)
+            if ((size_t)size < cwd_size)
                 size = (int)cwd_size;
             ret = sh_malloc(shthread_get_shell(), size);
             if (ret)
@@ -1349,6 +1705,7 @@ int shfile_cloexec(shfdtab *pfdtab, int fd, int closeit)
         else
             file->shflags &= ~SHFILE_FLAGS_CLOSE_ON_EXEC;
         shfile_put(pfdtab, file, &tmp);
+        rc = 0;
     }
     else
         rc = -1;
@@ -1402,11 +1759,50 @@ void shfile_set_umask(shfdtab *pfdtab, mode_t mask)
 }
 
 
+
 shdir *shfile_opendir(shfdtab *pfdtab, const char *dir)
 {
-#ifdef SHFILE_IN_USE
-    errno = ENOSYS;
-    return NULL;
+#if defined(SHFILE_IN_USE) && K_OS == K_OS_WINDOWS
+    shdir  *pdir = NULL;
+
+    if (g_pfnNtQueryDirectoryFile)
+    {
+        char abspath[SHFILE_MAX_PATH];
+        if (shfile_make_path(pfdtab, dir, &abspath[0]) == 0)
+        {
+            HANDLE              hFile;
+            SECURITY_ATTRIBUTES SecurityAttributes;
+
+            SecurityAttributes.nLength = sizeof(SecurityAttributes);
+            SecurityAttributes.lpSecurityDescriptor = NULL;
+            SecurityAttributes.bInheritHandle = FALSE;
+
+            hFile = CreateFileA(abspath,
+                                GENERIC_READ,
+                                FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                &SecurityAttributes,
+                                OPEN_EXISTING,
+                                FILE_ATTRIBUTE_DIRECTORY | FILE_FLAG_BACKUP_SEMANTICS,
+                                NULL /* hTemplateFile */);
+            if (hFile != INVALID_HANDLE_VALUE)
+            {
+                pdir = (shdir *)sh_malloc(shthread_get_shell(), sizeof(*pdir));
+                if (pdir)
+                {
+                    pdir->pfdtab = pfdtab;
+                    pdir->native = hFile;
+                    pdir->off    = ~(size_t)0;
+                }
+                else
+                    CloseHandle(hFile);
+            }
+            else
+                shfile_dos2errno(GetLastError());
+        }
+    }
+    else
+        errno = ENOSYS;
+    return pdir;
 #else
     return (shdir *)opendir(dir);
 #endif
@@ -1414,8 +1810,65 @@ shdir *shfile_opendir(shfdtab *pfdtab, const char *dir)
 
 shdirent *shfile_readdir(struct shdir *pdir)
 {
-#ifdef SHFILE_IN_USE
-    errno = ENOSYS;
+#if defined(SHFILE_IN_USE) && K_OS == K_OS_WINDOWS
+    if (pdir)
+    {
+        NTSTATUS rcNt;
+
+        if (   pdir->off == ~(size_t)0
+            || pdir->off + sizeof(MY_FILE_NAMES_INFORMATION) >= pdir->cb)
+        {
+            MY_IO_STATUS_BLOCK Ios;
+
+            memset(&Ios, 0, sizeof(Ios));
+            rcNt = g_pfnNtQueryDirectoryFile(pdir->native,
+                                             NULL /*Event*/,
+                                             NULL /*ApcRoutine*/,
+                                             NULL /*ApcContext*/,
+                                             &Ios,
+                                             &pdir->buf[0],
+                                             sizeof(pdir->buf),
+                                             MY_FileNamesInformation,
+                                             FALSE /*ReturnSingleEntry*/,
+                                             NULL /*FileName*/,
+                                             pdir->off == ~(size_t)0 /*RestartScan*/);
+            if (rcNt >= 0 && rcNt != STATUS_PENDING)
+            {
+                pdir->cb  = Ios.Information;
+                pdir->off = 0;
+            }
+            else if (rcNt == STATUS_NO_MORE_FILES)
+                errno = 0; /* wrong? */
+            else
+                shfile_nt2errno(rcNt);
+        }
+
+        if (   pdir->off != ~(size_t)0
+            && pdir->off + sizeof(MY_FILE_NAMES_INFORMATION) <= pdir->cb)
+        {
+            PMY_FILE_NAMES_INFORMATION  pcur = (PMY_FILE_NAMES_INFORMATION)&pdir->buf[pdir->off];
+            ANSI_STRING                 astr;
+            UNICODE_STRING              ustr;
+
+            astr.Length = astr.MaximumLength = sizeof(pdir->ent.name);
+            astr.Buffer = &pdir->ent.name[0];
+
+            ustr.Length = ustr.MaximumLength = pcur->FileNameLength < ~(USHORT)0 ? (USHORT)pcur->FileNameLength : ~(USHORT)0;
+            ustr.Buffer = &pcur->FileName[0];
+
+            rcNt = g_pfnRtlUnicodeStringToAnsiString(&astr, &ustr, 0/*AllocateDestinationString*/);
+            if (rcNt < 0)
+                sprintf(pdir->ent.name, "conversion-failed-%08x-rcNt=%08x-len=%u",
+                        pcur->FileIndex, rcNt, pcur->FileNameLength);
+            if (pcur->NextEntryOffset)
+                pdir->off += pcur->NextEntryOffset;
+            else
+                pdir->off = pdir->cb;
+            return &pdir->ent;
+        }
+    }
+    else
+        errno = EINVAL;
     return NULL;
 #else
     struct dirent *pde = readdir((DIR *)pdir);
@@ -1425,8 +1878,16 @@ shdirent *shfile_readdir(struct shdir *pdir)
 
 void shfile_closedir(struct shdir *pdir)
 {
-#ifdef SHFILE_IN_USE
-    errno = ENOSYS;
+#if defined(SHFILE_IN_USE) && K_OS == K_OS_WINDOWS
+    if (pdir)
+    {
+        CloseHandle(pdir->native);
+        pdir->pfdtab = NULL;
+        pdir->native = INVALID_HANDLE_VALUE;
+        sh_free(shthread_get_shell(), pdir);
+    }
+    else
+        errno = EINVAL;
 #else
     closedir((DIR *)pdir);
 #endif

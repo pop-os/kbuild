@@ -1,10 +1,10 @@
-/* $Id: mscfakes.c 2243 2009-01-10 02:24:02Z bird $ */
+/* $Id: mscfakes.c 2484 2011-07-21 19:01:08Z bird $ */
 /** @file
  * Fake Unix stuff for MSC.
  */
 
 /*
- * Copyright (c) 2005-2009 knut st. osmundsen <bird-kBuild-spamix@anduin.net>
+ * Copyright (c) 2005-2010 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
  *
  * This file is part of kBuild.
  *
@@ -157,6 +157,9 @@ msc_set_errno(DWORD dwErr)
         case ERROR_ALREADY_EXISTS:          errno = EEXIST; break;
         case ERROR_FILENAME_EXCED_RANGE:    errno = ENOENT; break;
         case ERROR_NESTING_NOT_ALLOWED:     errno = EAGAIN; break;
+#ifdef EMLINK
+        case ERROR_TOO_MANY_LINKS:          errno = EMLINK; break;
+#endif
     }
 
     return -1;
@@ -212,7 +215,6 @@ int lchmod(const char *pszPath, mode_t mode)
 int msc_chmod(const char *pszPath, mode_t mode)
 {
     int rc = 0;
-    int saved_errno;
     int fMustBeDir;
     char *pszPathFree = msc_fix_path(&pszPath, &fMustBeDir);
 
@@ -255,11 +257,32 @@ int msc_chmod(const char *pszPath, mode_t mode)
 }
 
 
+typedef BOOL (WINAPI *PFNCREATEHARDLINKA)(LPCSTR, LPCSTR, LPSECURITY_ATTRIBUTES);
 int link(const char *pszDst, const char *pszLink)
 {
-    errno = ENOSYS;
-    err(1, "link() is not implemented on windows!");
-    return -1;
+    static PFNCREATEHARDLINKA   s_pfnCreateHardLinkA = NULL;
+    static int                  s_fTried = FALSE;
+
+    /* The API was introduced in Windows 2000, so resolve it dynamically. */
+    if (!s_pfnCreateHardLinkA)
+    {
+        if (!s_fTried)
+        {
+            HMODULE hmod = LoadLibrary("KERNEL32.DLL");
+            if (hmod)
+                *(FARPROC *)&s_pfnCreateHardLinkA = GetProcAddress(hmod, "CreateHardLinkA");
+            s_fTried = TRUE;
+        }
+        if (!s_pfnCreateHardLinkA)
+        {
+            errno = ENOSYS;
+            return -1;
+        }
+    }
+
+    if (s_pfnCreateHardLinkA(pszLink, pszDst, NULL))
+        return 0;
+    return msc_set_errno(GetLastError());
 }
 
 
