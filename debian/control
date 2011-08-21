@@ -11,7 +11,7 @@ Build-Depends: debhelper (>= 7.0.50~),
                byacc,
                flex,
                libacl1-dev
-Standards-Version: 3.8.4
+Standards-Version: 3.9.2
 Homepage: http://svn.netlabs.org/kbuild
 Vcs-Browser: http://git.debian.org/?p=pkg-virtualbox/kbuild.git
 Vcs-Git: git://git.debian.org/git/pkg-virtualbox/kbuild.git
