@@ -8,6 +8,8 @@ BOOTSTRAP := ASH=/bin/bash ECHO=/bin/echo MKDIR=/bin/mkdir CP=/bin/cp \
 SVNROOT   := http://svn.netlabs.org/repos/kbuild/trunk
 REVISION  := $(shell echo $(UPSTREAM_VERSION) | sed -e's,.*svn,,')
 
+export LDFLAGS := $(shell dpkg-buildflags --get LDFLAGS) -Wl,--as-needed
+
 %:
 	dh $@
 
@@ -19,11 +21,10 @@ override_dh_auto_build:
 	$(info DEBUG: macros defined by gcc:)
 	-gcc -dM -E - < /dev/null
 	kBuild/env.sh --full make -f bootstrap.gmk SRCDIR=`pwd` $(BOOTSTRAP)
-	kBuild/env.sh kmk rebuild PATH_INS=`pwd` $(YACC)
+	kBuild/env.sh kmk rebuild PATH_INS=`pwd` KBUILD_VERBOSE=2 $(YACC)
 
 override_dh_auto_install:
-	kBuild/env.sh kmk install NIX_INSTALL_DIR=/usr LDFLAGS=-Wl,--as-needed
-	cd out/*.*/release/usr/share/kBuild && chmod a-x *.kmk */*.kmk
+	kBuild/env.sh kmk install NIX_INSTALL_DIR=/usr KBUILD_VERBOSE=2 LDFLAGS=-Wl,--as-needed
 
 override_dh_auto_clean:
 	-kBuild/env.sh kmk uninstall
