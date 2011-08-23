@@ -7,6 +7,7 @@ kbuild (1:0.1.9998svn2543-1) UNRELEASED; urgency=low
   * Convert package from cdbs to dh(1).
   * Bump Standards-Version to 3.9.2, no changes needed.
   * Add gbp.conf and enable pristine-tar.
+  * Enable DM-Upload-Allowed.
 
  -- Felix Geyer <debfx-pkg@fobos.de>  Sat, 20 Aug 2011 16:04:33 +0200
 
