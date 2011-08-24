@@ -1,4 +1,4 @@
-kbuild (1:0.1.9998svn2543-1) UNRELEASED; urgency=low
+kbuild (1:0.1.9998svn2543-1) unstable; urgency=low
 
   * New upstream snapshot.
   * Refresh patches.
