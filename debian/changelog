@@ -1,3 +1,10 @@
+kbuild (1:0.1.9998svn2543-2) UNRELEASED; urgency=low
+
+  * Fix FTBFS on kfreebsd: link against pthread. (Closes: #645698)
+    - Update 06_binutils-gold.diff
+
+ -- Felix Geyer <debfx-pkg@fobos.de>  Sat, 26 Nov 2011 19:24:25 +0100
+
 kbuild (1:0.1.9998svn2543-1) unstable; urgency=low
 
   * New upstream snapshot.

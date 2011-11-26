@@ -8,7 +8,7 @@ Bug-Debian: http://bugs.debian.org/554937
  ##kmk_DEFS += KMK_PRF=1
  ##kmkmissing_DEFS += KMK_PRF=1
  
-+ifeq ($(KBUILD_TARGET), linux)
++if1of ($(KBUILD_TARGET), linux gnukfreebsd)
 + ifn1of ($(KBUILD_TARGET_ARCH), hppa32 hppa64)
 +  TEMPLATE_BIN-THREADED_LIBS = pthread
 + endif
