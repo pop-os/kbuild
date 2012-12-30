@@ -6,7 +6,7 @@ YACC      := YACC=/usr/bin/byacc
 BOOTSTRAP := ASH=/bin/bash ECHO=/bin/echo MKDIR=/bin/mkdir CP=/bin/cp \
   RM=/bin/rm INSTALL=/usr/bin/install $(YACC)
 SVNROOT   := http://svn.netlabs.org/repos/kbuild/trunk
-REVISION  := $(shell echo $(UPSTREAM_VERSION) | sed -e's,.*svn,,')
+REVISION  := $(shell echo $(UPSTREAM_VERSION) | sed -e's,.*svn,,' | sed -e's,+dfsg.*,,')
 
 export LDFLAGS := $(shell dpkg-buildflags --get LDFLAGS) -Wl,--as-needed
 
