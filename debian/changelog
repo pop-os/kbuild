@@ -1,3 +1,13 @@
+kbuild (1:0.1.9998svn2543+dfsg-1) unstable; urgency=high
+
+  * Stop hardcoding the -O3 optimization flag as it causes kmk_sed to
+    miscompile. (Closes: #697892)
+    - Add 08_no_o3_optimization.diff
+  * Set urgency to high as it fixes an RC bug which blocks a virtualbox
+    security fix.
+
+ -- Felix Geyer <debfx-pkg@fobos.de>  Fri, 18 Jan 2013 19:00:28 +0100
+
 kbuild (1:0.1.9998svn2543+dfsg-0.1) unstable; urgency=low
 
   * Non-maintainer upload.

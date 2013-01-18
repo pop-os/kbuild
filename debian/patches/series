@@ -5,3 +5,4 @@
 05_hppa-disable-threads.diff
 06_binutils-gold.diff
 07_special-chars-build-path.diff
+08_no_o3_optimization.diff
