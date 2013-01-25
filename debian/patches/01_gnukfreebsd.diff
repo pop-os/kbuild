@@ -82,14 +82,14 @@ Bug-Debian: http://bugs.debian.org/540665
 --- a/src/lib/k/kDefs.h
 +++ b/src/lib/k/kDefs.h
 @@ -56,8 +56,10 @@
- #define K_OS_SOLARIS    9
+ #define K_OS_SOLARIS    10
  /** Windows. */
- #define K_OS_WINDOWS    10
+ #define K_OS_WINDOWS    11
 +/** GNU/kFreeBSD (move to 4 probably) */
-+#define K_OS_GNUKFREEBSD 11
++#define K_OS_GNUKFREEBSD 12
  /** The max K_OS_* value (exclusive). */
--#define K_OS_MAX        11
-+#define K_OS_MAX        12
+-#define K_OS_MAX        12
++#define K_OS_MAX        13
  /** @} */
  
  /** @def K_OS
@@ -99,9 +99,9 @@ Bug-Debian: http://bugs.debian.org/540665
  #  define K_OS      K_OS_FREEBSD
 +# elif defined(__FreeBSD_kernel__) /*??*/
 +#  define K_OS      K_OS_GNUKFREEBSD
+ # elif defined(__HAIKU__)
+ #  define K_OS      K_OS_HAIKU
  # elif defined(__gnu_linux__)
- #  define K_OS      K_OS_LINUX
- # elif defined(__NetBSD__) /*??*/
 --- a/Config.kmk
 +++ b/Config.kmk
 @@ -111,6 +111,7 @@ endif
@@ -140,11 +140,11 @@ Bug-Debian: http://bugs.debian.org/540665
  # this keyword namespace is shared between OSes, architectures, cpus and
  # build types. (PORTME)
  #
--KBUILD_OSES   := darwin dos dragonfly freebsd l4 linux netbsd nt openbsd os2 solaris win os-agnostic
-+KBUILD_OSES   := darwin dos dragonfly freebsd gnukfreebsd l4 linux netbsd nt openbsd os2 solaris win os-agnostic
- KBUILD_ARCHES := x86 amd64 sparc32 sparc64 s390 s390x ppc32 ppc64 mips32 mips64 ia64 hppa32 hppa64 arm alpha
- 
- 
+-KBUILD_OSES      := darwin dos dragonfly freebsd haiku l4 linux netbsd nt openbsd os2 solaris win os-agnostic
++KBUILD_OSES      := darwin dos dragonfly freebsd gnukfreebsd haiku l4 linux netbsd nt openbsd os2 solaris win os-agnostic
+ KBUILD_ARCHES    := x86 amd64 sparc32 sparc64 s390 s390x ppc32 ppc64 mips32 mips64 ia64 hppa32 hppa64 arm alpha
+ KBUILD_ARCHES_64 := amd64 sparc64 s390x ppc64 mips64 ia64 hppa64 alpha
+ KBUILD_ARCHES_32 := x86 sparc32 s390 ppc32 mips32 hppa32 arm
 @@ -551,7 +551,7 @@ else ifeq ($(KBUILD_HOST),os2)
  EXEC_X86_WIN32      := innopec.exe
  HOSTSUFF_EXE        := .exe
@@ -237,9 +237,9 @@ Bug-Debian: http://bugs.debian.org/540665
  	HAVE_SYS_SIGNAME HAVE_SYSCTL_H HAVE_SETPROGNAME
  kash_DEFS.openbsd = \
 @@ -96,6 +98,9 @@ kash_SOURCES = \
- 	shheap.c \
- 	shthread.c \
- 	shfile.c
+ kash_SOURCES.haiku = \
+ 	sys_signame.c \
+ 	strlcpy.c
 +kash_SOURCES.gnukfreebsd = \
 +	sys_signame.c \
 +	strlcpy.c
