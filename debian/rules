@@ -8,7 +8,7 @@ BOOTSTRAP := ASH=/bin/bash ECHO=/bin/echo MKDIR=/bin/mkdir CP=/bin/cp \
 SVNROOT   := http://svn.netlabs.org/repos/kbuild/trunk
 REVISION  := $(shell echo $(UPSTREAM_VERSION) | sed -e's,.*svn,,' | sed -e's,+dfsg.*,,')
 
-export LDFLAGS := $(shell dpkg-buildflags --get LDFLAGS) -Wl,--as-needed
+export DEB_LDFLAGS_MAINT_APPEND := -Wl,--as-needed
 
 %:
 	dh $@
