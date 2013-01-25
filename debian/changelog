@@ -1,6 +1,7 @@
 kbuild (1:0.1.9998svn2577+dfsg-1) UNRELEASED; urgency=low
 
   * New upstream snapshot.
+  * Switch to my @debian.org email address.
 
  -- Felix Geyer <fgeyer@debian.org>  Fri, 25 Jan 2013 17:52:57 +0100
 

@@ -3,8 +3,7 @@ Section: devel
 Priority: extra
 Maintainer: Debian Virtualbox Team <pkg-virtualbox-devel@lists.alioth.debian.org>
 Uploaders: Michael Meskes <meskes@debian.org>,
-           Felix Geyer <debfx-pkg@fobos.de>
-DM-Upload-Allowed: yes
+           Felix Geyer <fgeyer@debian.org>
 Build-Depends: debhelper (>= 7.0.50~),
                autoconf,
                automake,
