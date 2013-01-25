@@ -1,3 +1,9 @@
+kbuild (1:0.1.9998svn2577+dfsg-1) UNRELEASED; urgency=low
+
+  * New upstream snapshot.
+
+ -- Felix Geyer <fgeyer@debian.org>  Fri, 25 Jan 2013 17:52:57 +0100
+
 kbuild (1:0.1.9998svn2543+dfsg-1) unstable; urgency=high
 
   * Stop hardcoding the -O3 optimization flag as it causes kmk_sed to
