@@ -591,7 +591,7 @@ reap_children (int block, int err)
 		pid = WAIT_NOHANG (&status);
 	      else
 #endif
-		pid = wait (&status);
+		EINTRLOOP(pid, wait (&status));
 #endif /* !VMS */
 	    }
 	  else
@@ -2053,7 +2053,7 @@ job_next_command (struct child *child)
 static int
 load_too_high (void)
 {
-#if defined(__MSDOS__) || defined(VMS) || defined(_AMIGA) || defined(__riscos__)
+#if defined(__MSDOS__) || defined(VMS) || defined(_AMIGA) || defined(__riscos__) || defined(__HAIKU__)
   return 1;
 #else
   static double last_sec;

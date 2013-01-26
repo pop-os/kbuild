@@ -212,8 +212,37 @@ define_variable_in_set (const char *name, unsigned int length,
   struct variable **var_slot;
   struct variable var_key;
 
+#ifndef KMK
   if (set == NULL)
     set = &global_variable_set;
+#else
+  if (set == NULL)
+    {
+      /* underscore prefixed variables are automatically local in
+         kBuild-define-* scopes.  They also get a global definition with
+         the current scope prefix. */
+      if (g_pTopKbDef && length > 0 && name[0] == '_')
+        {
+          char         *prefixed_nm;
+          unsigned int  prefixed_nm_len;
+
+          set = get_top_kbuild_variable_set();
+          v = define_variable_in_set(name, length, value, value_len,
+                                     1 /* duplicate_value */,
+                                     origin, recursive, set, flocp);
+
+          prefixed_nm_len = length;
+          prefixed_nm = kbuild_prefix_variable(name, &prefixed_nm_len);
+          define_variable_in_set(prefixed_nm, prefixed_nm_len,
+                                 value, value_len, duplicate_value,
+                                 origin, recursive, &global_variable_set,
+                                 flocp);
+          free(prefixed_nm);
+          return v;
+        }
+      set = &global_variable_set;
+    }
+#endif
 
 #ifndef CONFIG_WITH_STRCACHE2
   var_key.name = (char *) name;
@@ -1268,7 +1297,8 @@ define_automatic_variables (void)
   && defined (CONFIG_WITH_ABSPATHEX) \
   && defined (CONFIG_WITH_TOUPPER_TOLOWER) \
   && defined (CONFIG_WITH_DEFINED) \
-  && defined (CONFIG_WITH_VALUE_LENGTH) && defined (CONFIG_WITH_COMPARE) \
+  && defined (CONFIG_WITH_VALUE_LENGTH) \
+  && defined (CONFIG_WITH_COMPARE) \
   && defined (CONFIG_WITH_STACK) \
   && defined (CONFIG_WITH_MATH) \
   && defined (CONFIG_WITH_XARGS) \
@@ -1290,7 +1320,8 @@ define_automatic_variables (void)
   && defined (CONFIG_WITH_DEFINED_FUNCTIONS) \
   && defined (KMK_HELPERS)
   (void) define_variable ("KMK_FEATURES", 12,
-                          "append-dash-n abspath includedep-queue install-hard-linking"
+                          "append-dash-n abspath includedep-queue install-hard-linking umask"
+                          " kBuild-define"
                           " rsort"
                           " abspathex"
                           " toupper tolower"
@@ -1315,12 +1346,13 @@ define_automatic_variables (void)
                           " for while"
                           " root"
                           " length insert pos lastpos substr translate"
-                          " kb-src-tool kb-obj-base kb-obj-suff kb-src-prop kb-src-one kb-exp-tmpl "
-                          " firstdefined lastdefined "
+                          " kb-src-tool kb-obj-base kb-obj-suff kb-src-prop kb-src-one kb-exp-tmpl"
+                          " firstdefined lastdefined"
                           , o_default, 0);
 # else /* MSC can't deal with strings mixed with #if/#endif, thus the slow way. */
 #  error "All features should be enabled by default!"
-  strcpy (buf, "append-dash-n abspath includedep-queue install-hard-linking");
+  strcpy (buf, "append-dash-n abspath includedep-queue install-hard-linking umask"
+               " kBuild-define");
 #  if defined (CONFIG_WITH_RSORT)
   strcat (buf, " rsort");
 #  endif

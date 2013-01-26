@@ -1,4 +1,4 @@
-# $Id: Config.kmk 2538 2011-08-02 20:00:46Z bird $
+# $Id: Config.kmk 2555 2011-11-30 20:01:57Z bird $
 ## @file
 # Build Configuration.
 #
@@ -48,7 +48,7 @@ ifneq ($(wildcard $(PATH_ROOT)/SvnInfo.kmk),)
 KBUILD_SVN_INFO_KMK := $(PATH_ROOT)/SvnInfo.kmk
 KBUILD_SVN_INFO_DEP := $(KBUILD_SVN_INFO_KMK)
 
-else ifneq ($(wildcard $(PATH_ROOT)/.svn/entries),)
+else ifneq ($(wildcard $(PATH_ROOT)/.svn/entries $(PATH_ROOT)/../.svn/entries),)
 # Generate from svn info
 KBUILD_SVN_INFO_KMK := $(PATH_OBJ)/SvnInfo.kmk
 KBUILD_SVN_INFO_DEP := $(KBUILD_SVN_INFO_KMK)
@@ -99,7 +99,7 @@ PATH_GNUMAKE_SRC ?= $(PATH_ROOT)/src/kmk
 #
 # Various platform specific hacks.
 #
-ifn1of ($(KBUILD_TARGET), openbsd)
+ifn1of ($(KBUILD_TARGET), haiku openbsd)
  GCC_Wextra = -Wextra
 endif
 if1of ($(KBUILD_TARGET), openbsd)
@@ -336,7 +336,7 @@ endif
 TEMPLATE_BIN-THREADED = Threaded command line binary
 TEMPLATE_BIN-THREADED_EXTENDS = BIN
 TEMPLATE_BIN-THREADED_EXTENDS_BY = appending
-if1of ($(KBUILD_TARGET), dragonfly freebsd openbsd)
+if1of ($(KBUILD_TARGET), dragonfly freebsd linux openbsd)
  TEMPLATE_BIN-THREADED_LIBS = pthread
 endif
 

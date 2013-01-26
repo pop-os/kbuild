@@ -77,6 +77,12 @@ static math_int math_int_from_string (const char *str);
   extern APIRET APIENTRY DosQueryHeaderInfo(HMODULE hmod, ULONG ulIndex, PVOID pvBuffer, ULONG cbBuffer, ULONG ulSubFunction);
 #endif /* CONFIG_WITH_OS2_LIBPATH */
 
+#ifdef KMK
+/** Checks if the @a_cch characters (bytes) in @a a_psz equals @a a_szConst. */
+# define STR_N_EQUALS(a_psz, a_cch, a_szConst) \
+    ( (a_cch) == sizeof (a_szConst) - 1 && !strncmp ((a_psz), (a_szConst), sizeof (a_szConst) - 1) )
+#endif
+
 
 struct function_table_entry
   {
@@ -5220,8 +5226,8 @@ func_commands (char *o, char **argv, const char *funcname)
   return o;
 }
 #endif  /* CONFIG_WITH_COMMANDS_FUNC */
-
 #ifdef KMK
+
 /* Useful when debugging kmk and/or makefiles. */
 char *
 func_breakpoint (char *o, char **argv UNUSED, const char *funcname UNUSED)
@@ -5230,13 +5236,127 @@ func_breakpoint (char *o, char **argv UNUSED, const char *funcname UNUSED)
   __debugbreak();
 #elif defined(__i386__) || defined(__x86__) || defined(__X86__) || defined(_M_IX86) || defined(__i386) \
    || defined(__amd64__) || defined(__x86_64__) || defined(__AMD64__) || defined(_M_X64) || defined(__amd64)
+# ifdef __sun__
+  __asm__ __volatile__ ("int $3\n\t");
+# else
   __asm__ __volatile__ ("int3\n\t");
+# endif
 #else
   char *p = (char *)0;
   *p = '\0';
 #endif
   return o;
 }
+
+/* umask | umask -S. */
+char *
+func_get_umask (char *o, char **argv UNUSED, const char *funcname UNUSED)
+{
+  char sz[80];
+  int off;
+  mode_t u;
+  int symbolic = 0;
+  const char *psz = argv[0];
+
+  if (psz)
+    {
+      const char *pszEnd = strchr (psz, '\0');
+      strip_whitespace (&psz, &pszEnd);
+
+      if (pszEnd != psz)
+        {
+          if (   STR_N_EQUALS (psz, pszEnd - pszEnd, "S")
+              || STR_N_EQUALS (psz, pszEnd - pszEnd, "-S")
+              || STR_N_EQUALS (psz, pszEnd - pszEnd, "symbolic") )
+            symbolic = 1;
+          else
+            error (reading_file, _("$(%s ) invalid argument `%s'"),
+                   funcname, argv[0]);
+        }
+    }
+
+  u = umask (002);
+  umask (u);
+
+  if (symbolic)
+    {
+      off = 0;
+      sz[off++] = 'u';
+      sz[off++] = '=';
+      if ((u & S_IRUSR) == 0)
+        sz[off++] = 'r';
+      if ((u & S_IWUSR) == 0)
+        sz[off++] = 'w';
+      if ((u & S_IXUSR) == 0)
+        sz[off++] = 'x';
+      sz[off++] = ',';
+      sz[off++] = 'g';
+      sz[off++] = '=';
+      if ((u & S_IRGRP) == 0)
+        sz[off++] = 'r';
+      if ((u & S_IWGRP) == 0)
+        sz[off++] = 'w';
+      if ((u & S_IXGRP) == 0)
+        sz[off++] = 'x';
+      sz[off++] = ',';
+      sz[off++] = 'o';
+      sz[off++] = '=';
+      if ((u & S_IROTH) == 0)
+        sz[off++] = 'r';
+      if ((u & S_IWOTH) == 0)
+        sz[off++] = 'w';
+      if ((u & S_IXOTH) == 0)
+        sz[off++] = 'x';
+    }
+  else
+    off = sprintf (sz, "%.4o", u);
+
+  return variable_buffer_output (o, sz, off);
+}
+
+
+/* umask 0002 | umask u=rwx,g=rwx,o=rx. */
+char *
+func_set_umask (char *o, char **argv UNUSED, const char *funcname UNUSED)
+{
+  mode_t u;
+  const char *psz;
+
+  /* Figure what kind of input this is. */
+  psz = argv[0];
+  while (isblank ((unsigned char)*psz))
+    psz++;
+
+  if (isdigit ((unsigned char)*psz))
+   {
+      u = 0;
+      while (*psz)
+        {
+          u <<= 3;
+          if (*psz < '0' || *psz >= '8')
+            {
+              error (reading_file, _("$(%s ) illegal number `%s'"), funcname, argv[0]);
+              break;
+            }
+          u += *psz - '0';
+          psz++;
+        }
+
+      if (argv[1] != NULL)
+          error (reading_file, _("$(%s ) too many arguments for octal mode"), funcname);
+  }
+  else
+  {
+      u = umask(0);
+      umask(u);
+      error (reading_file, _("$(%s ) symbol mode is not implemented"), funcname);
+  }
+
+  umask(u);
+
+  return o;
+}
+
 #endif /* KMK */
 
 
@@ -5426,6 +5546,8 @@ static struct function_table_entry function_table_init[] =
 #endif
 #ifdef KMK
   { STRING_SIZE_TUPLE("breakpoint"),    0,  0,  0,  func_breakpoint},
+  { STRING_SIZE_TUPLE("set-umask"),     1,  3,  1,  func_set_umask},
+  { STRING_SIZE_TUPLE("get-umask"),     0,  0,  0,  func_get_umask},
 #endif
 };
 
