@@ -4,6 +4,7 @@ kbuild (1:0.1.9998svn2577+dfsg-1) UNRELEASED; urgency=low
   * Switch to my @debian.org email address.
   * Refresh patches.
   * Switch to debhelper compat level v9.
+  * Bump Standards-Version to 3.9.4, no changes needed.
 
  -- Felix Geyer <fgeyer@debian.org>  Fri, 25 Jan 2013 17:52:57 +0100
 
