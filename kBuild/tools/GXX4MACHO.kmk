@@ -1,6 +1,6 @@
-# $Id: GXX4MACHO.kmk 2535 2011-08-02 19:05:34Z bird $
+# $Id: GXX4MACHO.kmk 2547 2011-11-04 21:58:53Z bird $
 ## @file
-# kBuild Tool Config - GCC v4 targeting Darwin (Mac OS X) Mach-o, for building C++ code.
+# kBuild Tool Config - GCC v4 targeting Darwin (Mac OS X) Mach-O, for building C++ code.
 #
 
 #
@@ -31,7 +31,7 @@
 #
 #
 
-TOOL_GXX4MACHO := GCC v4 targeting Darwin (Mac OS X) Mach-o, for building C++ code.
+TOOL_GXX4MACHO := GCC v4 targeting Darwin (Mac OS X) Mach-O, for building C++ code.
 
 # Tool Specific Properties
 TOOL_GXX4MACHO_PREFIX    ?=

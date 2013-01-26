@@ -1,4 +1,4 @@
-# $Id: OPENWATCOM.kmk 2413 2010-09-11 17:43:04Z bird $
+# $Id: OPENWATCOM.kmk 2576 2012-05-31 15:07:00Z bird $
 ## @file
 # kBuild Tool Config - Open Watcom v1.4 and later.
 #
@@ -58,12 +58,19 @@ endif
 ifneq ($(PATH_TOOL_OPENWATCOM),)
  TOOL_OPENWATCOM_PATHLESS := no
 
- ifeq ($(KBUILD_HOST),os2)
-  PATH_TOOL_OPENWATCOM_BIN   = $(PATH_TOOL_OPENWATCOM)/binp
+ ifeq ($(KBUILD_HOST),darwin)
+  PATH_TOOL_OPENWATCOM_BIN   = $(PATH_TOOL_OPENWATCOM)/binosx
   TOOL_OPENWATCOM_ENV_SETUP ?= $(REDIRECT) \
- 	-E 'BEGINLIBPATH=$(PATH_TOOL_OPENWATCOM)/binp/dll;$(BEGINLIBPATH)' \
- 	-E 'LIBPATHSTRICT=T' \
- 	-E 'PATH=$(PATH_TOOL_OPENWATCOM_BIN);$(PATH_TOOL_OPENWATCOM)/binw' \
+ 	-E 'PATH=$(PATH_TOOL_OPENWATCOM_BIN):$(PATH_TOOL_OPENWATCOM)/binl:$(PATH_TOOL_OPENWATCOM)/binw:$(PATH)' \
+ 	-E 'WATCOM=$(PATH_TOOL_OPENWATCOM)' \
+ 	-E 'EDPATH=$(PATH_TOOL_OPENWATCOM)/EDDAT' \
+ 	-E 'LIB=$1' \
+ 	-E 'INCLUDE=' \
+ 	--
+ else ifeq ($(KBUILD_HOST),freebsd)
+  PATH_TOOL_OPENWATCOM_BIN   = $(PATH_TOOL_OPENWATCOM)/binfbsd
+  TOOL_OPENWATCOM_ENV_SETUP ?= $(REDIRECT) \
+ 	-E 'PATH=$(PATH_TOOL_OPENWATCOM_BIN):$(PATH_TOOL_OPENWATCOM)/binl:$(PATH_TOOL_OPENWATCOM)/binw:$(PATH)' \
  	-E 'WATCOM=$(PATH_TOOL_OPENWATCOM)' \
  	-E 'EDPATH=$(PATH_TOOL_OPENWATCOM)/EDDAT' \
  	-E 'LIB=$1' \
@@ -72,7 +79,27 @@ ifneq ($(PATH_TOOL_OPENWATCOM),)
  else ifeq ($(KBUILD_HOST),linux)
   PATH_TOOL_OPENWATCOM_BIN   = $(PATH_TOOL_OPENWATCOM)/binl
   TOOL_OPENWATCOM_ENV_SETUP ?= $(REDIRECT) \
- 	-E 'PATH=$(PATH_TOOL_OPENWATCOM_BIN):$(PATH_TOOL_OPENWATCOM)/binw' \
+ 	-E 'PATH=$(PATH_TOOL_OPENWATCOM_BIN):$(PATH_TOOL_OPENWATCOM)/binw:$(PATH)' \
+ 	-E 'WATCOM=$(PATH_TOOL_OPENWATCOM)' \
+ 	-E 'EDPATH=$(PATH_TOOL_OPENWATCOM)/EDDAT' \
+ 	-E 'LIB=$1' \
+ 	-E 'INCLUDE=' \
+ 	--
+ else ifeq ($(KBUILD_HOST),os2)
+  PATH_TOOL_OPENWATCOM_BIN   = $(PATH_TOOL_OPENWATCOM)/binp
+  TOOL_OPENWATCOM_ENV_SETUP ?= $(REDIRECT) \
+ 	-E 'BEGINLIBPATH=$(PATH_TOOL_OPENWATCOM)/binp/dll;$(BEGINLIBPATH)' \
+ 	-E 'LIBPATHSTRICT=T' \
+ 	-E 'PATH=$(PATH_TOOL_OPENWATCOM_BIN);$(PATH_TOOL_OPENWATCOM)/binw;$(PATH)' \
+ 	-E 'WATCOM=$(PATH_TOOL_OPENWATCOM)' \
+ 	-E 'EDPATH=$(PATH_TOOL_OPENWATCOM)/EDDAT' \
+ 	-E 'LIB=$1' \
+ 	-E 'INCLUDE=' \
+ 	--
+ else ifeq ($(KBUILD_HOST),solaris)
+  PATH_TOOL_OPENWATCOM_BIN   = $(PATH_TOOL_OPENWATCOM)/binsol
+  TOOL_OPENWATCOM_ENV_SETUP ?= $(REDIRECT) \
+ 	-E 'PATH=$(PATH_TOOL_OPENWATCOM_BIN):$(PATH_TOOL_OPENWATCOM)/binl:$(PATH_TOOL_OPENWATCOM)/binw:$(PATH)' \
  	-E 'WATCOM=$(PATH_TOOL_OPENWATCOM)' \
  	-E 'EDPATH=$(PATH_TOOL_OPENWATCOM)/EDDAT' \
  	-E 'LIB=$1' \
@@ -81,7 +108,7 @@ ifneq ($(PATH_TOOL_OPENWATCOM),)
  else
   PATH_TOOL_OPENWATCOM_BIN   = $(PATH_TOOL_OPENWATCOM)/binnt
   TOOL_OPENWATCOM_ENV_SETUP ?= $(REDIRECT) \
- 	-E 'PATH=$(PATH_TOOL_OPENWATCOM_BIN);$(PATH_TOOL_OPENWATCOM)/binw' \
+ 	-E 'PATH=$(PATH_TOOL_OPENWATCOM_BIN);$(PATH_TOOL_OPENWATCOM)/binw;$(PATH)' \
  	-E 'WATCOM=$(PATH_TOOL_OPENWATCOM)' \
  	-E 'EDPATH=$(PATH_TOOL_OPENWATCOM)/EDDAT' \
  	-E 'LIB=$1' \
@@ -118,6 +145,12 @@ else
  TOOL_OPENWATCOM_LD16  ?= wcl$(HOSTSUFF_EXE)
  TOOL_OPENWATCOM_WLINK ?= wlink$(HOSTSUFF_EXE)
 
+endif
+
+if1of ($(KBUILD_HOST), os2 win)
+ TOOL_OPENWATCOM_FIX_SLASHES = $(subst /,\\,$1)
+else
+ TOOL_OPENWATCOM_FIX_SLASHES = $1
 endif
 
 # General Properties used by kBuild
@@ -168,11 +201,11 @@ TOOL_OPENWATCOM_COMPILE_AS_OUTPUT = $(obj).err
 define TOOL_OPENWATCOM_COMPILE_AS_CMDS
 	$(QUIET) $(call TOOL_OPENWATCOM_ENV_SETUP) $(TOOL_OPENWATCOM_AS) \
 		$(flags) \
-		$(addsuffix , $(addprefix -i=, $(subst /,\\,$(incs)))) \
+		$(addsuffix , $(addprefix -i=, $(call TOOL_OPENWATCOM_FIX_SLASHES,$(incs)))) \
 		$(addprefix -d, $(defs)) \
-		-fo=$(subst /,\\,$(obj)) \
-		-fr=$(subst /,\\,$(obj)).err \
-		$(subst /,\\,$(abspath $(source)))
+		-fo=$(call TOOL_OPENWATCOM_FIX_SLASHES,$(obj)) \
+		-fr=$(call TOOL_OPENWATCOM_FIX_SLASHES,$(obj)).err \
+		$(call TOOL_OPENWATCOM_FIX_SLASHES,$(abspath $(source)))
 	$(QUIET)$(APPEND) -n $(obj).err
 ## @todo dependencies
 endef
@@ -184,11 +217,11 @@ TOOL_OPENWATCOM_COMPILE_C_OUTPUT = $(obj).err
 define TOOL_OPENWATCOM_COMPILE_C_CMDS
 	$(QUIET) $(call TOOL_OPENWATCOM_ENV_SETUP) $(TOOL_OPENWATCOM_CC) \
 		$(flags) \
-		$(addsuffix , $(addprefix -i=, $(subst /,\\,$(incs)))) \
+		$(addsuffix , $(addprefix -i=, $(call TOOL_OPENWATCOM_FIX_SLASHES,$(incs)))) \
 		$(addprefix -d, $(defs)) \
-		-fo=$(subst /,\\,$(obj)) \
-		-fr=$(subst /,\\,$(obj)).err \
-		$(subst /,\\,$(abspath $(source)))
+		-fo=$(call TOOL_OPENWATCOM_FIX_SLASHES,$(obj)) \
+		-fr=$(call TOOL_OPENWATCOM_FIX_SLASHES,$(obj)).err \
+		$(call TOOL_OPENWATCOM_FIX_SLASHES,$(abspath $(source)))
 	$(QUIET)$(APPEND) -n $(obj).err
 ## @todo dependencies
 endef
@@ -199,11 +232,11 @@ TOOL_OPENWATCOM_COMPILE_CXX_OUTPUT = $(obj).err
 define TOOL_OPENWATCOM_COMPILE_CXX_CMDS
 	$(QUIET) $(call TOOL_OPENWATCOM_ENV_SETUP) $(TOOL_OPENWATCOM_CXX) \
 		$(flags) \
-		$(addsuffix , $(addprefix -i=, $(subst /,\\,$(incs)))) \
+		$(addsuffix , $(addprefix -i=, $(call TOOL_OPENWATCOM_FIX_SLASHES,$(incs)))) \
 		$(addprefix -d, $(defs)) \
-		-fo=$(subst /,\\,$(obj)) \
-		-fr=$(subst /,\\,$(obj)).err \
-		$(subst /,\\,$(abspath $(source)))
+		-fo=$(call TOOL_OPENWATCOM_FIX_SLASHES,$(obj)) \
+		-fr=$(call TOOL_OPENWATCOM_FIX_SLASHES,$(obj)).err \
+		$(call TOOL_OPENWATCOM_FIX_SLASHES,$(abspath $(source)))
 	$(QUIET)$(APPEND) -n $(obj).err
 ## @todo dependencies
 endef
@@ -215,18 +248,18 @@ define TOOL_OPENWATCOM_COMPILE_RC_CMDS
 	$(QUIET) $(call TOOL_OPENWATCOM_ENV_SETUP) \
 		$(TOOL_OPENWATCOM_RC) -r\
 		$(flags) \
-		$(addprefix -i=, $(subst /,\\,$(incs))) \
+		$(addprefix -i=, $(call TOOL_OPENWATCOM_FIX_SLASHES,$(incs))) \
 		$(addprefix -d, $(defs))\
-		-fo=$(subst /,\\,$(obj)) \
-		$(subst /,\\,$(abspath $(source)))
+		-fo=$(call TOOL_OPENWATCOM_FIX_SLASHES,$(obj)) \
+		$(call TOOL_OPENWATCOM_FIX_SLASHES,$(abspath $(source)))
 endef
 
 TOOL_OPENWATCOM_LINK_LIBRARY_OUTPUT = ## @todo $(outbase).rsp
 TOOL_OPENWATCOM_LINK_LIBRARY_DEPEND = $(othersrc)
 TOOL_OPENWATCOM_LINK_LIBRARY_DEPORD =
 define TOOL_OPENWATCOM_LINK_LIBRARY_CMDS
-	$(QUIET)$(APPEND) -tn $(outbase).rsp $(foreach obj,$(subst /,\,$(objs) $(othersrc)),'+"$(obj)"')
-	$(QUIET)$(TOOL_OPENWATCOM_ENV_SETUP) $(TOOL_OPENWATCOM_AR) $(flags) $(subst /,\\,$(out)) @$(outbase).rsp
+	$(QUIET)$(APPEND) -tn $(outbase).rsp $(foreach obj,$(call TOOL_OPENWATCOM_FIX_SLASHES,$(objs) $(othersrc)),'+"$(obj)"')
+	$(QUIET)$(TOOL_OPENWATCOM_ENV_SETUP) $(TOOL_OPENWATCOM_AR) $(flags) $(call TOOL_OPENWATCOM_FIX_SLASHES,$(out)) @$(outbase).rsp
 endef
 
 TOOL_OPENWATCOM_LINK_PROGRAM_OUTPUT = $(outbase).map
@@ -236,16 +269,16 @@ define TOOL_OPENWATCOM_LINK_PROGRAM_CMDS
 	$(QUIET)$(call TOOL_OPENWATCOM_ENV_SETUP,$(subst $(SP),,$(addsuffix ;,$(libpath)))) \
 		$(TOOL_OPENWATCOM_LD) \
 		$(flags) \
-		-fe=$(subst /,\\,$(out)) \
-		-fm=$(subst /,\\,$(outbase).map) \
-		$(subst /,\\,$(filter-out %.res,$(objs))) \
-		$(subst /,\\,$(libs)) \
-		$(subst /,\\,$(othersrc))
+		-fe=$(call TOOL_OPENWATCOM_FIX_SLASHES,$(out)) \
+		-fm=$(call TOOL_OPENWATCOM_FIX_SLASHES,$(outbase).map) \
+		$(call TOOL_OPENWATCOM_FIX_SLASHES,$(filter-out %.res,$(objs))) \
+		$(call TOOL_OPENWATCOM_FIX_SLASHES,$(libs)) \
+		$(call TOOL_OPENWATCOM_FIX_SLASHES,$(othersrc))
 	$(if $(filter %.res,$(objs)), $(QUIET)$(call TOOL_OPENWATCOM_ENV_SETUP) \
 		$(TOOL_OPENWATCOM_RC) \
 			$(filter -bt=%,$(flags)) \
-			/fe=$(subst /,\\,$(out)) \
-			$(subst /,\\,$(filter %.res,$(objs))))
+			/fe=$(call TOOL_OPENWATCOM_FIX_SLASHES,$(out)) \
+			$(call TOOL_OPENWATCOM_FIX_SLASHES,$(filter %.res,$(objs))))
 endef
 
 TOOL_OPENWATCOM_LINK_DLL_OUTPUT = $(outbase).map
@@ -255,16 +288,16 @@ define TOOL_OPENWATCOM_LINK_DLL_CMDS
 	$(QUIET)$(call TOOL_OPENWATCOM_ENV_SETUP,$(subst $(SP),,$(addsuffix ;,$(libpath)))) \
 		$(TOOL_OPENWATCOM_LD) \
 		$(flags) \
-		-fe=$(subst /,\\,$(out)) \
-		-fm=$(subst /,\\,$(outbase).map) \
-		$(subst /,\\,$(filter-out %.res,$(objs))) \
-		$(subst /,\\,$(libs)) \
-		$(subst /,\\,$(othersrc))
+		-fe=$(call TOOL_OPENWATCOM_FIX_SLASHES,$(out)) \
+		-fm=$(call TOOL_OPENWATCOM_FIX_SLASHES,$(outbase).map) \
+		$(call TOOL_OPENWATCOM_FIX_SLASHES,$(filter-out %.res,$(objs))) \
+		$(call TOOL_OPENWATCOM_FIX_SLASHES,$(libs)) \
+		$(call TOOL_OPENWATCOM_FIX_SLASHES,$(othersrc))
 	$(if $(filter %.res,$(objs)), $(QUIET)$(call TOOL_OPENWATCOM_ENV_SETUP) \
 		$(TOOL_OPENWATCOM_RC) \
 			$(filter -bt=%,$(flags)) \
-			/fe=$(subst /,\\,$(out)) \
-			$(subst /,\\,$(filter %.res,$(objs))))
+			/fe=$(call TOOL_OPENWATCOM_FIX_SLASHES,$(out)) \
+			$(call TOOL_OPENWATCOM_FIX_SLASHES,$(filter %.res,$(objs))))
 endef
 
 TOOL_OPENWATCOM_LINK_SYSMOD_OUTPUT = $(outbase).map
@@ -274,15 +307,15 @@ define TOOL_OPENWATCOM_LINK_SYSMOD_CMDS
 	$(QUIET)$(call TOOL_OPENWATCOM_ENV_SETUP,$(subst $(SP),,$(addsuffix ;,$(libpath)))) \
 		$(TOOL_OPENWATCOM_LD) \
 		$(flags) \
-		-fe=$(subst /,\\,$(out)) \
-		-fm=$(subst /,\\,$(outbase).map) \
-		$(subst /,\\,$(filter-out %.res,$(objs))) \
-		$(subst /,\\,$(libs)) \
-		$(subst /,\\,$(othersrc))
+		-fe=$(call TOOL_OPENWATCOM_FIX_SLASHES,$(out)) \
+		-fm=$(call TOOL_OPENWATCOM_FIX_SLASHES,$(outbase).map) \
+		$(call TOOL_OPENWATCOM_FIX_SLASHES,$(filter-out %.res,$(objs))) \
+		$(call TOOL_OPENWATCOM_FIX_SLASHES,$(libs)) \
+		$(call TOOL_OPENWATCOM_FIX_SLASHES,$(othersrc))
 	$(if $(filter %.res,$(objs)), $(QUIET)$(call TOOL_OPENWATCOM_ENV_SETUP) \
 		$(TOOL_OPENWATCOM_RC) \
 			$(filter -bt=%,$(flags)) \
-			/fe=$(subst /,\\,$(out)) \
-			$(subst /,\\,$(filter %.res,$(objs))))
+			/fe=$(call TOOL_OPENWATCOM_FIX_SLASHES,$(out)) \
+			$(call TOOL_OPENWATCOM_FIX_SLASHES,$(filter %.res,$(objs))))
 endef
 
