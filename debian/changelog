@@ -1,6 +1,6 @@
 kbuild (1:0.1.9998svn2577+dfsg-1) UNRELEASED; urgency=low
 
-  * New upstream snapshot.
+  * New upstream snapshot. (Closes: #697620)
   * Switch to my @debian.org email address.
   * Refresh patches.
   * Switch to debhelper compat level v9.
