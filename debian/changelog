@@ -1,4 +1,4 @@
-kbuild (1:0.1.9998svn2577+dfsg-1) UNRELEASED; urgency=low
+kbuild (1:0.1.9998svn2577+dfsg-1) experimental; urgency=low
 
   * New upstream snapshot. (Closes: #697620)
   * Switch to my @debian.org email address.
@@ -6,7 +6,7 @@ kbuild (1:0.1.9998svn2577+dfsg-1) UNRELEASED; urgency=low
   * Switch to debhelper compat level v9.
   * Bump Standards-Version to 3.9.4, no changes needed.
 
- -- Felix Geyer <fgeyer@debian.org>  Fri, 25 Jan 2013 17:52:57 +0100
+ -- Felix Geyer <fgeyer@debian.org>  Wed, 06 Mar 2013 21:53:30 +0100
 
 kbuild (1:0.1.9998svn2543+dfsg-1) unstable; urgency=high
 
