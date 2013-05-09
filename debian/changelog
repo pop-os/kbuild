@@ -1,3 +1,9 @@
+kbuild (1:0.1.9998svn2577+dfsg-2) UNRELEASED; urgency=low
+
+  * Use canonical URIs for Vcs-* fields.
+
+ -- Felix Geyer <fgeyer@debian.org>  Thu, 09 May 2013 11:33:38 +0200
+
 kbuild (1:0.1.9998svn2577+dfsg-1) experimental; urgency=low
 
   * New upstream snapshot. (Closes: #697620)
