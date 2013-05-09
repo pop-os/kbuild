@@ -1,8 +1,9 @@
-kbuild (1:0.1.9998svn2577+dfsg-2) UNRELEASED; urgency=low
+kbuild (1:0.1.9998svn2577+dfsg-2) unstable; urgency=low
 
+  * Upload to unstable.
   * Use canonical URIs for Vcs-* fields.
 
- -- Felix Geyer <fgeyer@debian.org>  Thu, 09 May 2013 11:33:38 +0200
+ -- Felix Geyer <fgeyer@debian.org>  Thu, 09 May 2013 11:37:23 +0200
 
 kbuild (1:0.1.9998svn2577+dfsg-1) experimental; urgency=low
 
