@@ -1,3 +1,9 @@
+kbuild (1:0.1.9998svn2577+dfsg-3) UNRELEASED; urgency=low
+
+  * Add missing build-dependency on texinfo. (Closes: #712335)
+
+ -- Felix Geyer <fgeyer@debian.org>  Sat, 15 Jun 2013 15:17:13 +0200
+
 kbuild (1:0.1.9998svn2577+dfsg-2) unstable; urgency=low
 
   * Upload to unstable.
