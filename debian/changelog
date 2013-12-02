@@ -1,3 +1,11 @@
+kbuild (1:0.1.9998svn2695+dfsg-1) unstable; urgency=low
+
+  [ Ritesh Raj Sarraf ]
+  * [8c3dfc1] Exclude src/kmk/doc/make.texi from dfsg archive
+  * [00cc15e] Imported Upstream version 0.1.9998svn2695+dfsg
+
+ -- Ritesh Raj Sarraf <rrs@debian.org>  Mon, 02 Dec 2013 14:28:37 -0500
+
 kbuild (1:0.1.9998svn2577+dfsg-3) unstable; urgency=low
 
   * Add missing build-dependency on texinfo. (Closes: #712335)
