@@ -1,4 +1,4 @@
-/* $Id: shfile.c 2553 2011-11-25 21:44:21Z bird $ */
+/* $Id: shfile.c 2681 2013-04-14 18:41:58Z bird $ */
 /** @file
  *
  * File management.
@@ -163,14 +163,14 @@ static PFN_RtlUnicodeStringToAnsiString g_pfnRtlUnicodeStringToAnsiString = NULL
  */
 static void shfile_native_close(intptr_t native, unsigned flags)
 {
-#if K_OS == K_OS_WINDOWS
+# if K_OS == K_OS_WINDOWS
     BOOL fRc = CloseHandle((HANDLE)native);
     assert(fRc); (void)fRc;
-#else
+# else
     int s = errno;
     close(native);
     errno = s;
-#endif
+# endif
     (void)flags;
 }
 
@@ -288,7 +288,7 @@ static int shfile_insert(shfdtab *pfdtab, intptr_t native, unsigned oflags, unsi
     return fd;
 }
 
-#if K_OS != K_OS_WINDOWS
+# if K_OS != K_OS_WINDOWS
 /**
  * Makes a copy of the native file, closes the original, and inserts the copy
  * into the descriptor table.
@@ -317,7 +317,7 @@ static int shfile_copy_insert_and_close(shfdtab *pfdtab, int *pnative, unsigned 
         fd = shfile_insert(pfdtab, native_copy, oflags, shflags, fdMin, who);
     return fd;
 }
-#endif /* !K_OS_WINDOWS */
+# endif /* !K_OS_WINDOWS */
 
 /**
  * Gets a file descriptor and lock the file descriptor table.
@@ -384,13 +384,13 @@ int shfile_make_path(shfdtab *pfdtab, const char *path, char *buf)
         return -1;
     }
     if (    *path == '/'
-#if K_OS == K_OS_WINDOWS || K_OS == K_OS_OS2
+# if K_OS == K_OS_WINDOWS || K_OS == K_OS_OS2
         ||  *path == '\\'
         ||  (   *path
              && path[1] == ':'
              && (   (*path >= 'A' && *path <= 'Z')
                  || (*path >= 'a' && *path <= 'z')))
-#endif
+# endif
         )
     {
         memcpy(buf, path, path_len + 1);
@@ -418,14 +418,65 @@ int shfile_make_path(shfdtab *pfdtab, const char *path, char *buf)
         memcpy(buf + cwd_len, path, path_len + 1);
     }
 
-#if K_OS == K_OS_WINDOWS || K_OS == K_OS_OS2
+# if K_OS == K_OS_WINDOWS || K_OS == K_OS_OS2
     if (!strcmp(buf, "/dev/null"))
         strcpy(buf, "NUL");
-#endif
+# endif
     return 0;
 }
 
 # if K_OS == K_OS_WINDOWS
+
+/**
+ * Adjusts the file name if it ends with a trailing directory slash.
+ *
+ * Windows APIs doesn't like trailing slashes.
+ *
+ * @returns 1 if it has a directory slash, 0 if not.
+ *
+ * @param   abspath     The path to adjust (SHFILE_MAX_PATH).
+ */
+static int shfile_trailing_slash_hack(char *abspath)
+{
+    /*
+     * Anything worth adjust here?
+     */
+    size_t path_len = strlen(abspath);
+    if (   path_len == 0
+        || (   abspath[path_len - 1] != '/'
+#  if K_OS == K_OS_WINDOWS || K_OS == K_OS_OS2
+            && abspath[path_len - 1] != '\\'
+#  endif
+           )
+       )
+        return 0;
+
+    /*
+     * Ok, make the adjustment.
+     */
+    if (path_len + 2 <= SHFILE_MAX_PATH)
+    {
+        /* Add a '.' to the end. */
+        abspath[path_len++] = '.';
+        abspath[path_len]   = '\0';
+    }
+    else
+    {
+        /* No space for a dot, remove the slash if it's alone or just remove
+           one and add a dot like above. */
+        if (   abspath[path_len - 2] != '/'
+#  if K_OS == K_OS_WINDOWS || K_OS == K_OS_OS2
+            && abspath[path_len - 2] != '\\'
+#  endif
+           )
+            abspath[--path_len] = '\0';
+        else
+            abspath[path_len - 1] = '.';
+    }
+
+    return 1;
+}
+
 
 /**
  * Converts a DOS(/Windows) error code to errno,
@@ -527,6 +578,21 @@ DWORD shfile_query_handle_access_mask(HANDLE h, PACCESS_MASK pMask)
 #endif /* SHFILE_IN_USE */
 
 /**
+ * Converts DOS slashes to UNIX slashes if necessary.
+ *
+ * @param   pszPath             The path to fix.
+ */
+static void shfile_fix_slashes(char *pszPath)
+{
+#if K_OS == K_OS_WINDOWS || K_OS == K_OS_OS2
+    while ((pszPath = strchr(pszPath, '\\')))
+        *pszPath++ = '/';
+#else
+    (void)pszPath;
+#endif
+}
+
+/**
  * Initializes the global variables in this file.
  */
 static void shfile_init_globals(void)
@@ -569,9 +635,12 @@ int shfile_init(shfdtab *pfdtab, shfdtab *inherit)
     if (!rc)
     {
 #ifdef SHFILE_IN_USE
+        /* Get CWD with unix slashes. */
         char buf[SHFILE_MAX_PATH];
         if (getcwd(buf, sizeof(buf)))
         {
+            shfile_fix_slashes(buf);
+
             pfdtab->cwd = sh_strdup(NULL, buf);
             if (!inherit)
             {
@@ -763,6 +832,50 @@ int shfile_init(shfdtab *pfdtab, shfdtab *inherit)
 #if K_OS == K_OS_WINDOWS && defined(SHFILE_IN_USE)
 
 /**
+ * Changes the inheritability of a file descriptro, taking console handles into
+ * account.
+ *
+ * @note    This MAY change the native handle for the entry.
+ *
+ * @returns The native handle.
+ * @param   pfd     The file descriptor to change.
+ * @param   set     If set, make child processes inherit the handle, if clear
+ *                  make them not inherit it.
+ */
+static HANDLE shfile_set_inherit_win(shfile *pfd, int set)
+{
+    HANDLE hFile = (HANDLE)pfd->native;
+    if (!SetHandleInformation(hFile, HANDLE_FLAG_INHERIT, set ? HANDLE_FLAG_INHERIT : 0))
+    {
+        /* SetHandleInformation doesn't work for console handles,
+           so we have to duplicate the handle to change the
+           inheritability. */
+        DWORD err = GetLastError();
+        if (   err == ERROR_INVALID_PARAMETER
+            && DuplicateHandle(GetCurrentProcess(),
+                               hFile,
+                               GetCurrentProcess(),
+                               &hFile,
+                               0,
+                               set ? TRUE : FALSE /* bInheritHandle */,
+                               DUPLICATE_SAME_ACCESS))
+        {
+            TRACE2((NULL, "shfile_set_inherit_win: %p -> %p (set=%d)\n", pfd->native, hFile, set));
+            if (!CloseHandle((HANDLE)pfd->native))
+                assert(0);
+            pfd->native = (intptr_t)hFile;
+        }
+        else
+        {
+            err = GetLastError();
+            assert(0);
+            hFile = (HANDLE)pfd->native;
+        }
+    }
+    return hFile;
+}
+
+/**
  * Helper for shfork.
  *
  * @param   pfdtab  The file descriptor table.
@@ -774,7 +887,6 @@ void shfile_fork_win(shfdtab *pfdtab, int set, intptr_t *hndls)
 {
     shmtxtmp tmp;
     unsigned i;
-    DWORD fFlag = set ? HANDLE_FLAG_INHERIT : 0;
 
     shmtx_enter(&pfdtab->mtx, &tmp);
     TRACE2((NULL, "shfile_fork_win: set=%d\n", set));
@@ -784,17 +896,10 @@ void shfile_fork_win(shfdtab *pfdtab, int set, intptr_t *hndls)
     {
         if (pfdtab->tab[i].fd == i)
         {
-            HANDLE hFile = (HANDLE)pfdtab->tab[i].native;
+            shfile_set_inherit_win(&pfdtab->tab[i], set);
             if (set)
                 TRACE2((NULL, "  #%d: native=%#x oflags=%#x shflags=%#x\n",
-                        i, hFile, pfdtab->tab[i].oflags, pfdtab->tab[i].shflags));
-            if (!SetHandleInformation(hFile, HANDLE_FLAG_INHERIT, fFlag))
-            {
-#if 0  /* Seems to happen for console handles, ignore it. */
-                DWORD err = GetLastError();
-                assert(0);
-#endif
-            }
+                        i, pfdtab->tab[i].native, pfdtab->tab[i].oflags, pfdtab->tab[i].shflags));
         }
     }
 
@@ -860,17 +965,9 @@ void *shfile_exec_win(shfdtab *pfdtab, int prepare, unsigned short *sizep, intpt
             if (    pfdtab->tab[i].fd == i
                 &&  !(pfdtab->tab[i].shflags & SHFILE_FLAGS_CLOSE_ON_EXEC))
             {
-                HANDLE hFile = (HANDLE)pfdtab->tab[i].native;
+                HANDLE hFile = shfile_set_inherit_win(&pfdtab->tab[i], 1);
                 TRACE2((NULL, "  #%d: native=%#x oflags=%#x shflags=%#x\n",
                         i, hFile, pfdtab->tab[i].oflags, pfdtab->tab[i].shflags));
-
-                if (!SetHandleInformation(hFile, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT))
-                {
-#if 0 /* Seems to fail for console handles, ignore. */
-                    DWORD err = GetLastError();
-                    assert(0);
-#endif
-                }
                 paf[i] = FOPEN;
                 if (pfdtab->tab[i].oflags & _O_APPEND)
                     paf[i] |= FAPPEND;
@@ -913,14 +1010,7 @@ void *shfile_exec_win(shfdtab *pfdtab, int prepare, unsigned short *sizep, intpt
         {
             if (    pfdtab->tab[i].fd == i
                 &&  !(pfdtab->tab[i].shflags & SHFILE_FLAGS_CLOSE_ON_EXEC))
-            {
-                HANDLE hFile = (HANDLE)pfdtab->tab[i].native;
-                if (!SetHandleInformation(hFile, HANDLE_FLAG_INHERIT, 0))
-                {
-                    DWORD err = GetLastError();
-                    assert(0);
-                }
-            }
+                shfile_set_inherit_win(&pfdtab->tab[i], 0);
         }
         pvRet = NULL;
     }
@@ -1200,7 +1290,10 @@ int shfile_movefd(shfdtab *pfdtab, int fdfrom, int fdto)
     return rc;
 
 #else
-    return dup2(fdfrom, fdto);
+    int fdnew = dup2(fdfrom, fdto);
+    if (fdnew >= 0)
+        close(fdfrom);
+    return fdnew;
 #endif
 }
 
@@ -1355,29 +1448,24 @@ long shfile_write(shfdtab *pfdtab, int fd, const void *buf, size_t len)
     else
         rc = -1;
 
+# ifdef DEBUG
+    if (fd != shthread_get_shell()->tracefd)
+        TRACE2((NULL, "shfile_write(%d,,%d) -> %d [%d]\n", fd, len, rc, errno));
+# endif
+
 #else
     if (fd != shthread_get_shell()->tracefd)
     {
+        int iSavedErrno = errno;
         struct stat s;
         int x;
         x = fstat(fd, &s);
         TRACE2((NULL, "shfile_write(%d) - %lu bytes (%d) - pos %lu - before; %o\n",
                 fd, (long)s.st_size, x, (long)lseek(fd, 0, SEEK_CUR), s.st_mode ));
-        errno = 0;
+        errno = iSavedErrno;
     }
 
     rc = write(fd, buf, len);
-#endif
-
-#ifdef DEBUG
-    if (fd != shthread_get_shell()->tracefd)
-    {
-        struct stat s;
-        int x;
-        TRACE2((NULL, "shfile_write(%d,,%d) -> %d [%d]\n", fd, len, rc, errno));
-        x=fstat(fd, &s);
-        TRACE2((NULL, "shfile_write(%d) - %lu bytes (%d) - pos %lu - after\n", fd, (long)s.st_size, x, (long)lseek(fd, 0, SEEK_CUR) ));
-    }
 #endif
     return rc;
 }
@@ -1502,7 +1590,7 @@ int shfile_fcntl(shfdtab *pfdtab, int fd, int cmd, int arg)
     {
         case F_GETFL: TRACE2((NULL, "shfile_fcntl(%d,F_GETFL,ignored=%d) -> %d [%d]\n", fd, arg, rc, errno));  break;
         case F_SETFL: TRACE2((NULL, "shfile_fcntl(%d,F_SETFL,newflags=%#x) -> %d [%d]\n", fd, arg, rc, errno)); break;
-        case F_DUPFD: TRACE2((NULL, "shfile_fcntl(%d,F_DUPFS,minfd=%d) -> %d [%d]\n", fd, arg, rc, errno)); break;
+        case F_DUPFD: TRACE2((NULL, "shfile_fcntl(%d,F_DUPFD,minfd=%d) -> %d [%d]\n", fd, arg, rc, errno)); break;
         default:  TRACE2((NULL, "shfile_fcntl(%d,%d,%d) -> %d [%d]\n", fd, cmd, arg, rc, errno)); break;
     }
     return rc;
@@ -1517,7 +1605,13 @@ int shfile_stat(shfdtab *pfdtab, const char *path, struct stat *pst)
     if (!rc)
     {
 # if K_OS == K_OS_WINDOWS
+        int dir_slash = shfile_trailing_slash_hack(abspath);
         rc = stat(abspath, pst); /** @todo re-implement stat. */
+        if (!rc && dir_slash && !S_ISDIR(pst->st_mode))
+        {
+            rc = -1;
+            errno = ENOTDIR;
+        }
 # else
         rc = stat(abspath, pst);
 # endif
@@ -1539,7 +1633,13 @@ int shfile_lstat(shfdtab *pfdtab, const char *path, struct stat *pst)
     if (!rc)
     {
 # if K_OS == K_OS_WINDOWS
-        rc = stat(abspath, pst); /** @todo implement lstat. */
+        int dir_slash = shfile_trailing_slash_hack(abspath);
+        rc = stat(abspath, pst); /** @todo re-implement stat. */
+        if (!rc && dir_slash && !S_ISDIR(pst->st_mode))
+        {
+            rc = -1;
+            errno = ENOTDIR;
+        }
 # else
         rc = lstat(abspath, pst);
 # endif
@@ -1566,12 +1666,13 @@ int shfile_chdir(shfdtab *pfdtab, const char *path)
     {
         char *abspath_copy = sh_strdup(psh, abspath);
         char *free_me = abspath_copy;
-        rc = chdir(path);
+        rc = chdir(abspath);
         if (!rc)
         {
             shmtxtmp    tmp;
             shmtx_enter(&pfdtab->mtx, &tmp);
 
+            shfile_fix_slashes(abspath_copy);
             free_me = pfdtab->cwd;
             pfdtab->cwd = abspath_copy;
 
@@ -1769,6 +1870,8 @@ shdir *shfile_opendir(shfdtab *pfdtab, const char *dir)
 #if defined(SHFILE_IN_USE) && K_OS == K_OS_WINDOWS
     shdir  *pdir = NULL;
 
+    TRACE2((NULL, "shfile_opendir: dir='%s'\n", dir));
+    shfile_init_globals();
     if (g_pfnNtQueryDirectoryFile)
     {
         char abspath[SHFILE_MAX_PATH];
@@ -1801,13 +1904,17 @@ shdir *shfile_opendir(shfdtab *pfdtab, const char *dir)
                     CloseHandle(hFile);
             }
             else
-                shfile_dos2errno(GetLastError());
+            {
+                errno = shfile_dos2errno(GetLastError());
+                TRACE2((NULL, "shfile_opendir: CreateFileA(%s) -> %d/%d\n", abspath, GetLastError(), errno));
+            }
         }
     }
     else
         errno = ENOSYS;
     return pdir;
 #else
+    TRACE2((NULL, "shfile_opendir: dir='%s'\n", dir));
     return (shdir *)opendir(dir);
 #endif
 }

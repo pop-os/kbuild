@@ -1,4 +1,4 @@
-/* $Id: shinstance.c 2546 2011-10-01 19:49:54Z bird $ */
+/* $Id: shinstance.c 2652 2012-09-09 17:21:48Z bird $ */
 /** @file
  * The shell instance methods.
  */
@@ -42,6 +42,9 @@
 #if K_OS == K_OS_WINDOWS
 # include <Windows.h>
 extern pid_t shfork_do(shinstance *psh); /* shforkA-win.asm */
+#endif
+#if !defined(HAVE_SYS_SIGNAME) && defined(DEBUG)
+extern void init_sys_signame(void);
 #endif
 
 
@@ -587,14 +590,28 @@ int sh_sigaction(shinstance *psh, int signo, const struct shsigaction *newp, str
             g_sig_state[signo].sa.sa_handler = SIG_DFL;
         g_sig_state[signo].sa.sa_flags = psh->sigactions[signo].sh_flags & SA_RESTART;
 
+#if !defined(HAVE_SYS_SIGNAME) && defined(DEBUG)
+        init_sys_signame();
+#endif
         TRACE2((psh, "sh_sigaction: setting signo=%d:%s to {.sa_handler=%p, .sa_flags=%#x}\n",
-                    signo, sys_signame[signo], g_sig_state[signo].sa.sa_handler, g_sig_state[signo].sa.sa_flags));
+                signo, sys_signame[signo], g_sig_state[signo].sa.sa_handler, g_sig_state[signo].sa.sa_flags));
 #ifdef _MSC_VER
         if (signal(signo, g_sig_state[signo].sa.sa_handler) == SIG_ERR)
+        {
+            TRACE2((psh, "sh_sigaction: SIG_ERR, errno=%d signo=%d\n", errno, signo));
+            if (   signo != SIGHUP   /* whatever */
+                && signo != SIGQUIT
+                && signo != SIGPIPE
+                && signo != SIGTTIN
+                && signo != SIGTSTP
+                && signo != SIGTTOU
+                && signo != SIGCONT)
+                assert(0);
+        }
 #else
         if (sigaction(signo, &g_sig_state[signo].sa, NULL))
-#endif
             assert(0);
+#endif
 
         shmtx_leave(&g_sh_mtx, &tmp);
     }
@@ -1174,6 +1191,21 @@ int sh_execve(shinstance *psh, const char *exe, const char * const *argv, const 
             }
             errno = EINVAL;
         }
+        else
+        {
+            DWORD dwErr = GetLastError();
+            switch (dwErr)
+            {
+                case ERROR_FILE_NOT_FOUND:          errno = ENOENT; break;
+                case ERROR_PATH_NOT_FOUND:          errno = ENOENT; break;
+                case ERROR_BAD_EXE_FORMAT:          errno = ENOEXEC; break;
+                case ERROR_INVALID_EXE_SIGNATURE:   errno = ENOEXEC; break;
+                default:
+                    errno = EINVAL;
+                    break;
+            }
+            TRACE2((psh, "sh_execve: dwErr=%d -> errno=%d\n", dwErr, errno));
+        }
 
         shfile_exec_win(&psh->fdtab, 0 /* done */, NULL, NULL);
     }
@@ -1408,5 +1440,17 @@ int sh_setrlimit(shinstance *psh, int resid, const shrlimit *limp)
             resid, limp, (long)limp->rlim_cur, (long)limp->rlim_max, rc, errno));
     (void)psh;
     return rc;
+}
+
+
+/* Wrapper for strerror that makes sure it doesn't return NULL and causes the
+   caller or fprintf routines to crash. */
+const char *sh_strerror(shinstance *psh, int error)
+{
+    char *err = strerror(error);
+    if (!err)
+        return "strerror return NULL!";
+    (void)psh;
+    return err;
 }
 

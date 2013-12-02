@@ -57,14 +57,14 @@ struct optent {
 /* Those marked [U] are required by posix, but have no effect! */
 
 #ifdef DEBUG
-# define NOPTS 21
-#else
 # define NOPTS 20
+#else
+# define NOPTS 19
 #endif
 
 #ifdef DEFINE_OPTIONS
 # define DEF_OPTS(name, letter, opt_set) {name, letter, opt_set, 0},
-const struct optent ro_optlist[NOPTS] = {
+const struct optent ro_optlist[NOPTS + 1] = {
 #else
 # define DEF_OPTS(name, letter, opt_set)
 #endif

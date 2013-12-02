@@ -227,8 +227,21 @@ tryexec(shinstance *psh, char *cmd, char **argv, char **envp, int vforked, int h
 	errno = e;
 }
 
-
 #ifdef EXEC_HASH_BANG_SCRIPT
+
+/*
+ * Checks if NAME is the (base) name of the shell executable or something
+ * very similar.
+ */
+STATIC int
+is_shell_exe_name(const char *name)
+{
+    return equal(name, "kmk_ash")
+        || equal(name, "kmk_sh")
+	|| equal(name, "kash")
+        || equal(name, "sh");
+}
+
 /*
  * Execute an interpreter introduced by "#!", for systems where this
  * feature has not been built into the kernel.  If the interpreter is
@@ -239,7 +252,7 @@ tryexec(shinstance *psh, char *cmd, char **argv, char **envp, int vforked, int h
  * reading any input.  It would benefit from a rewrite.
  */
 
-#define NEWARGS 5
+#define NEWARGS 16
 
 STATIC void
 execinterp(shinstance *psh, char **argv, char **envp)
@@ -251,10 +264,11 @@ execinterp(shinstance *psh, char **argv, char **envp)
 	char *p;
 	char **ap;
 	char *newargs[NEWARGS];
-	int i;
+	intptr_t i;
 	char **ap2;
 	char **new;
 
+	/* Split the string into arguments. */
 	n = psh->parsenleft - 2;
 	inp = psh->parsenextc + 2;
 	ap = newargs;
@@ -275,22 +289,35 @@ bad:		  error(psh, "Bad #! line");
 		n++, inp--;
 		*ap++ = grabstackstr(psh, outp);
 	}
-	if (ap == newargs + 1) {	/* if no args, maybe no exec is needed */
-		p = newargs[0];
-		for (;;) {
-			if (equal(p, "sh") || equal(p, "ash")) {
-				TRACE((psh, "hash bang self\n"));
-				return;
-			}
-			while (*p != '/') {
-				if (*p == '\0')
-					goto break2;
-				p++;
-			}
-			p++;
-		}
-break2:;
+
+	/* /usr/bin/env emulation, very common with kash/kmk_ash. */
+	i = ap - newargs;
+	if (i > 1 && equal(newargs[0], "/usr/bin/env")) {
+		if (   !strchr(newargs[1], '=')
+		    && newargs[1][0] != '-') {
+		    /* shellexec below searches the PATH for us, so just
+		       drop /usr/bin/env. */
+		    TRACE((psh, "hash bang /usr/bin/env utility, dropping /usr/bin/env\n"));
+		    ap--;
+		    i--;
+		    for (n = 0; n < i; n++)
+			    newargs[n] = newargs[n + 1];
+		} /* else: complicated invocation */
 	}
+
+	/* If the interpreter is the shell or a similar shell, there is
+	   no need to exec. */
+	if (i == 1) {
+		p = strrchr(newargs[0], '/');
+		if (!p)
+			p = newargs[0];
+		if (is_shell_exe_name(p)) {
+			TRACE((psh, "hash bang self\n"));
+			return;
+		}
+	}
+
+	/* Combine the two argument lists and exec. */
 	i = (char *)ap - (char *)newargs;		/* size in bytes */
 	if (i == 0)
 		error(psh, "Bad #! line");
@@ -300,13 +327,14 @@ break2:;
 	while ((i -= sizeof (char **)) >= 0)
 		*ap2++ = *ap++;
 	ap = argv;
-	while (*ap2++ = *ap++);
+	while ((*ap2++ = *ap++))
+	    /* nothing*/;
 	TRACE((psh, "hash bang '%s'\n", new[0]));
 	shellexec(psh, new, envp, pathval(psh), 0, 0);
 	/* NOTREACHED */
 }
-#endif
 
+#endif /* EXEC_HASH_BANG_SCRIPT */
 
 
 /*
@@ -1141,7 +1169,7 @@ typecmd(shinstance *psh, int argc, char **argv)
 				} else {
 					if (!v_flag)
 						out1fmt(psh, ": %s\n",
-						    strerror(errno));
+						    sh_strerror(psh, errno));
 					else
 						err = 126;
 				}
