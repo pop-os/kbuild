@@ -38,14 +38,15 @@
 /* Define to 1 if you have the `atexit' function. */
 #define HAVE_ATEXIT 1
 
-/* Define to 1 if you have the `bsd_signal' function. */
-/* #undef HAVE_BSD_SIGNAL */
-
 /* Use case insensitive file names */
 /* #undef HAVE_CASE_INSENSITIVE_FS */
 
 /* Define to 1 if you have the clock_gettime function. */
-/* #undef HAVE_CLOCK_GETTIME */
+#define HAVE_CLOCK_GETTIME 1
+
+/* Define to 1 if you have the declaration of `bsd_signal', and to 0 if you
+   don't. */
+#define HAVE_DECL_BSD_SIGNAL 0
 
 /* Define to 1 if you have the declaration of `sys_siglist', and to 0 if you
    don't. */
@@ -77,6 +78,9 @@
 
 /* Define to 1 if you have the `fdopen' function. */
 #define HAVE_FDOPEN 1
+
+/* Define to 1 if you have the `fileno' function. */
+#define HAVE_FILENO 1
 
 /* Define to 1 if you have the `fork' function. */
 #define HAVE_FORK 1
@@ -220,6 +224,18 @@
 /* Define to 1 if you have the <string.h> header file. */
 #define HAVE_STRING_H 1
 
+/* Define to 1 if you have the `strncasecmp' function. */
+#define HAVE_STRNCASECMP 1
+
+/* Define to 1 if you have the `strncmpi' function. */
+/* #undef HAVE_STRNCMPI */
+
+/* Define to 1 if you have the `strndup' function. */
+#define HAVE_STRNDUP 1
+
+/* Define to 1 if you have the `strnicmp' function. */
+/* #undef HAVE_STRNICMP */
+
 /* Define to 1 if you have the `strsignal' function. */
 #define HAVE_STRSIGNAL 1
 
@@ -314,7 +330,7 @@
 #define PACKAGE_NAME "GNU make"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "GNU make 3.81.90"
+#define PACKAGE_STRING "GNU make 3.82"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "make"
@@ -323,7 +339,7 @@
 #define PACKAGE_URL "http://www.gnu.org/software/make/"
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "3.81.90"
+#define PACKAGE_VERSION "3.82"
 
 /* Define to the character that separates directories in PATH. */
 #define PATH_SEPARATOR_CHAR ':'
@@ -390,13 +406,18 @@
 
 
 /* Version number of package */
-#define VERSION "3.81.90"
+#define VERSION "3.82"
 
 /* Use platform specific coding */
 /* #undef WINDOWS32 */
 
 /* Define if using the dmalloc debugging malloc package */
 /* #undef WITH_DMALLOC */
+
+/* Enable large inode numbers on Mac OS X 10.5.  */
+#ifndef _DARWIN_USE_64_BIT_INODE
+# define _DARWIN_USE_64_BIT_INODE 1
+#endif
 
 /* Number of bits in a file offset, on hosts where this is settable. */
 /* #undef _FILE_OFFSET_BITS */

@@ -1,4 +1,4 @@
-/* $Id: electric.c 2413 2010-09-11 17:43:04Z bird $ */
+/* $Id: electric.c 2626 2012-08-09 14:11:47Z bird $ */
 /** @file
  * A simple electric heap implementation.
  */
@@ -158,11 +158,11 @@ xmalloc (unsigned int size)
 }
 
 void *
-xcalloc (size_t size, size_t items)
+xcalloc (unsigned size)
 {
     void *result;
-    result = xmalloc (size * items);
-    return memset (result, 0, size * items);
+    result = xmalloc (size);
+    return memset (result, 0, size);
 }
 
 void *
@@ -183,9 +183,13 @@ xrealloc (void *ptr, unsigned int size)
 char *
 xstrdup (const char *ptr)
 {
-  size_t size = strlen (ptr) + 1;
-  char *result = xmalloc (size);
-  return memcpy (result, ptr, size);
+  if (ptr)
+    {
+      size_t size = strlen (ptr) + 1;
+      char *result = xmalloc (size);
+      return memcpy (result, ptr, size);
+    }
+  return NULL;
 }
 
 #else /* !ELECTRIC_HEAP */

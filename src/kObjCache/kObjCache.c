@@ -1,10 +1,10 @@
-/* $Id: kObjCache.c 2568 2012-03-18 17:59:32Z bird $ */
+/* $Id: kObjCache.c 2627 2012-08-09 14:12:12Z bird $ */
 /** @file
  * kObjCache - Object Cache.
  */
 
 /*
- * Copyright (c) 2007-2011 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
+ * Copyright (c) 2007-2012 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
  *
  * This file is part of kBuild.
  *
@@ -29,6 +29,7 @@
 #if 0
 # define ELECTRIC_HEAP
 # include "../kmk/electric.h"
+# include "../kmk/electric.c"
 #endif
 #include <string.h>
 #include <stdlib.h>
@@ -79,6 +80,7 @@
 
 #include "crc32.h"
 #include "md5.h"
+#include "kDep.h"
 
 
 /*******************************************************************************
@@ -109,6 +111,12 @@
 # define STDERR_FILENO 2
 #endif
 
+#define MY_IS_BLANK(a_ch)   ((a_ch) == ' ' || (a_ch) == '\t')
+
+#define KOC_BUF_MIN         KOC_BUF_ALIGNMENT
+#define KOC_BUF_INCR        KOC_BUF_ALIGNMENT
+#define KOC_BUF_ALIGNMENT   (4U*1024U*1024U)
+
 
 /*******************************************************************************
 *   Global Variables                                                           *
@@ -121,6 +129,11 @@ static char g_szErrorPrefix[128];
 /** Read buffer shared by the cache components. */
 static char g_szLine[KOBJCACHE_MAX_LINE_LEN + 16];
 
+/** How many times we've moved memory around. */
+static size_t g_cMemMoves = 0;
+/** How much memory we've moved. */
+static size_t g_cbMemMoved = 0;
+
 
 /*******************************************************************************
 *   Internal Functions                                                         *
@@ -128,9 +141,9 @@ static char g_szLine[KOBJCACHE_MAX_LINE_LEN + 16];
 static char *MakePathFromDirAndFile(const char *pszName, const char *pszDir);
 static char *CalcRelativeName(const char *pszPath, const char *pszDir);
 static FILE *FOpenFileInDir(const char *pszName, const char *pszDir, const char *pszMode);
-static int UnlinkFileInDir(const char *pszName, const char *pszDir);
-static int RenameFileInDir(const char *pszOldName, const char *pszNewName, const char *pszDir);
-static int DoesFileInDirExist(const char *pszName, const char *pszDir);
+static int   UnlinkFileInDir(const char *pszName, const char *pszDir);
+static int   RenameFileInDir(const char *pszOldName, const char *pszNewName, const char *pszDir);
+static int   DoesFileInDirExist(const char *pszName, const char *pszDir);
 static void *ReadFileInDir(const char *pszName, const char *pszDir, size_t *pcbFile);
 
 
@@ -756,13 +769,992 @@ static void AppendArgs(int *pcArgs, char ***ppapszArgs, const char *pszCmdLine, 
 }
 
 
+/**
+ * Dependency collector state.
+ */
+typedef struct KOCDEP
+{
+    /** The statemachine for processing the preprocessed code stream. */
+    enum KOCDEPSTATE
+    {
+        kOCDepState_Invalid = 0,
+        kOCDepState_NeedNewLine,
+        kOCDepState_NeedHash,
+        kOCDepState_NeedLine_l,
+        kOCDepState_NeedLine_l_HaveSpace,
+        kOCDepState_NeedLine_i,
+        kOCDepState_NeedLine_n,
+        kOCDepState_NeedLine_e,
+        kOCDepState_NeedSpaceBeforeDigit,
+        kOCDepState_NeedFirstDigit,
+        kOCDepState_NeedMoreDigits,
+        kOCDepState_NeedQuote,
+        kOCDepState_NeedEndQuote
+    }   enmState;
+    /** Current offset into the filename buffer. */
+    uint32_t offFilename;
+    /** The amount of space currently allocated for the filename buffer. */
+    uint32_t cbFilenameAlloced;
+    /** Pointer to the filename buffer. */
+    char *pszFilename;
+    /** The current dependency file. */
+    PDEP pCurDep;
+} KOCDEP;
+/** Pointer to a KOCDEP.  */
+typedef KOCDEP *PKOCDEP;
+
+
+/**
+ * Initializes the dependency collector state.
+ *
+ * @param   pDepState       The dependency collector state.
+ */
+static void kOCDepInit(PKOCDEP pDepState)
+{
+    pDepState->enmState = kOCDepState_NeedHash;
+    pDepState->offFilename = 0;
+    pDepState->cbFilenameAlloced = 0;
+    pDepState->pszFilename = NULL;
+    pDepState->pCurDep = NULL;
+}
+
+
+/**
+ * Deletes the dependency collector state, releasing all resources.
+ *
+ * @param   pDepState       The dependency collector state.
+ */
+static void kOCDepDelete(PKOCDEP pDepState)
+{
+    pDepState->enmState = kOCDepState_Invalid;
+    free(pDepState->pszFilename);
+    pDepState->pszFilename = NULL;
+    depCleanup();
+}
+
+
+/**
+ * Unescapes a string in place.
+ *
+ * @returns The new string length.
+ * @param   psz             The string to unescape (input and output).
+ */
+static size_t kOCDepUnescape(char *psz)
+{
+    char *pszSrc = psz;
+    char *pszDst = psz;
+    char ch;
+
+    while ((ch = *pszSrc++) != '\0')
+    {
+        if (ch == '\\')
+        {
+            char ch2 = *pszSrc;
+            if (ch2)
+            {
+                pszSrc++;
+                ch = ch2;
+            }
+            /* else: cannot happen / just ignore */
+        }
+        *pszDst++ = ch;
+    }
+
+    *pszDst = '\0';
+    return pszDst - psz;
+}
+
+
+/**
+ * Checks if the character at @a offChar is escaped or not.
+ *
+ * @returns 1 if escaped, 0 if not.
+ * @param   pach            The string (not terminated).
+ * @param   offChar         The offset of the character in question.
+ */
+static int kOCDepIsEscaped(char *pach, size_t offChar)
+{
+    while (offChar > 0 && pach[offChar - 1] == '\\')
+    {
+        if (   offChar == 1
+            || pach[offChar - 2] != '\\')
+            return 1;
+        offChar -= 2;
+    }
+    return 0;
+}
+
+
+static void kOCDepEnter(PKOCDEP pDepState, const char *pszUnescFilename, size_t cchFilename)
+{
+    if (cchFilename + 1 >= pDepState->cbFilenameAlloced)
+    {
+        pDepState->cbFilenameAlloced = (cchFilename + 1 + 15) & ~15;
+        pDepState->pszFilename = (char *)xrealloc(pDepState->pszFilename, pDepState->cbFilenameAlloced);
+    }
+
+    memcpy(pDepState->pszFilename, pszUnescFilename, cchFilename);
+    pDepState->pszFilename[cchFilename] = '\0';
+    cchFilename = kOCDepUnescape(pDepState->pszFilename);
+
+    if (   !pDepState->pCurDep
+        || cchFilename != pDepState->pCurDep->cchFilename
+        || strcmp(pDepState->pszFilename, pDepState->pCurDep->szFilename))
+        pDepState->pCurDep = depAdd(pDepState->pszFilename, cchFilename);
+}
+
+
+/**
+ * This consumes the preprocessor output and generate dependencies from it.
+ *
+ * The trick is to look at the line directives and which files get listed there.
+ *
+ * @returns The new state. This is a convenience for saving code space and it
+ *          isn't really meant to be of any use to the caller.
+ * @param   pDepState       The dependency collector state.
+ * @param   pszInput        The input.
+ * @param   cchInput        The input length.
+ */
+static enum KOCDEPSTATE
+kOCDepConsumer(PKOCDEP pDepState, const char *pszInput, size_t cchInput)
+{
+    enum KOCDEPSTATE enmState = pDepState->enmState;
+    const char *psz;
+
+    while (cchInput > 0)
+    {
+        switch (enmState)
+        {
+            case kOCDepState_NeedNewLine:
+                psz = (const char *)memchr(pszInput, '\n', cchInput);
+                if (!psz)
+                    return enmState;
+                psz++;
+                cchInput -= psz - pszInput;
+                pszInput = psz;
+
+            case kOCDepState_NeedHash:
+                while (cchInput > 0 && MY_IS_BLANK(*pszInput))
+                    cchInput--, pszInput++;
+                if (!cchInput)
+                    return pDepState->enmState = kOCDepState_NeedHash;
+
+                if (*pszInput != '#')
+                    break;
+                pszInput++;
+                cchInput--;
+                enmState = kOCDepState_NeedLine_l;
+
+            case kOCDepState_NeedLine_l:
+            case kOCDepState_NeedLine_l_HaveSpace:
+                while (cchInput > 0 && MY_IS_BLANK(*pszInput))
+                {
+                    enmState = kOCDepState_NeedLine_l_HaveSpace;
+                    cchInput--, pszInput++;
+                }
+                if (!cchInput)
+                    return pDepState->enmState = enmState;
+
+                if (*pszInput != 'l')
+                {
+                    /* # <digit> "<file>" */
+                    if (enmState != kOCDepState_NeedLine_l_HaveSpace || !isdigit(*pszInput))
+                        break;
+                    pszInput++;
+                    cchInput--;
+                    enmState = kOCDepState_NeedMoreDigits;
+                    continue;
+                }
+                pszInput++;
+                if (!--cchInput)
+                    return pDepState->enmState = kOCDepState_NeedLine_i;
+
+            case kOCDepState_NeedLine_i:
+                if (*pszInput != 'i')
+                    break;
+                pszInput++;
+                if (!--cchInput)
+                    return pDepState->enmState = kOCDepState_NeedLine_n;
+
+            case kOCDepState_NeedLine_n:
+                if (*pszInput != 'n')
+                    break;
+                pszInput++;
+                if (!--cchInput)
+                    return pDepState->enmState = kOCDepState_NeedLine_e;
+
+            case kOCDepState_NeedLine_e:
+                if (*pszInput != 'e')
+                    break;
+                pszInput++;
+                if (!--cchInput)
+                    return pDepState->enmState = kOCDepState_NeedSpaceBeforeDigit;
+
+            case kOCDepState_NeedSpaceBeforeDigit:
+                if (!MY_IS_BLANK(*pszInput))
+                    break;
+                pszInput++;
+                cchInput--;
+
+            case kOCDepState_NeedFirstDigit:
+                while (cchInput > 0 && MY_IS_BLANK(*pszInput))
+                    cchInput--, pszInput++;
+                if (!cchInput)
+                    return pDepState->enmState = kOCDepState_NeedFirstDigit;
+
+                if (!isdigit(*pszInput))
+                    break;
+                pszInput++;
+                cchInput--;
+
+            case kOCDepState_NeedMoreDigits:
+                while (cchInput > 0 && isdigit(*pszInput))
+                    cchInput--, pszInput++;
+                if (!cchInput)
+                    return pDepState->enmState = kOCDepState_NeedMoreDigits;
+
+            case kOCDepState_NeedQuote:
+                while (cchInput > 0 && MY_IS_BLANK(*pszInput))
+                    cchInput--, pszInput++;
+                if (!cchInput)
+                    return pDepState->enmState = kOCDepState_NeedQuote;
+
+                if (*pszInput != '"')
+                    break;
+                pszInput++;
+                cchInput--;
+
+            case kOCDepState_NeedEndQuote:
+            {
+                uint32_t off = pDepState->offFilename;
+                for (;;)
+                {
+                    char ch;
+
+                    if (!cchInput)
+                    {
+                        pDepState->offFilename = off;
+                        return pDepState->enmState = kOCDepState_NeedEndQuote;
+                    }
+
+                    if (off + 1 >= pDepState->cbFilenameAlloced)
+                    {
+                        if (!pDepState->cbFilenameAlloced)
+                            pDepState->cbFilenameAlloced = 32;
+                        else
+                            pDepState->cbFilenameAlloced *= 2;
+                        pDepState->pszFilename = (char *)xrealloc(pDepState->pszFilename, pDepState->cbFilenameAlloced);
+                    }
+                    pDepState->pszFilename[off] = ch = *pszInput++;
+                    cchInput--;
+
+                    if (   ch == '"'
+                        && (   off == 0
+                            || pDepState->pszFilename[off - 1] != '\\'
+                            || !kOCDepIsEscaped(pDepState->pszFilename, off)))
+                    {
+                        /* Done, unescape and add the file. */
+                        size_t cchFilename;
+
+                        pDepState->pszFilename[off] = '\0';
+                        cchFilename = kOCDepUnescape(pDepState->pszFilename);
+
+                        if (   !pDepState->pCurDep
+                            || cchFilename != pDepState->pCurDep->cchFilename
+                            || strcmp(pDepState->pszFilename, pDepState->pCurDep->szFilename))
+                            pDepState->pCurDep = depAdd(pDepState->pszFilename, cchFilename);
+                        pDepState->offFilename = 0;
+                        break;
+                    }
+
+                    off++;
+                }
+            }
+        }
+
+        /* next newline */
+        enmState = kOCDepState_NeedNewLine;
+    }
+
+    return pDepState->enmState = enmState;
+}
+
+
+/**
+ * Writes the dependencies to the specified file.
+ *
+ * @param   pDepState       The dependency collector state.
+ * @param   pszFilename     The name of the dependency file.
+ * @param   pszObjFile      The object file name, relative to @a pszObjDir.
+ * @param   pszObjDir       The object file directory.
+ * @param   fFixCase        Whether to fix the case of dependency files.
+ * @param   fQuiet          Whether to be quiet about the dependencies.
+ * @param   fGenStubs       Whether to generate stubs.
+ */
+static void kOCDepWriteToFile(PKOCDEP pDepState, const char *pszFilename, const char *pszObjFile, const char *pszObjDir,
+                              int fFixCase, int fQuiet, int fGenStubs)
+{
+    char *pszObjFileAbs;
+    char *psz;
+    FILE *pFile = fopen(pszFilename, "w");
+    if (!pFile)
+        FatalMsg("Failed to open dependency file '%s': %s\n", pszFilename, strerror(errno));
+
+    depOptimize(fFixCase, fQuiet);
+
+    /* Make object file name with unix slashes. */
+    pszObjFileAbs = MakePathFromDirAndFile(pszObjFile, pszObjDir);
+    psz = pszObjFileAbs;
+    while ((psz = strchr(psz, '\\')) != NULL)
+        *psz++ = '/';
+
+    fprintf(pFile, "%s:", pszObjFileAbs);
+    free(pszObjFileAbs);
+    depPrint(pFile);
+    if (fGenStubs)
+        depPrintStubs(pFile);
+
+    if (fclose(pFile) != 0)
+        FatalMsg("Failed to write dependency file '%s': %s\n", pszFilename, strerror(errno));
+}
+
+
+/**
+ * Preprocessor output reader state.
+ */
+typedef struct KOCCPPRD
+{
+    /** Pointer to the preprocessor output. */
+    char *pszBuf;
+    /** Allocated buffer size. */
+    size_t cbBufAlloc;
+    /** Amount preprocessor output that we've completed optimizations for. */
+    size_t cchDstOptimized;
+    /** Offset to the start of the unoptimized source. */
+    size_t offSrcUnoptimized;
+    /** The offset of the next bits to process. */
+    size_t offSrcCur;
+    /** The offset where to put more raw preprocessor output. */
+    size_t offSrcRead;
+    /** The line number corresponding to offOptimized. */
+    uint32_t uOptLineNo;
+    /** The current line number. */
+    uint32_t uCurLineNo;
+    /** Set if we're done, clear if we're expecting more preprocessor output. */
+    int fDone;
+    /** The saved character at cchOptimized. */
+    char chSaved;
+    /** Whether the optimizations are enabled. */
+    int fOptimize;
+
+    /** Buffer holding the current file name (unescaped). */
+    char *pszFileNmBuf;
+    /** The size of the file name buffer. */
+    size_t cbFileNmBuf;
+    /** The length of the current file string. */
+    size_t cchCurFileNm;
+
+    /** Line directive / new line sequence buffer. */
+    char *pszLineBuf;
+    /** The size of the buffer pointed to by pszLineBuf. */
+    size_t cbLineBuf;
+
+    /** Set if we should work the dependency generator as well. */
+    PKOCDEP pDepState;
+} KOCCPPRD;
+/** Pointer to a preprocessor reader state. */
+typedef KOCCPPRD *PKOCCPPRD;
+
+
+/**
+ * Allocate the initial C preprocessor output buffer.
+ *
+ * @param   pCppRd      The C preprocessor reader instance.
+ * @param   cbOldCpp    The size of the output the last time.  This is 0 if
+ *                      there was not previous run.
+ * @param   fOptimize   Whether optimizations are enabled.
+ * @param   pDepState   Pointer to the dependency generator.  Must only be set
+ *                      if @a fOptimize is also set.
+ */
+static void kOCCppRdInit(PKOCCPPRD pCppRd, size_t cbOldCpp, int fOptimize, PKOCDEP pDepState)
+{
+    assert(!pDepState || fOptimize);
+
+    pCppRd->cbBufAlloc = cbOldCpp ? (cbOldCpp + KOC_BUF_INCR) & ~(KOC_BUF_ALIGNMENT - 1) : KOC_BUF_MIN;
+    pCppRd->pszBuf = xmalloc(pCppRd->cbBufAlloc);
+    pCppRd->cchCurFileNm = 0;
+    pCppRd->cchDstOptimized = 0;
+    pCppRd->offSrcUnoptimized = 0;
+    pCppRd->offSrcCur = 0;
+    pCppRd->offSrcRead = 0;
+    pCppRd->uOptLineNo = 1;
+    pCppRd->uCurLineNo = 1;
+    pCppRd->fDone = 0;
+    pCppRd->chSaved = 0;
+    pCppRd->fOptimize = fOptimize;
+
+    pCppRd->pszFileNmBuf = NULL;
+    pCppRd->cbFileNmBuf = 0;
+    pCppRd->cchCurFileNm = 0;
+
+    pCppRd->pszLineBuf = NULL;
+    pCppRd->cbLineBuf = 0;
+
+    pCppRd->pDepState = pDepState;
+}
+
+
+static void kOCCppRdDelete(PKOCCPPRD pCppRd)
+{
+    free(pCppRd->pszBuf);
+    pCppRd->pszBuf = NULL;
+
+    free(pCppRd->pszFileNmBuf);
+    pCppRd->pszFileNmBuf = NULL;
+
+    free(pCppRd->pszLineBuf);
+    pCppRd->pszLineBuf = NULL;
+}
+
+
+/**
+ * Allocate more buffer space for the C preprocessor output.
+ *
+ * @param   pCppRd      The C preprocessor reader instance.
+ */
+static size_t kOCCppRdGrowBuffer(PKOCCPPRD pCppRd)
+{
+    pCppRd->cbBufAlloc += KOC_BUF_INCR;
+    pCppRd->pszBuf = xrealloc(pCppRd->pszBuf, pCppRd->cbBufAlloc);
+
+    return pCppRd->cbBufAlloc - pCppRd->offSrcRead;
+}
+
+
+static size_t kOCCppRdOptInsert(PKOCCPPRD pCppRd, size_t cchSrcReplaced, const char *pchInsert, size_t cchInsert)
+{
+    size_t offDelta = 0;
+    size_t cchAvail;
+
+    pCppRd->offSrcUnoptimized += cchSrcReplaced;
+    assert(pCppRd->offSrcUnoptimized <= pCppRd->offSrcCur);
+    cchAvail = pCppRd->offSrcUnoptimized - pCppRd->cchDstOptimized;
+    if (cchAvail < cchInsert)
+    {
+        size_t const cbToMove = pCppRd->offSrcRead - pCppRd->offSrcUnoptimized;
+        assert(cbToMove <= pCppRd->offSrcRead);
+        offDelta = cchInsert - cchAvail;
+
+        while (pCppRd->offSrcRead + offDelta >= pCppRd->cbBufAlloc)
+            kOCCppRdGrowBuffer(pCppRd);
+
+        g_cMemMoves++;
+        g_cbMemMoved += cbToMove + 1;
+        memmove(pCppRd->pszBuf + pCppRd->offSrcUnoptimized + offDelta,
+                pCppRd->pszBuf + pCppRd->offSrcUnoptimized,
+                cbToMove + 1);
+
+        pCppRd->offSrcRead += offDelta;
+        pCppRd->offSrcUnoptimized += offDelta;
+        pCppRd->offSrcCur += offDelta;
+        assert(pCppRd->offSrcRead < 1 || pCppRd->pszBuf[pCppRd->offSrcRead - 1] != '\0');
+    }
+
+    memcpy(pCppRd->pszBuf + pCppRd->cchDstOptimized, pchInsert, cchInsert);
+    pCppRd->cchDstOptimized += cchInsert;
+
+    return offDelta;
+}
+
+
+static void kOCCppRdOptCommit(PKOCCPPRD pCppRd)
+{
+    size_t cchToCommit = pCppRd->offSrcCur - pCppRd->offSrcUnoptimized;
+    assert(pCppRd->offSrcUnoptimized <= pCppRd->offSrcCur);
+
+    if (cchToCommit)
+    {
+        memmove(pCppRd->pszBuf + pCppRd->cchDstOptimized, pCppRd->pszBuf + pCppRd->offSrcUnoptimized, cchToCommit);
+        pCppRd->cchDstOptimized += cchToCommit;
+        pCppRd->offSrcUnoptimized = pCppRd->offSrcCur;
+    }
+
+    pCppRd->uOptLineNo = pCppRd->uCurLineNo;
+}
+
+
+
+static char *kOCCppRdOptGetEol(PKOCCPPRD pCppRd, char *pszCur, size_t cbLeft)
+{
+    char *pszEol = memchr(pszCur, '\n', cbLeft);
+    if (pszEol)
+    {
+        if (pszCur != pszEol && pszEol[-1] == '\r')
+            pszEol--;
+    }
+    else if (pCppRd->fDone && cbLeft)
+        pszEol = pszCur + cbLeft;
+    return pszEol;
+}
+
+static void kOCCppRdOptSetFile(PKOCCPPRD pCppRd, const char *pchFile, size_t cchFile)
+{
+    if (cchFile >= pCppRd->cbFileNmBuf)
+    {
+        pCppRd->cbFileNmBuf  = (cchFile + 15 + 1) & ~(size_t)15;
+        pCppRd->pszFileNmBuf = xrealloc(pCppRd->pszFileNmBuf, pCppRd->cbFileNmBuf);
+    }
+    memcpy(pCppRd->pszFileNmBuf, pchFile, cchFile);
+    pCppRd->pszFileNmBuf[cchFile] = '\0';
+    pCppRd->cchCurFileNm = cchFile;
+}
+
+
+static size_t kOCCppRdOptFmtLine(PKOCCPPRD pCppRd, uint32_t uLine, const char *pchFile, size_t cchFile)
+{
+    size_t cchUsed;
+    size_t cbNeeded;
+
+    /* Make sure we've got enough buffer space. */
+    cbNeeded = sizeof("#line 4888222111 \"\"\n") + cchFile;
+    if (cbNeeded > pCppRd->cbLineBuf)
+    {
+        pCppRd->cbLineBuf  = (cbNeeded + 32 + 15) & ~(size_t)15;
+        pCppRd->pszLineBuf = xrealloc(pCppRd->pszLineBuf, pCppRd->cbLineBuf);
+    }
+
+    /* Do the formatting. */
+    cchUsed = sprintf(pCppRd->pszLineBuf, "#line %lu", (unsigned long)uLine);
+    if (cchFile)
+    {
+        pCppRd->pszLineBuf[cchUsed++] = ' ';
+        pCppRd->pszLineBuf[cchUsed++] = '"';
+        memcpy(&pCppRd->pszLineBuf[cchUsed], pchFile, cchFile);
+        cchUsed += cchFile;
+        pCppRd->pszLineBuf[cchUsed++] = '"';
+    }
+    pCppRd->pszLineBuf[cchUsed++] = '\n';
+    pCppRd->pszLineBuf[cchUsed] = '\0';
+
+    return cchUsed;
+}
+
+
+static size_t kOCCppRdOptFmtNewLines(PKOCCPPRD pCppRd, uint32_t cNewLines)
+{
+    if (cNewLines + 1 > pCppRd->cbLineBuf)
+    {
+        pCppRd->cbLineBuf  = (cNewLines + 1 + 32 + 15) & ~(size_t)15;
+        pCppRd->pszLineBuf = xrealloc(pCppRd->pszLineBuf, pCppRd->cbLineBuf);
+    }
+
+    memset(pCppRd->pszLineBuf, '\n', cNewLines);
+    pCppRd->pszLineBuf[cNewLines] = '\0';
+    return cNewLines;
+}
+
+
+static size_t kOCCppRdOptFlush(PKOCCPPRD pCppRd, size_t offSrcCur, int fLineDirNext)
+{
+    size_t offDelta = 0;
+    size_t const offSrcUnoptimized = pCppRd->offSrcUnoptimized;
+    assert(offSrcUnoptimized <= offSrcCur);
+
+    if (offSrcCur > offSrcUnoptimized)
+    {
+        /*
+         * We've got unflushed whitelines.
+         */
+        size_t const cchSrcInQuestion = offSrcCur - offSrcUnoptimized;
+        uint32_t const cLinesInQuestion = pCppRd->uCurLineNo - pCppRd->uOptLineNo;
+        size_t cchLineDir;
+
+        if (   cLinesInQuestion <= 7
+            || (cchLineDir = kOCCppRdOptFmtLine(pCppRd, pCppRd->uCurLineNo, NULL, 0)) >= cLinesInQuestion)
+            cchLineDir = kOCCppRdOptFmtNewLines(pCppRd, cLinesInQuestion);
+
+        offDelta = kOCCppRdOptInsert(pCppRd, cchSrcInQuestion, pCppRd->pszLineBuf, cchLineDir);
+    }
+
+    (void)fLineDirNext; /* Use later if required. */
+    return offDelta;
+}
+
+
+static int kOCCppRdOptParseLine(PKOCCPPRD pCppRd, char *pszCur, char *pszEol,
+                                uint32_t *puNewLineNo, char **ppszNewFile, size_t *pcchNewFile)
+{
+    char    *psz = pszCur;
+    uint32_t uNewLineNo;
+    int      fIsShort;
+
+    /*
+     * Check if it's a #line directive of some kind and parse it.
+     */
+    if (*psz != '#')
+        return 0;
+    psz++;
+
+    fIsShort = MY_IS_BLANK(*psz);
+    while (MY_IS_BLANK(*psz))
+        psz++;
+
+    if (   psz[0] == 'l'
+        && psz[1] == 'i'
+        && psz[2] == 'n'
+        && psz[3] == 'e'
+        && MY_IS_BLANK(psz[4]) )
+    {
+        fIsShort = 0;
+        psz += 5;
+        while (MY_IS_BLANK(*psz))
+            psz++;
+    }
+    else if (fIsShort && isdigit(*psz))
+        fIsShort = 1;
+    else
+        return 0;
+
+    /* Parse the line number. */
+    if (!isdigit(*psz))
+        return 0;
+
+    uNewLineNo = *psz++ - '0';
+    while (isdigit(*psz))
+    {
+        uNewLineNo *= 10;
+        uNewLineNo += *psz++ - '0';
+    }
+    if (   psz != pszEol
+        && !MY_IS_BLANK(*psz))
+        return 0;
+
+    /*
+     * The file name part is optional.
+     */
+    while (MY_IS_BLANK(*psz))
+        psz++;
+
+    if (   psz != pszEol
+        && *psz == '"')
+    {
+        *ppszNewFile = ++psz;
+        while (   psz != pszEol
+               && (   *psz != '"'
+                   || (   psz[-1] == '\\'
+                       && kOCDepIsEscaped(psz, psz - *ppszNewFile)) )
+              )
+            psz++;
+        if (psz == pszEol)
+        {
+            /** @todo complain? */
+            return 0;
+        }
+        *pcchNewFile = psz - *ppszNewFile;
+
+        do
+            psz++;
+        while (psz != pszEol && MY_IS_BLANK(*psz));
+    }
+    else
+    {
+        /* No file given => Same as the current. */
+        *ppszNewFile = pCppRd->cchCurFileNm ? pCppRd->pszFileNmBuf : NULL;
+        *pcchNewFile = pCppRd->cchCurFileNm;
+    }
+    if (psz != pszEol)
+    {
+        /** @todo complain? */
+        return 0;
+    }
+
+    *puNewLineNo = uNewLineNo;
+    return 1;
+}
+
+
+static char *kOCCppRdOptHandleLine(PKOCCPPRD pCppRd, char *pszCur, size_t *pcbLeft, int *pfEmptyLine, char *pszEol)
+{
+    size_t const offSrcLine = pCppRd->offSrcCur;
+    size_t const cchSrcLine = pszEol - pCppRd->pszBuf - (pCppRd->fOptimize & 2 ? pCppRd->offSrcUnoptimized : pCppRd->offSrcCur);
+    size_t const cbLeftAssert = *pcbLeft;
+    char *pszNewFile;
+    size_t cchNewFile;
+    uint32_t uNewLineNo;
+    assert(*pszEol == '\r' || *pszEol == '\n' || *pszEol == '\0');
+
+    /* Advance to the end of the line before we do anything.  This can be a
+       little confusing but it saves effort and avoid trouble in the end. */
+    pCppRd->offSrcCur = pszEol - pCppRd->pszBuf;
+    *pcbLeft -= pszEol - pszCur;
+    assert(*pcbLeft <= cbLeftAssert); (void)cbLeftAssert;
+
+    /*
+     * Try parse the directive a '#line' one....
+     */
+    if (!kOCCppRdOptParseLine(pCppRd, pszCur, pszEol, &uNewLineNo, &pszNewFile, &cchNewFile))
+    {
+        /*
+         * No line directive.  Flush pending optimizations and indicate that
+         * the line isn't empty and needs to be commited at EOL.
+         */
+        kOCCppRdOptFlush(pCppRd, offSrcLine, 0);
+        *pfEmptyLine = 0;
+    }
+    else
+    {
+        char *pszCurFile = pCppRd->cchCurFileNm ? pCppRd->pszFileNmBuf : NULL;
+        if (   pszNewFile == pszCurFile
+            || (   cchNewFile == pCppRd->cchCurFileNm
+                && !memcmp(pszNewFile, pszCurFile, cchNewFile)) )
+        {
+            /*
+             * A #line directive specifying the same file.
+             */
+            if (uNewLineNo >= pCppRd->uCurLineNo)
+                *pfEmptyLine = 1;
+            else
+            {
+                /*
+                 * It went backwards, so we need to flush the old section of
+                 * the file and emit another directive for starting the new one.
+                 */
+                size_t cchLineDir;
+                if (!(pCppRd->fOptimize & 2))
+                    kOCCppRdOptFlush(pCppRd, offSrcLine, 1);
+
+                cchLineDir = kOCCppRdOptFmtLine(pCppRd, uNewLineNo, NULL, 0) - 1; /* sans \n */
+                kOCCppRdOptInsert(pCppRd, cchSrcLine, pCppRd->pszLineBuf, cchLineDir);
+
+                *pfEmptyLine = 0;
+            }
+        }
+        else
+        {
+            /*
+             * The #line directive changed the file.
+             */
+            size_t cchLineDir;
+
+            kOCCppRdOptSetFile(pCppRd, pszNewFile, cchNewFile); /* save to do this early */
+            if (!(pCppRd->fOptimize & 2))
+                kOCCppRdOptFlush(pCppRd, offSrcLine, 1);
+
+            cchLineDir = kOCCppRdOptFmtLine(pCppRd, uNewLineNo, pCppRd->pszFileNmBuf, cchNewFile) - 1; /* sans \n */
+            kOCCppRdOptInsert(pCppRd, cchSrcLine, pCppRd->pszLineBuf, cchLineDir);
+
+            if (pCppRd->pDepState)
+                kOCDepEnter(pCppRd->pDepState, pCppRd->pszFileNmBuf, cchNewFile);
+
+            *pfEmptyLine = 0;
+        }
+
+        pCppRd->uCurLineNo = uNewLineNo - 1;
+    }
+
+    return pCppRd->pszBuf + pCppRd->offSrcCur;
+}
+
+
+static void kOCCppRdOpt(PKOCCPPRD pCppRd)
+{
+    size_t cch;
+    char *pszEol;
+    char *pszCur = pCppRd->pszBuf + pCppRd->offSrcCur;
+    size_t cbTodo = pCppRd->offSrcRead - pCppRd->offSrcCur;
+    int fEmptyLine = 1;
+
+    while (cbTodo > 0)
+    {
+        switch (*pszCur)
+        {
+            case ' ':
+            case '\t':
+                break;
+
+            case '\n':
+                pCppRd->offSrcCur = pszCur - pCppRd->pszBuf + 1;
+                pCppRd->uCurLineNo++;
+                if (!fEmptyLine)
+                    kOCCppRdOptCommit(pCppRd);
+                fEmptyLine = 1;
+                break;
+
+            case '\r': /* "\r\n" -> "\n" */
+                if (cbTodo <= 1 && !pCppRd->fDone)
+                    return;
+                if (pszCur[1] == '\n' && !fEmptyLine)
+                {
+                    /* Commit the part up to the '\r' first, replace '\r\n' with '\n'. */
+                    pCppRd->offSrcCur = pszCur - pCppRd->pszBuf;
+                    kOCCppRdOptCommit(pCppRd);
+
+                    pCppRd->offSrcCur += 2;
+                    kOCCppRdOptInsert(pCppRd, 2, "\n", 1);
+
+                    assert(cbTodo >= 2);
+                    cbTodo -= 2;
+                    pszCur += 2;
+
+                    fEmptyLine = 1;
+                    continue;
+                }
+                break;
+
+            case '#':
+                pszEol = kOCCppRdOptGetEol(pCppRd, pszCur + 1, cbTodo - 1);
+                if (!pszEol)
+                    return;
+                pszCur = kOCCppRdOptHandleLine(pCppRd, pszCur, &cbTodo, &fEmptyLine, pszEol);
+                continue;
+
+            default:
+                /*
+                 * Some non-white stuff encountered, flush pending white
+                 * line optimizations and skip to the end of the line.
+                 */
+                fEmptyLine = 0;
+                pszEol = kOCCppRdOptGetEol(pCppRd, pszCur + 1, cbTodo - 1);
+                if (!pszEol)
+                    return;
+                cch = pszEol - pszCur;
+
+                pszCur += kOCCppRdOptFlush(pCppRd, pCppRd->offSrcCur, 0);
+
+                assert(cch <= cbTodo);
+                cbTodo -= cch;
+                pszCur += cch;
+                continue;
+        }
+
+        cbTodo--;
+        pszCur++;
+    }
+}
+
+
+static void kOCCppRdOptFinalize(PKOCCPPRD pCppRd)
+{
+    pCppRd->fDone = 1;
+    assert(pCppRd->offSrcRead < 1 || pCppRd->pszBuf[pCppRd->offSrcRead - 1] != '\0');
+    pCppRd->pszBuf[pCppRd->offSrcRead] = '\0';
+    kOCCppRdOpt(pCppRd);
+
+    assert(pCppRd->offSrcCur == pCppRd->offSrcRead);
+    kOCCppRdOptFlush(pCppRd, pCppRd->offSrcCur, 0);
+}
+
+
+
+/**
+ * Read C preprocessor output from the given file descriptor, optionally
+ * optimzing it.
+ *
+ * @returns Number of bytes read. 0 indicates end of file.
+ *
+ * @param   pCppRd      The C preprocessor reader instance.
+ * @param   fdIn        The file descriptor to read the raw preprocessor output
+ *                      from.
+ * @param   ppszRet     Where to return the pointer to the output.
+ *
+ * @remarks Won't return on error, calls FatalDie on those occasions.
+ */
+static long kOCCppRdRead(PKOCCPPRD pCppRd, int fdIn, const char **ppszRet)
+{
+    size_t cbLeft;
+    long   cbRead;
+
+    if (pCppRd->fOptimize)
+    {
+        /*
+         * Optimize the C preprocessor output on the way thru.
+         */
+        size_t const cchOldOptimized = pCppRd->cchDstOptimized;
+        if (pCppRd->chSaved)
+            pCppRd->pszBuf[pCppRd->cchDstOptimized] = pCppRd->chSaved;
+
+        do
+        {
+            /* Read more raw C preprocessor output. */
+            cbLeft = pCppRd->cbBufAlloc - pCppRd->offSrcRead;
+            if (cbLeft <= 1)
+                cbLeft = kOCCppRdGrowBuffer(pCppRd);
+
+            do
+                cbRead = read(fdIn, pCppRd->pszBuf + pCppRd->offSrcRead, (long)(cbLeft - 1));
+            while (cbRead < 0 && errno == EINTR);
+            if (cbRead < 0)
+                FatalDie("kOCCppRdRead - read(%d,,%ld) failed: %s\n",
+                         fdIn, (long)(cbLeft - 1), strerror(errno));
+            pCppRd->offSrcRead += cbRead;
+
+            /* Optimize it. */
+            if (!cbRead)
+            {
+                kOCCppRdOptFinalize(pCppRd);
+                break;
+            }
+            kOCCppRdOpt(pCppRd);
+        } while (pCppRd->cchDstOptimized == cchOldOptimized);
+
+        *ppszRet = &pCppRd->pszBuf[cchOldOptimized];
+        pCppRd->chSaved = pCppRd->pszBuf[pCppRd->cchDstOptimized];
+        pCppRd->pszBuf[pCppRd->cchDstOptimized] = '\0';
+        cbRead = (long)(pCppRd->cchDstOptimized - cchOldOptimized);
+    }
+    else
+    {
+        /*
+         * Pass thru.
+         */
+        char *pszBuf;
+        cbLeft = pCppRd->cbBufAlloc - pCppRd->offSrcRead;
+        if (cbLeft <= 1)
+            cbLeft = kOCCppRdGrowBuffer(pCppRd);
+        pszBuf = pCppRd->pszBuf + pCppRd->offSrcRead;
+
+        do
+            cbRead = read(fdIn, pszBuf, (long)(cbLeft - 1));
+        while (cbRead < 0 && errno == EINTR);
+        if (cbRead < 0)
+            FatalDie("kOCCppRdRead - read(%d,,%ld) failed: %s\n",
+                     fdIn, (long)(cbLeft - 1), strerror(errno));
+
+        *ppszRet = pszBuf;
+        pCppRd->offSrcRead += cbRead;
+        pszBuf[cbRead] = '\0';
+    }
+
+    return cbRead;
+}
+
+
+/**
+ * Grabs the output buffer from the C preprocessor reader.
+ *
+ * @param   pCppRd              The C preprocessor reader instance.
+ * @param   ppszRet             Where to return the pointer to the output.
+ * @param   pcbRet              Where to return the size of the output.
+ */
+static void kOCCppRdGrabOutput(PKOCCPPRD pCppRd, char **ppszRet, size_t *pcbRet)
+{
+    assert(pCppRd->offSrcRead < 1 || pCppRd->pszBuf[pCppRd->offSrcRead - 1] != '\0');
+    *ppszRet = pCppRd->pszBuf;
+    *pcbRet  = pCppRd->fOptimize ? pCppRd->cchDstOptimized : pCppRd->offSrcRead;
+    pCppRd->pszBuf = NULL;
+    pCppRd->offSrcRead = 0;
+}
+
+
+
 
 
 
 /** A checksum list entry.
- * We keep a list checksums (of precompiler output) that matches, The planned
- * matching algorithm doesn't require the precompiler output to be indentical,
- * only to produce the same object files.
+ * We keep a list checksums (of preprocessor output) that matches.
+ *
+ * The matching algorithm doesn't require the preprocessor output to be
+ * indentical, only to produce the same object files.
  */
 typedef struct KOCSUM
 {
@@ -782,8 +1774,7 @@ typedef const KOCSUM *PCKOCSUM;
 
 
 /**
- * Temporary context record used when calculating
- * the checksum of some data.
+ * Temporary context record used when calculating the checksum of some data.
  */
 typedef struct KOCSUMCTX
 {
@@ -1079,28 +2070,41 @@ typedef struct KOCENTRY
     char *pszAbsPath;
     /** Set if the object needs to be (re)compiled. */
     unsigned fNeedCompiling;
-    /** Whether the precompiler runs in piped mode. If clear it's file
+    /** Whether the preprocessor runs in piped mode. If clear it's file
      * mode (it could be redirected stdout, but that's essentially the
      * same from our point of view). */
     unsigned fPipedPreComp;
-    /** Whether the compiler runs in piped mode (precompiler output on stdin). */
+    /** Whether the compiler runs in piped mode (preprocessor output on stdin). */
     unsigned fPipedCompile;
-    /** The name of the pipe that we're feeding the precompiled output to the
+    /** The name of the pipe that we're feeding the preprocessed output to the
      *  compiler via.  This is a Windows thing. */
     char *pszNmPipeCompile;
+    /** Name of the dependency file (generated from #line statements in the
+     * preprocessor output). */
+    char *pszMakeDepFilename;
+    /** Whether to fix the case of the make depedencies. */
+    int fMakeDepFixCase;
+    /** Whether to do the make dependencies quietly. */
+    int fMakeDepQuiet;
+    /** Whether to generate stubs for headers files. */
+    int fMakeDepGenStubs;
+    /** The dependency collector state.  */
+    KOCDEP DepState;
+    /** Whether the optimizations are enabled. */
+    int fOptimizeCpp;
     /** Cache entry key that's used for some quick digest validation. */
     uint32_t uKey;
 
     /** The file data. */
     struct KOCENTRYDATA
     {
-        /** The name of file containing the precompiler output. */
+        /** The name of file containing the preprocessor output. */
         char *pszCppName;
-        /** Pointer to the precompiler output. */
+        /** Pointer to the preprocessor output. */
         char *pszCppMapping;
-        /** The size of the precompiler output. 0 if not determined. */
+        /** The size of the preprocessor output. 0 if not determined. */
         size_t cbCpp;
-        /** The precompiler output checksums that will produce the cached object. */
+        /** The preprocessor output checksums that will produce the cached object. */
         KOCSUM SumHead;
         /** The number of milliseconds spent precompiling. */
         uint32_t cMsCpp;
@@ -1116,6 +2120,7 @@ typedef struct KOCENTRY
         /** The number of milliseconds spent compiling. */
         uint32_t cMsCompile;
         /** @todo need a list of additional output files for MSC. */
+        /** @todo need compiler output (warnings). */
 
         /** The target os/arch identifier. */
         char *pszTarget;
@@ -1146,6 +2151,8 @@ static PKOCENTRY kOCEntryCreate(const char *pszFilename)
      * Allocate an empty entry.
      */
     pEntry = xmallocz(sizeof(*pEntry));
+
+    kOCDepInit(&pEntry->DepState);
 
     kOCSumInit(&pEntry->New.SumHead);
     kOCSumInit(&pEntry->Old.SumHead);
@@ -1180,6 +2187,9 @@ static void kOCEntryDestroy(PKOCENTRY pEntry)
     free(pEntry->pszDir);
     free(pEntry->pszAbsPath);
     free(pEntry->pszNmPipeCompile);
+    free(pEntry->pszMakeDepFilename);
+
+    kOCDepDelete(&pEntry->DepState);
 
     kOCSumDeleteChain(&pEntry->New.SumHead);
     kOCSumDeleteChain(&pEntry->Old.SumHead);
@@ -1217,14 +2227,19 @@ static void kOCEntryDestroy(PKOCENTRY pEntry)
  * @param   pEntry          The cache entry.
  * @param   papszArgv       The argument vector.
  * @param   cArgc           The number of entries in the vector.
- * @param   pszIgnorePath   Path to ignore when encountered at the end of arguments.
- *                          (Not quite safe for simple file names, but what the heck.)
+ * @param   pszIgnorePath1  Path to ignore when encountered at the end of
+ *                          arguments. (Not quite safe for simple file names,
+ *                          but what the heck.)
+ * @param   pszIgnorePath2  Path to ignore when encountered at the end of
+ *                          arguments. (Not quite safe for simple file names,
+ *                          but what the heck.)
  * @param   pSum            Where to store the check sum.
  */
 static void kOCEntryCalcArgvSum(PKOCENTRY pEntry, const char * const *papszArgv, unsigned cArgc,
-                                const char *pszIgnorePath, PKOCSUM pSum)
+                                const char *pszIgnorePath1, const char *pszIgnorePath2, PKOCSUM pSum)
 {
-    size_t cchIgnorePath = strlen(pszIgnorePath);
+    size_t cchIgnorePath1 = strlen(pszIgnorePath1);
+    size_t cchIgnorePath2 = pszIgnorePath2 ? strlen(pszIgnorePath2) : ~(size_t)0;
     KOCSUMCTX Ctx;
     unsigned i;
 
@@ -1232,8 +2247,10 @@ static void kOCEntryCalcArgvSum(PKOCENTRY pEntry, const char * const *papszArgv,
     for (i = 0; i < cArgc; i++)
     {
         size_t cch = strlen(papszArgv[i]);
-        if (    cch < cchIgnorePath
-            ||  !ArePathsIdenticalN(papszArgv[i] + cch - cchIgnorePath, pszIgnorePath, cch))
+        if (   (   cch < cchIgnorePath1
+                || !ArePathsIdenticalN(papszArgv[i] + cch - cchIgnorePath1, pszIgnorePath1, cch))
+            && (   cch < cchIgnorePath2
+                || !ArePathsIdenticalN(papszArgv[i] + cch - cchIgnorePath2, pszIgnorePath2, cch)) )
             kOCSumUpdate(pSum, &Ctx, papszArgv[i], cch + 1);
     }
     kOCSumFinalize(pSum, &Ctx);
@@ -1410,7 +2427,8 @@ static void kOCEntryRead(PKOCENTRY pEntry)
                 {
                     KOCSUM Sum;
                     kOCEntryCalcArgvSum(pEntry, (const char * const *)pEntry->Old.papszArgvCompile,
-                                        pEntry->Old.cArgvCompile, pEntry->Old.pszObjName, &Sum);
+                                        pEntry->Old.cArgvCompile, pEntry->Old.pszObjName, pEntry->Old.pszCppName,
+                                        &Sum);
                     fBad = !kOCSumIsEqual(&pEntry->Old.SumCompArgv, &Sum);
                 }
                 if (fBad)
@@ -1597,7 +2615,8 @@ static void kOCEntrySetCompileArgv(PKOCENTRY pEntry, const char * const *papszAr
         pEntry->New.papszArgvCompile[i] = xstrdup(papszArgvCompile[i]);
     pEntry->New.papszArgvCompile[i] = NULL; /* for exev/spawnv */
 
-    kOCEntryCalcArgvSum(pEntry, papszArgvCompile, cArgvCompile, pEntry->New.pszObjName, &pEntry->New.SumCompArgv);
+    kOCEntryCalcArgvSum(pEntry, papszArgvCompile, cArgvCompile, pEntry->New.pszObjName, pEntry->New.pszCppName,
+                        &pEntry->New.SumCompArgv);
     kOCSumInfo(&pEntry->New.SumCompArgv, 4, "comp-argv");
 
     /*
@@ -1634,11 +2653,11 @@ static void kOCEntrySetTarget(PKOCENTRY pEntry, const char *pszTarget)
 
 
 /**
- * Sets the precompiler output filename.
- * We don't generally care if this matches the old name or not.
+ * Sets the preprocessor output filename. We don't generally care if this
+ * matches the old name or not.
  *
  * @param   pEntry      The cache entry.
- * @param   pszCppName  The precompiler output filename.
+ * @param   pszCppName  The preprocessor output filename.
  */
 static void kOCEntrySetCppName(PKOCENTRY pEntry, const char *pszCppName)
 {
@@ -1648,10 +2667,10 @@ static void kOCEntrySetCppName(PKOCENTRY pEntry, const char *pszCppName)
 
 
 /**
- * Sets the piped mode of the precompiler and compiler.
+ * Sets the piped mode of the preprocessor and compiler.
  *
  * @param   pEntry                  The cache entry.
- * @param   fRedirPreCompStdOut     Whether the precompiler is in piped mode.
+ * @param   fRedirPreCompStdOut     Whether the preprocessor is in piped mode.
  * @param   fRedirCompileStdIn      Whether the compiler is in piped mode.
  * @param   pszNmPipeCompile        The name of the named pipe to use to feed
  *                                  the microsoft compiler.
@@ -1662,6 +2681,37 @@ static void kOCEntrySetPipedMode(PKOCENTRY pEntry, int fRedirPreCompStdOut, int 
     pEntry->fPipedPreComp = fRedirPreCompStdOut;
     pEntry->fPipedCompile = fRedirCompileStdIn || pszNmPipeCompile;
     pEntry->pszNmPipeCompile = xstrdup(pszNmPipeCompile);
+}
+
+
+/**
+ * Sets the dependency file.
+ *
+ * @param   pEntry                  The cache entry.
+ * @param   pszMakeDepFilename      The dependency filename.
+ * @param   fMakeDepFixCase         Whether to fix the case of dependency files.
+ * @param   fMakeDepQuiet           Whether to be quiet about the dependencies.
+ * @param   fMakeDepGenStubs        Whether to generate stubs.
+ */
+static void kOCEntrySetDepFilename(PKOCENTRY pEntry, const char *pszMakeDepFilename,
+                                   int fMakeDepFixCase, int fMakeDepQuiet, int fMakeDepGenStubs)
+{
+    pEntry->pszMakeDepFilename = xstrdup(pszMakeDepFilename);
+    pEntry->fMakeDepFixCase = fMakeDepFixCase;
+    pEntry->fMakeDepQuiet = fMakeDepQuiet;
+    pEntry->fMakeDepGenStubs = fMakeDepGenStubs;
+}
+
+
+/**
+ * Configures the preprocessor output optimizations.
+ *
+ * @param   pEntry                  The cache entry.
+ * @param   fOptimizeCpp            The one and only flag, so far.
+ */
+static void kOCEntrySetOptimizations(PKOCENTRY pEntry, int fOptimizeCpp)
+{
+    pEntry->fOptimizeCpp = fOptimizeCpp;
 }
 
 
@@ -1824,17 +2874,17 @@ static pid_t kOCEntrySpawnChild(PCKOCENTRY pEntry, uint32_t *pcMs, const char * 
     pid = _spawnvp(_P_NOWAIT, papszArgv[0], papszArgv);
 # endif
     if (pid == -1)
-        FatalDie("precompile - _spawnvp failed: %s\n", strerror(errno));
+        FatalDie("preprocess - _spawnvp failed: %s\n", strerror(errno));
 
 #else
     pid = fork();
     if (!pid)
     {
         execvp(papszArgv[0], (char **)papszArgv);
-        FatalDie("precompile - execvp failed: %s\n", strerror(errno));
+        FatalDie("preprocess - execvp failed: %s\n", strerror(errno));
     }
     if (pid == -1)
-        FatalDie("precompile - fork() failed: %s\n", strerror(errno));
+        FatalDie("preprocess - fork() failed: %s\n", strerror(errno));
 #endif
 
     /*
@@ -1902,13 +2952,14 @@ static void kOCEntryWaitChild(PCKOCENTRY pEntry, uint32_t *pcMs, pid_t pid, cons
  * Creates a pipe for setting up redirected stdin/stdout.
  *
  * @param   pEntry          The cache entry.
- * @param   pFDs            Where to store the two file descriptors.
+ * @param   paFDs           Where to store the two file descriptors.
  * @param   pszMsg          The operation message for info/error messages.
  * @param   pszPipeName     The pipe name if it is supposed to be named. (Windows only.)
+ * @param   fText           Whether to read text mode or binary mode.
  */
-static void kOCEntryCreatePipe(PKOCENTRY pEntry, int *pFDs, const char *pszPipeName, const char *pszMsg)
+static void kOCEntryCreatePipe(PKOCENTRY pEntry, int *paFDs, const char *pszPipeName, const char *pszMsg, int fText)
 {
-    pFDs[0] = pFDs[1] = -1;
+    paFDs[0] = paFDs[1] = -1;
 #if defined(__WIN__)
     if (pszPipeName)
     {
@@ -1924,18 +2975,19 @@ static void kOCEntryCreatePipe(PKOCENTRY pEntry, int *pFDs, const char *pszPipeN
         if (hPipe == INVALID_HANDLE_VALUE)
             FatalDie("%s - CreateNamedPipe(%s) failed: %d\n", pszMsg, pszPipeName, GetLastError());
 
-        pFDs[1 /* write */] = _open_osfhandle((intptr_t)hPipe, _O_WRONLY | _O_TEXT | _O_NOINHERIT);
-        if (pFDs[1 /* write */] == -1)
+        paFDs[1 /* write */] = _open_osfhandle((intptr_t)hPipe, _O_WRONLY | _O_TEXT | _O_NOINHERIT);
+        if (paFDs[1 /* write */] == -1)
             FatalDie("%s - _open_osfhandle failed: %d\n", pszMsg, strerror(errno));
     }
-    else if (_pipe(pFDs, 0, _O_NOINHERIT | _O_BINARY) < 0)
+    else if (   _pipe(paFDs, 256*1024, _O_NOINHERIT | (fText ? _O_TEXT : _O_BINARY)) < 0
+             && _pipe(paFDs,        0, _O_NOINHERIT | (fText ? _O_TEXT : _O_BINARY)) < 0)
 #else
-    if (pipe(pFDs) < 0)
+    if (pipe(paFDs) < 0)
 #endif
         FatalDie("%s - pipe failed: %s\n", pszMsg, strerror(errno));
 #if !defined(__WIN__)
-    fcntl(pFDs[0], F_SETFD, FD_CLOEXEC);
-    fcntl(pFDs[1], F_SETFD, FD_CLOEXEC);
+    fcntl(paFDs[0], F_SETFD, FD_CLOEXEC);
+    fcntl(paFDs[1], F_SETFD, FD_CLOEXEC);
 #endif
 
     (void)pEntry;
@@ -1957,7 +3009,7 @@ static void kOCEntrySpawnProducer(PKOCENTRY pEntry, const char * const *papszArg
     int fds[2];
     pid_t pid;
 
-    kOCEntryCreatePipe(pEntry, fds, NULL, pszMsg);
+    kOCEntryCreatePipe(pEntry, fds, NULL, pszMsg, pEntry->fOptimizeCpp);
     pid = kOCEntrySpawnChild(pEntry, &pEntry->New.cMsCpp, papszArgv, cArgv, -1, fds[1 /* write */], pszMsg);
 
     pfnConsumer(pEntry, fds[0 /* read */]);
@@ -1981,7 +3033,7 @@ static void kOCEntrySpawnConsumer(PKOCENTRY pEntry, const char * const *papszArg
     int fds[2];
     pid_t pid;
 
-    kOCEntryCreatePipe(pEntry, fds, pEntry->pszNmPipeCompile, pszMsg);
+    kOCEntryCreatePipe(pEntry, fds, pEntry->pszNmPipeCompile, pszMsg, 0 /*fText*/);
     pid = kOCEntrySpawnChild(pEntry, &pEntry->New.cMsCompile, papszArgv, cArgv, fds[0 /* read */], -1, pszMsg);
 #ifdef __WIN__
     if (pEntry->pszNmPipeCompile && !ConnectNamedPipe((HANDLE)_get_osfhandle(fds[1 /* write */]), NULL))
@@ -2015,14 +3067,14 @@ static void kOCEntrySpawnTee(PKOCENTRY pEntry, const char * const *papszProdArgv
     /*
      * The producer.
      */
-    kOCEntryCreatePipe(pEntry, fds, NULL, pszMsg);
+    kOCEntryCreatePipe(pEntry, fds, NULL, pszMsg, pEntry->fOptimizeCpp);
     pidConsumer = kOCEntrySpawnChild(pEntry, &pEntry->New.cMsCpp, papszProdArgv, cProdArgv, -1, fds[1 /* write */], pszMsg);
     fdIn = fds[0 /* read */];
 
     /*
      * The consumer.
      */
-    kOCEntryCreatePipe(pEntry, fds, pEntry->pszNmPipeCompile, pszMsg);
+    kOCEntryCreatePipe(pEntry, fds, pEntry->pszNmPipeCompile, pszMsg, 0 /*fText*/);
     pidProducer = kOCEntrySpawnChild(pEntry, &pEntry->New.cMsCompile, papszConsArgv, cConsArgv, fds[0 /* read */], -1, pszMsg);
     fdOut = fds[1 /* write */];
 
@@ -2040,7 +3092,7 @@ static void kOCEntrySpawnTee(PKOCENTRY pEntry, const char * const *papszProdArgv
 
 
 /**
- * Reads the output from the precompiler.
+ * Reads the output from the preprocessor.
  *
  * @param   pEntry      The cache entry. New.cbCpp and New.pszCppMapping will be updated.
  * @param   pWhich      Specifies what to read (old/new).
@@ -2059,14 +3111,14 @@ static int kOCEntryReadCppOutput(PKOCENTRY pEntry, struct KOCENTRYDATA *pWhich, 
         return -1;
     }
 
-    InfoMsg(3, "precompiled file is %lu bytes long\n", (unsigned long)pWhich->cbCpp);
+    InfoMsg(3, "preprocessed file is %lu bytes long\n", (unsigned long)pWhich->cbCpp);
     return 0;
 }
 
 
 /**
- * Worker for kOCEntryPreCompile and calculates the checksum of
- * the precompiler output.
+ * Worker for kOCEntryPreProcess and calculates the checksum of
+ * the preprocessor output.
  *
  * @param   pEntry      The cache entry. NewSum will be updated.
  */
@@ -2081,62 +3133,42 @@ static void kOCEntryCalcChecksum(PKOCENTRY pEntry)
 
 
 /**
- * This consumes the precompiler output and checksums it.
+ * This consumes the preprocessor output and checksums it.
  *
  * @param   pEntry  The cache entry.
- * @param   fdIn    The precompiler output pipe.
+ * @param   fdIn    The preprocessor output pipe.
  * @param   fdOut   The compiler input pipe, -1 if no compiler.
  */
-static void kOCEntryPreCompileConsumer(PKOCENTRY pEntry, int fdIn)
+static void kOCEntryPreProcessConsumer(PKOCENTRY pEntry, int fdIn)
 {
     KOCSUMCTX Ctx;
-    long cbLeft;
-    long cbAlloc;
-    char *psz;
+    KOCCPPRD CppRd;
 
     kOCSumInitWithCtx(&pEntry->New.SumHead, &Ctx);
-    cbAlloc = pEntry->Old.cbCpp ? ((long)pEntry->Old.cbCpp + 4*1024*1024 + 4096) & ~(4*1024*1024 - 1) : 4*1024*1024;
-    cbLeft = cbAlloc;
-    pEntry->New.pszCppMapping = psz = xmalloc(cbAlloc);
+    kOCCppRdInit(&CppRd, pEntry->Old.cbCpp, pEntry->fOptimizeCpp,
+                 pEntry->pszMakeDepFilename ? &pEntry->DepState : NULL);
+
     for (;;)
     {
         /*
          * Read data from the pipe.
          */
-        long cbRead = read(fdIn, psz, cbLeft - 1);
+        const char *psz;
+        long cbRead = kOCCppRdRead(&CppRd, fdIn, &psz);
         if (!cbRead)
             break;
-        if (cbRead < 0)
-        {
-            if (errno == EINTR)
-                continue;
-            FatalDie("precompile - read(%d,,%ld) failed: %s\n",
-                     fdIn, (long)cbLeft, strerror(errno));
-        }
 
         /*
          * Process the data.
          */
-        psz[cbRead] = '\0';
         kOCSumUpdate(&pEntry->New.SumHead, &Ctx, psz, cbRead);
-
-        /*
-         * Advance.
-         */
-        psz += cbRead;
-        cbLeft -= cbRead;
-        if (cbLeft <= 1)
-        {
-            size_t off = psz - pEntry->New.pszCppMapping;
-            cbLeft  += 4*1024*1024;
-            cbAlloc += 4*1024*1024;
-            pEntry->New.pszCppMapping = xrealloc(pEntry->New.pszCppMapping, cbAlloc);
-            psz = pEntry->New.pszCppMapping + off;
-        }
+        if (pEntry->pszMakeDepFilename && !pEntry->fOptimizeCpp)
+            kOCDepConsumer(&pEntry->DepState, psz, cbRead);
     }
 
     close(fdIn);
-    pEntry->New.cbCpp = cbAlloc - cbLeft;
+    kOCCppRdGrabOutput(&CppRd, &pEntry->New.pszCppMapping, &pEntry->New.cbCpp);
+    kOCCppRdDelete(&CppRd);
     kOCSumFinalize(&pEntry->New.SumHead, &Ctx);
     kOCSumInfo(&pEntry->New.SumHead, 4, "cpp (pipe)");
 }
@@ -2145,24 +3177,25 @@ static void kOCEntryPreCompileConsumer(PKOCENTRY pEntry, int fdIn)
 
 
 /**
- * Run the precompiler and calculate the checksum of the output.
+ * Run the preprocessor and calculate the checksum of the output.
  *
  * @param   pEntry              The cache entry.
- * @param   papszArgvPreComp    The argument vector for executing precompiler. The cArgvPreComp'th argument must be NULL.
+ * @param   papszArgvPreComp    The argument vector for executing preprocessor.
+ *                              The cArgvPreComp'th argument must be NULL.
  * @param   cArgvPreComp        The number of arguments.
  */
-static void kOCEntryPreCompile(PKOCENTRY pEntry, const char * const *papszArgvPreComp, unsigned cArgvPreComp)
+static void kOCEntryPreProcess(PKOCENTRY pEntry, const char * const *papszArgvPreComp, unsigned cArgvPreComp)
 {
     /*
-     * If we're executing the precompiler in piped mode, it's relatively simple.
+     * If we're executing the preprocessor in piped mode, it's relatively simple.
      */
     if (pEntry->fPipedPreComp)
-        kOCEntrySpawnProducer(pEntry, papszArgvPreComp, cArgvPreComp, "precompile",
-                              kOCEntryPreCompileConsumer);
+        kOCEntrySpawnProducer(pEntry, papszArgvPreComp, cArgvPreComp, "preprocess",
+                              kOCEntryPreProcessConsumer);
     else
     {
         /*
-         * Rename the old precompiled output to '-old' so the precompiler won't
+         * Rename the old preprocessed output to '-old' so the preprocessor won't
          * overwrite it when we execute it.
          */
         if (    pEntry->Old.pszCppName
@@ -2183,19 +3216,25 @@ static void kOCEntryPreCompile(PKOCENTRY pEntry, const char * const *papszArgvPr
         }
 
         /*
-         * Precompile it and calculate the checksum on the output.
+         * Preprocess it and calculate the checksum on the output.
          */
         InfoMsg(3, "precompiling -> '%s'...\n", pEntry->New.pszCppName);
-        kOCEntrySpawn(pEntry, &pEntry->New.cMsCpp, papszArgvPreComp, cArgvPreComp, "precompile", NULL);
+        kOCEntrySpawn(pEntry, &pEntry->New.cMsCpp, papszArgvPreComp, cArgvPreComp, "preprocess", NULL);
         kOCEntryReadCppOutput(pEntry, &pEntry->New, 0 /* fatal */);
         kOCEntryCalcChecksum(pEntry);
+        if (pEntry->pszMakeDepFilename)
+            kOCDepConsumer(&pEntry->DepState, pEntry->New.pszCppMapping, pEntry->New.cbCpp);
     }
+
+    if (pEntry->pszMakeDepFilename)
+        kOCDepWriteToFile(&pEntry->DepState, pEntry->pszMakeDepFilename, pEntry->New.pszObjName, pEntry->pszDir,
+                          pEntry->fMakeDepFixCase, pEntry->fMakeDepQuiet, pEntry->fMakeDepGenStubs);
 }
 
 
 /**
  * Worker function for kOCEntryTeeConsumer and kOCEntryCompileIt that
- * writes the precompiler output to disk.
+ * writes the preprocessor output to disk.
  *
  * @param   pEntry      The cache entry.
  * @param   fFreeIt     Whether we can free it after writing it or not.
@@ -2256,8 +3295,8 @@ static void kOCEntryWriteCppOutput(PKOCENTRY pEntry, int fFreeIt)
 
 
 /**
- * kOCEntrySpawnConsumer callback that passes the precompiler
- * output to the compiler and writes it to the disk (latter only when necesary).
+ * kOCEntrySpawnConsumer callback that passes the preprocessor output to the
+ * compiler and writes it to the disk (latter only when necesary).
  *
  * @param   pEntry      The cache entry.
  * @param   fdOut       The pipe handle connected to the childs stdin.
@@ -2345,11 +3384,11 @@ static void kOCEntryCompileIt(PKOCENTRY pEntry)
 /**
  * kOCEntrySpawnTee callback that works sort of like 'tee'.
  *
- * It will calculate the precompiled output checksum and
+ * It will calculate the preprocessed output checksum and
  * write it to disk while the compiler is busy compiling it.
  *
  * @param   pEntry  The cache entry.
- * @param   fdIn    The input handle (connected to the precompiler).
+ * @param   fdIn    The input handle (connected to the preprocessor).
  * @param   fdOut   The output handle (connected to the compiler).
  */
 static void kOCEntryTeeConsumer(PKOCENTRY pEntry, int fdIn, int fdOut)
@@ -2358,41 +3397,34 @@ static void kOCEntryTeeConsumer(PKOCENTRY pEntry, int fdIn, int fdOut)
     unsigned fConnectedToCompiler = fdOut == -1 || pEntry->pszNmPipeCompile == NULL;
 #endif
     KOCSUMCTX Ctx;
-    long cbLeft;
-    long cbAlloc;
-    char *psz;
+    KOCCPPRD  CppRd;
 
     kOCSumInitWithCtx(&pEntry->New.SumHead, &Ctx);
-    cbAlloc = pEntry->Old.cbCpp ? ((long)pEntry->Old.cbCpp + 4*1024*1024 + 4096) & ~(4*1024*1024 - 1) : 4*1024*1024;
-    cbLeft = cbAlloc;
-    pEntry->New.pszCppMapping = psz = xmalloc(cbAlloc);
-    InfoMsg(3, "precompiler|compile - starting passhtru...\n");
+    kOCCppRdInit(&CppRd, pEntry->Old.cbCpp, pEntry->fOptimizeCpp,
+                 pEntry->pszMakeDepFilename ? &pEntry->DepState : NULL);
+    InfoMsg(3, "preprocessor|compile - starting passhtru...\n");
     for (;;)
     {
         /*
          * Read data from the pipe.
          */
-        long cbRead = read(fdIn, psz, cbLeft - 1);
+        const char *psz;
+        long cbRead = kOCCppRdRead(&CppRd, fdIn, &psz);
         if (!cbRead)
             break;
-        if (cbRead < 0)
-        {
-            if (errno == EINTR)
-                continue;
-            FatalDie("precompile|compile - read(%d,,%ld) failed: %s\n",
-                     fdIn, (long)cbLeft, strerror(errno));
-        }
-        InfoMsg(3, "precompiler|compile - read %d\n", cbRead);
+        InfoMsg(3, "preprocessor|compile - read %d\n", cbRead);
 
         /*
          * Process the data.
          */
-        psz[cbRead] = '\0';
         kOCSumUpdate(&pEntry->New.SumHead, &Ctx, psz, cbRead);
+        if (pEntry->pszMakeDepFilename && !pEntry->fOptimizeCpp)
+            kOCDepConsumer(&pEntry->DepState, psz, cbRead);
+
 #ifdef __WIN__
         if (   !fConnectedToCompiler
             && !(fConnectedToCompiler = ConnectNamedPipe((HANDLE)_get_osfhandle(fdOut), NULL)))
-            FatalDie("precompile|compile - ConnectNamedPipe failed: %d\n", GetLastError());
+            FatalDie("preprocess|compile - ConnectNamedPipe failed: %d\n", GetLastError());
 #endif
         do
         {
@@ -2401,35 +3433,24 @@ static void kOCEntryTeeConsumer(PKOCENTRY pEntry, int fdIn, int fdOut)
             {
                 if (errno == EINTR)
                     continue;
-                FatalDie("precompile|compile - write(%d,,%ld) failed: %s\n", fdOut, cbRead, strerror(errno));
+                FatalDie("preprocess|compile - write(%d,,%ld) failed: %s\n", fdOut, cbRead, strerror(errno));
             }
             psz += cbWritten;
             cbRead -= cbWritten;
-            cbLeft -= cbWritten;
         } while (cbRead > 0);
 
-        /*
-         * Expand the buffer?
-         */
-        if (cbLeft <= 1)
-        {
-            size_t off = psz - pEntry->New.pszCppMapping;
-            cbLeft = 4*1024*1024;
-            cbAlloc += cbLeft;
-            pEntry->New.pszCppMapping = xrealloc(pEntry->New.pszCppMapping, cbAlloc);
-            psz = pEntry->New.pszCppMapping + off;
-        }
     }
-    InfoMsg(3, "precompiler|compile - done passhtru\n");
+    InfoMsg(3, "preprocessor|compile - done passhtru\n");
 
     close(fdIn);
     close(fdOut);
-    pEntry->New.cbCpp = cbAlloc - cbLeft;
+    kOCCppRdGrabOutput(&CppRd, &pEntry->New.pszCppMapping, &pEntry->New.cbCpp);
+    kOCCppRdDelete(&CppRd);
     kOCSumFinalize(&pEntry->New.SumHead, &Ctx);
     kOCSumInfo(&pEntry->New.SumHead, 4, "cpp (tee)");
 
     /*
-     * Write the precompiler output to disk and free the memory it
+     * Write the preprocessor output to disk and free the memory it
      * occupies while the compiler is busy compiling.
      */
     kOCEntryWriteCppOutput(pEntry, 1 /* free it */);
@@ -2440,10 +3461,11 @@ static void kOCEntryTeeConsumer(PKOCENTRY pEntry, int fdIn, int fdOut)
  * Performs pre-compile and compile in one go (typical clean build scenario).
  *
  * @param   pEntry              The cache entry.
- * @param   papszArgvPreComp    The argument vector for executing precompiler. The cArgvPreComp'th argument must be NULL.
+ * @param   papszArgvPreComp    The argument vector for executing preprocessor.
+ *                              The cArgvPreComp'th argument must be NULL.
  * @param   cArgvPreComp        The number of arguments.
  */
-static void kOCEntryPreCompileAndCompile(PKOCENTRY pEntry, const char * const *papszArgvPreComp, unsigned cArgvPreComp)
+static void kOCEntryPreProcessAndCompile(PKOCENTRY pEntry, const char * const *papszArgvPreComp, unsigned cArgvPreComp)
 {
     if (    pEntry->fPipedCompile
         &&  pEntry->fPipedPreComp)
@@ -2461,15 +3483,18 @@ static void kOCEntryPreCompileAndCompile(PKOCENTRY pEntry, const char * const *p
             UnlinkFileInDir(pEntry->New.pszCppName, pEntry->pszDir);
 
         /*
-         * Do the actual compile and write the precompiler output to disk.
+         * Do the actual compile and write the preprocessor output to disk.
          */
         kOCEntrySpawnTee(pEntry, papszArgvPreComp, cArgvPreComp,
                          (const char * const *)pEntry->New.papszArgvCompile, pEntry->New.cArgvCompile,
-                         "precompile|compile", kOCEntryTeeConsumer);
+                         "preprocess|compile", kOCEntryTeeConsumer);
+        if (pEntry->pszMakeDepFilename)
+            kOCDepWriteToFile(&pEntry->DepState, pEntry->pszMakeDepFilename,  pEntry->New.pszObjName, pEntry->pszDir,
+                              pEntry->fMakeDepFixCase, pEntry->fMakeDepQuiet, pEntry->fMakeDepGenStubs);
     }
     else
     {
-        kOCEntryPreCompile(pEntry, papszArgvPreComp, cArgvPreComp);
+        kOCEntryPreProcess(pEntry, papszArgvPreComp, cArgvPreComp);
         kOCEntryCompileIt(pEntry);
     }
 }
@@ -2562,7 +3587,7 @@ static const char *kOCEntryFindFileStatement(const char *pszStart, const char *p
 
 /**
  * Worker for kOCEntryCompareOldAndNewOutput() that compares the
- * precompiled output using a fast but not very good method.
+ * preprocessed output using a fast but not very good method.
  *
  * @returns 1 if matching, 0 if not matching.
  * @param   pEntry      The entry containing the names of the files to compare.
@@ -2612,7 +3637,7 @@ static int kOCEntryCompareFast(PCKOCENTRY pEntry)
              * Since we might be skipping a few new empty headers, it is
              * possible that we will omit this header from the dependencies
              * when using VCC. This might not be a problem, since it seems
-             * we'll have to use the precompiler output to generate the deps
+             * we'll have to use the preprocessor output to generate the deps
              * anyway.
              */
             const char *psz;
@@ -2778,7 +3803,7 @@ static int kOCEntryCompareFast(PCKOCENTRY pEntry)
 
 /**
  * Worker for kOCEntryCompileIfNeeded that compares the
- * precompiled output.
+ * preprocessed output.
  *
  * @returns 1 if matching, 0 if not matching.
  * @param   pEntry      The entry containing the names of the files to compare.
@@ -2809,15 +3834,23 @@ static void kOCEntryCalcRecompile(PKOCENTRY pEntry)
         return;
 
     /*
-     * Check if the precompiler output differ in any significant way?
+     * Check if the preprocessor output differ in any significant way?
      */
     if (!kOCSumHasEqualInChain(&pEntry->Old.SumHead, &pEntry->New.SumHead))
     {
-        InfoMsg(2, "no checksum match - comparing output\n");
-        if (!kOCEntryCompareOldAndNewOutput(pEntry))
+        if (pEntry->fOptimizeCpp & 2)
+        {
+            InfoMsg(2, "no checksum match - no need to compare output, -O2.\n");
             pEntry->fNeedCompiling = 1;
+        }
         else
-            kOCSumAddChain(&pEntry->New.SumHead, &pEntry->Old.SumHead);
+        {
+            InfoMsg(2, "no checksum match - comparing output\n");
+            if (!kOCEntryCompareOldAndNewOutput(pEntry))
+                pEntry->fNeedCompiling = 1;
+            else
+                kOCSumAddChain(&pEntry->New.SumHead, &pEntry->Old.SumHead);
+        }
     }
 }
 
@@ -2835,6 +3868,45 @@ static int kOCEntryNeedsCompiling(PCKOCENTRY pEntry)
 
 
 /**
+ * Tries to hardlink a file.
+ *
+ * @returns 1 if it succeeded, 0 if it didn't.
+ * @param   pszLink     The name of the hardlink.
+ * @param   pszLinkTo   The file to hardlinkg @a pszDst to.
+ */
+static int kOCEntryTryHardlink(const char *pszLink, const char *pszLinkTo)
+{
+#ifdef __WIN__
+    typedef BOOL (WINAPI *PFNCREATEHARDLINKA)(LPCSTR, LPCSTR, LPSECURITY_ATTRIBUTES);
+    static PFNCREATEHARDLINKA   s_pfnCreateHardLinkA = NULL;
+    static int                  s_fTried = FALSE;
+
+    /* The API was introduced in Windows 2000, so resolve it dynamically. */
+    if (!s_pfnCreateHardLinkA)
+    {
+        if (!s_fTried)
+        {
+            HMODULE hmod = LoadLibrary("KERNEL32.DLL");
+            if (hmod)
+                *(FARPROC *)&s_pfnCreateHardLinkA = GetProcAddress(hmod, "CreateHardLinkA");
+            s_fTried = TRUE;
+        }
+        if (!s_pfnCreateHardLinkA)
+            return 0;
+    }
+
+    if (!s_pfnCreateHardLinkA(pszLink, pszLinkTo, NULL))
+        return 0;
+#else
+    if (link(pszLinkTo, pszLink) != 0)
+        return 0;
+#endif
+    return 1;
+}
+
+
+
+/**
  * Worker function for kOCEntryCopy.
  *
  * @param   pEntry      The entry we're coping to, which pszTo is relative to.
@@ -2844,60 +3916,63 @@ static int kOCEntryNeedsCompiling(PCKOCENTRY pEntry)
 static void kOCEntryCopyFile(PCKOCENTRY pEntry, const char *pszTo, char *pszSrc)
 {
     char *pszDst = MakePathFromDirAndFile(pszTo, pEntry->pszDir);
-    char *pszBuf = xmalloc(256 * 1024);
-    char *psz;
-    int fdSrc;
-    int fdDst;
-
-    /*
-     * Open the files.
-     */
-    fdSrc = open(pszSrc, O_RDONLY | O_BINARY);
-    if (fdSrc == -1)
-        FatalDie("failed to open '%s': %s\n", pszSrc, strerror(errno));
-
     unlink(pszDst);
-    fdDst = open(pszDst, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0666);
-    if (fdDst == -1)
-        FatalDie("failed to create '%s': %s\n", pszDst, strerror(errno));
-
-    /*
-     * Copy them.
-     */
-    for (;;)
+    if (!kOCEntryTryHardlink(pszDst, pszSrc))
     {
-        /* read a chunk. */
-        long cbRead = read(fdSrc, pszBuf, 256*1024);
-        if (cbRead < 0)
-        {
-            if (errno == EINTR)
-                continue;
-            FatalDie("read '%s' failed: %s\n", pszSrc, strerror(errno));
-        }
-        if (!cbRead)
-            break; /* eof */
+        char *pszBuf = xmalloc(256 * 1024);
+        char *psz;
+        int fdSrc;
+        int fdDst;
 
-        /* write the chunk. */
-        psz = pszBuf;
-        do
+        /*
+         * Open the files.
+         */
+        fdSrc = open(pszSrc, O_RDONLY | O_BINARY);
+        if (fdSrc == -1)
+            FatalDie("failed to open '%s': %s\n", pszSrc, strerror(errno));
+
+        fdDst = open(pszDst, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0666);
+        if (fdDst == -1)
+            FatalDie("failed to create '%s': %s\n", pszDst, strerror(errno));
+
+        /*
+         * Copy them.
+         */
+        for (;;)
         {
-            long cbWritten = write(fdDst, psz, cbRead);
-            if (cbWritten < 0)
+            /* read a chunk. */
+            long cbRead = read(fdSrc, pszBuf, 256*1024);
+            if (cbRead < 0)
             {
                 if (errno == EINTR)
                     continue;
-                FatalDie("write '%s' failed: %s\n", pszSrc, strerror(errno));
+                FatalDie("read '%s' failed: %s\n", pszSrc, strerror(errno));
             }
-            psz += cbWritten;
-            cbRead -= cbWritten;
-        } while (cbRead > 0);
-    }
+            if (!cbRead)
+                break; /* eof */
 
-    /* cleanup */
-    if (close(fdDst) != 0)
-        FatalDie("closing '%s' failed: %s\n", pszDst, strerror(errno));
-    close(fdSrc);
-    free(pszBuf);
+            /* write the chunk. */
+            psz = pszBuf;
+            do
+            {
+                long cbWritten = write(fdDst, psz, cbRead);
+                if (cbWritten < 0)
+                {
+                    if (errno == EINTR)
+                        continue;
+                    FatalDie("write '%s' failed: %s\n", pszSrc, strerror(errno));
+                }
+                psz += cbWritten;
+                cbRead -= cbWritten;
+            } while (cbRead > 0);
+        }
+
+        /* cleanup */
+        if (close(fdDst) != 0)
+            FatalDie("closing '%s' failed: %s\n", pszDst, strerror(errno));
+        close(fdSrc);
+        free(pszBuf);
+    }
     free(pszDst);
     free(pszSrc);
 }
@@ -2956,7 +4031,7 @@ typedef struct KOCDIGEST
     uint32_t uKey;
     /** The checksum of the compile argument vector. */
     KOCSUM SumCompArgv;
-    /** The list of precompiler output checksums that's . */
+    /** The list of preprocessor output checksums that's . */
     KOCSUM SumHead;
 } KOCDIGEST;
 /** Pointer to a file digest. */
@@ -3831,7 +4906,7 @@ static int usage(FILE *pOut)
             "            <-f|--file <local-cache-file>>\n"
             "            <-t|--target <target-name>>\n"
             "            [-r|--redir-stdout] [-p|--passthru] [--named-pipe-compile <pipename>]\n"
-            "            --kObjCache-cpp <filename> <precompiler + args>\n"
+            "            --kObjCache-cpp <filename> <preprocessor + args>\n"
             "            --kObjCache-cc <object> <compiler + args>\n"
             "            [--kObjCache-both [args]]\n"
             );
@@ -3869,6 +4944,12 @@ int main(int argc, char **argv)
     const char *pszObjName = NULL;
     int fRedirCompileStdIn = 0;
     const char *pszNmPipeCompile = NULL;
+
+    const char *pszMakeDepFilename = NULL;
+    int fMakeDepFixCase = 0;
+    int fMakeDepGenStubs = 0;
+    int fMakeDepQuiet = 0;
+    int fOptimizePreprocessorOutput = 0;
 
     const char *pszTarget = NULL;
 
@@ -3910,7 +4991,7 @@ int main(int argc, char **argv)
             if (!pszObjName)
             {
                 if (++i >= argc)
-                    return SyntaxError("--kObjCache-cc requires an precompiler output filename!\n");
+                    return SyntaxError("--kObjCache-cc requires an preprocessor output filename!\n");
                 pszObjName = argv[i];
             }
         }
@@ -3974,6 +5055,22 @@ int main(int argc, char **argv)
             pszNmPipeCompile = argv[++i];
             fRedirCompileStdIn = 0;
         }
+        else if (!strcmp(argv[i], "-m") || !strcmp(argv[i], "--make-dep-file"))
+        {
+            if (i + 1 >= argc)
+                return SyntaxError("%s requires a filename!\n", argv[i]);
+            pszMakeDepFilename = argv[++i];
+        }
+        else if (!strcmp(argv[i], "--make-dep-fix-case"))
+            fMakeDepFixCase = 1;
+        else if (!strcmp(argv[i], "--make-dep-gen-stubs"))
+            fMakeDepGenStubs = 1;
+        else if (!strcmp(argv[i], "--make-dep-quiet"))
+            fMakeDepQuiet = 1;
+        else if (!strcmp(argv[i], "-O1") || !strcmp(argv[i], "--optimize-1"))
+            fOptimizePreprocessorOutput = 1;
+        else if (!strcmp(argv[i], "-O2") || !strcmp(argv[i], "--optimize-2"))
+            fOptimizePreprocessorOutput = 1 | 2;
         else if (!strcmp(argv[i], "-p") || !strcmp(argv[i], "--passthru"))
             fRedirPreCompStdOut = fRedirCompileStdIn = 1;
         else if (!strcmp(argv[i], "-r") || !strcmp(argv[i], "--redir-stdout"))
@@ -3990,8 +5087,8 @@ int main(int argc, char **argv)
         }
         else if (!strcmp(argv[i], "-V") || !strcmp(argv[i], "--version"))
         {
-            printf("kObjCache - kBuild version %d.%d.%d ($Revision: 2568 $)\n"
-                   "Copyright (c) 2007-2011 knut st. osmundsen\n",
+            printf("kObjCache - kBuild version %d.%d.%d ($Revision: 2627 $)\n"
+                   "Copyright (c) 2007-2012 knut st. osmundsen\n",
                    KBUILD_VERSION_MAJOR, KBUILD_VERSION_MINOR, KBUILD_VERSION_PATCH);
             return 0;
         }
@@ -4005,7 +5102,7 @@ int main(int argc, char **argv)
     if (!cArgvCompile)
         return SyntaxError("No compiler arguments (--kObjCache-cc)!\n");
     if (!cArgvPreComp)
-        return SyntaxError("No precompiler arguments (--kObjCache-cc)!\n");
+        return SyntaxError("No preprocessor arguments (--kObjCache-cc)!\n");
 
     /*
      * Calc the cache file name.
@@ -4025,7 +5122,7 @@ int main(int argc, char **argv)
             psz = strrchr(pszCacheName, '.');
             if (!psz || psz <= pszCacheName)
                 psz = (char *)pszCacheName + cch;
-            memcpy(psz, ".koc", sizeof(".koc") - 1);
+            memcpy(psz, ".koc", sizeof(".koc"));
         }
         pszCacheFile = MakePathFromDirAndFile(pszCacheName, pszCacheDir);
     }
@@ -4042,11 +5139,13 @@ int main(int argc, char **argv)
 
     pEntry = kOCEntryCreate(pszEntryFile);
     kOCEntryRead(pEntry);
+    kOCEntrySetCppName(pEntry, pszPreCompName);
     kOCEntrySetCompileObjName(pEntry, pszObjName);
     kOCEntrySetCompileArgv(pEntry, papszArgvCompile, cArgvCompile);
     kOCEntrySetTarget(pEntry, pszTarget);
-    kOCEntrySetCppName(pEntry, pszPreCompName);
     kOCEntrySetPipedMode(pEntry, fRedirPreCompStdOut, fRedirCompileStdIn, pszNmPipeCompile);
+    kOCEntrySetDepFilename(pEntry, pszMakeDepFilename, fMakeDepFixCase, fMakeDepQuiet, fMakeDepGenStubs);
+    kOCEntrySetOptimizations(pEntry, fOptimizePreprocessorOutput);
 
     /*
      * Open (& lock) the two files and do validity checks and such.
@@ -4061,16 +5160,16 @@ int main(int argc, char **argv)
          */
         kObjCacheUnlock(pCache);
         InfoMsg(1, "doing full compile\n");
-        kOCEntryPreCompileAndCompile(pEntry, papszArgvPreComp, cArgvPreComp);
+        kOCEntryPreProcessAndCompile(pEntry, papszArgvPreComp, cArgvPreComp);
         kObjCacheLock(pCache);
     }
     else
     {
         /*
-         * Do the precompile (don't need to lock the cache file for this).
+         * Do the preprocess (don't need to lock the cache file for this).
          */
         kObjCacheUnlock(pCache);
-        kOCEntryPreCompile(pEntry, papszArgvPreComp, cArgvPreComp);
+        kOCEntryPreProcess(pEntry, papszArgvPreComp, cArgvPreComp);
 
         /*
          * Check if we need to recompile. If we do, try see if the is a cache entry first.
@@ -4111,6 +5210,12 @@ int main(int argc, char **argv)
     kOCEntryWrite(pEntry);
     kObjCacheUnlock(pCache);
     kObjCacheDestroy(pCache);
+    if (fOptimizePreprocessorOutput)
+    {
+        InfoMsg(3, "g_cbMemMoved=%#x (%d)\n", g_cbMemMoved, g_cbMemMoved);
+        InfoMsg(3, "g_cMemMoves=%#x (%d)\n", g_cMemMoves, g_cMemMoves);
+    }
+
     return 0;
 }
 

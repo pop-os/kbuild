@@ -1,4 +1,4 @@
-# $Id: VCC100.kmk 2557 2011-12-13 12:48:32Z bird $
+# $Id: VCC100.kmk 2677 2013-02-01 15:04:53Z bird $
 ## @file
 # kBuild Tool Config - Visual C++ 10.0 (aka Visual 2010 and MSC v16), targeting $(KBUILD_TARGET).
 #
@@ -73,20 +73,32 @@ ifneq ($(PATH_TOOL_VCC100),)
  TOOL_VCC100_CC  ?= $(EXEC_X86_WIN32) $(PATH_TOOL_VCC100_BIN)/cl.exe
  TOOL_VCC100_CXX ?= $(EXEC_X86_WIN32) $(PATH_TOOL_VCC100_BIN)/cl.exe
  TOOL_VCC100_AS  ?= $(EXEC_X86_WIN32) $(PATH_TOOL_VCC100_BIN)/ml64.exe
- TOOL_VCC100_RC  ?= $(EXEC_X86_WIN32) $(PATH_TOOL_VCC100_BIN.x86)/rc.exe
  TOOL_VCC100_AR  ?= $(EXEC_X86_WIN32) $(PATH_TOOL_VCC100_BIN)/lib.exe
  TOOL_VCC100_LD  ?= $(EXEC_X86_WIN32) $(PATH_TOOL_VCC100_BIN)/link.exe
- TOOL_VCC100_MT  ?= $(EXEC_X86_WIN32) $(PATH_TOOL_VCC100_BIN.x86)/mt.exe
+ TOOL_VCC100_DUMPBIN ?= $(EXEC_X86_WIN32) $(PATH_TOOL_VCC100_BIN)/dumpbin.exe
+ TOOL_VCC100_EDITBIN ?= $(EXEC_X86_WIN32) $(PATH_TOOL_VCC100_BIN)/editbin.exe
 else
  # Pathless, relies on the environment.
  TOOL_VCC100_CC  ?= $(EXEC_X86_WIN32) cl.exe
  TOOL_VCC100_CXX ?= $(EXEC_X86_WIN32) cl.exe
  TOOL_VCC100_AS  ?= $(EXEC_X86_WIN32) ml64.exe
- TOOL_VCC100_RC  ?= $(EXEC_X86_WIN32) rc.exe
  TOOL_VCC100_AR  ?= $(EXEC_X86_WIN32) lib.exe
  TOOL_VCC100_LD  ?= $(EXEC_X86_WIN32) link.exe
- TOOL_VCC100_MT  ?= $(EXEC_X86_WIN32) mt.exe
+ TOOL_VCC100_DUMPBIN ?= $(EXEC_X86_WIN32) dumpbin.exe
+ TOOL_VCC100_EDITBIN ?= $(EXEC_X86_WIN32) editbin.exe
 endif
+TOOL_VCC100_RC   ?= $(EXEC_X86_WIN32) $(call TOOL_VCC100_FN_FIND_SDK_TOOL,rc.exe,[Rr][Cc].[Ee][Xx][Ee],TOOL_VCC100_RC_CACHED)
+TOOL_VCC100_MT   ?= $(EXEC_X86_WIN32) $(call TOOL_VCC100_FN_FIND_SDK_TOOL,mt.exe,[Mm][Tt].[Ee][Xx][Ee],TOOL_VCC100_MT_CACHED)
+
+# The following in duplicated in VCC100.kmk and VCC100X86.kmk.
+TOOL_VCC100_FN_FIND_SDK_TOOL_SUB = $(eval $3 := $(firstword  \
+       $(if-expr defined(PATH_SDK_WINPSDK71_BIN), $(wildcard $(PATH_SDK_WINPSDK71_BIN)/$2)) \
+       $(if-expr defined(PATH_SDK_WINPSDK_BIN)  , $(wildcard $(PATH_SDK_WINPSDK_BIN)/$2)) \
+	$(rsort $(wildcard $(KBUILD_DEVTOOLS_HST)/sdk/*/[Bb][Ii][Nn]/$2)) \
+	$(rsort $(wildcard $(KBUILD_DEVTOOLS_HST_ALT)/sdk/*/[Bb][Ii][Nn]/$2)) \
+	$1))
+TOOL_VCC100_FN_FIND_SDK_TOOL = $(if-expr !defined($3),$(TOOL_VCC100_FN_FIND_SDK_TOOL_SUB),)$($3)
+
 ## Disabled fast DEP_IDB based dependencies.
 #VCC100_OLD_DEPS = 1
 
@@ -96,16 +108,18 @@ endif
 TOOL_VCC100_PDB = $(dir $(1))$(tolower $(notdir $(1))).$(2)
 
 TOOL_VCC100_COBJSUFF         ?= .obj
-TOOL_VCC100_CFLAGS           ?= -TC -c -nologo
-TOOL_VCC100_CFLAGS.debug     ?= -Od -Zi
+TOOL_VCC100_CFLAGS           ?= -TC -nologo
+TOOL_VCC100_CFLAGS.debug     ?= -Zi
+TOOL_VCC100_CFLAGS.dbgopt    ?= -O2 -Zi
 TOOL_VCC100_CFLAGS.release   ?= -O2
 TOOL_VCC100_CFLAGS.profile   ?= -O2
 TOOL_VCC100_CINCS            ?= $(PATH_TOOL_VCC100_INC)
 TOOL_VCC100_CDEFS            ?=
 
 TOOL_VCC100_CXXOBJSUFF       ?= .obj
-TOOL_VCC100_CXXFLAGS         ?= -TP -c -nologo
-TOOL_VCC100_CXXFLAGS.debug   ?= -Od -Zi
+TOOL_VCC100_CXXFLAGS         ?= -TP -nologo
+TOOL_VCC100_CXXFLAGS.debug   ?= -Zi
+TOOL_VCC100_CXXFLAGS.dbgopt  ?= -O2 -Zi
 TOOL_VCC100_CXXFLAGS.release ?= -O2
 TOOL_VCC100_CXXFLAGS.profile ?= -O2
 TOOL_VCC100_CXXINCS          ?= $(PATH_TOOL_VCC100_INC) $(PATH_TOOL_VCC100_ATLMFC_INC)
@@ -125,6 +139,8 @@ TOOL_VCC100_LDFLAGS.amd64    ?= -machine:amd64
 TOOL_VCC100_LDFLAGS.x86      ?= -machine:x86
 TOOL_VCC100_LDFLAGS          ?= -nologo
 TOOL_VCC100_LDFLAGS.debug    ?= -debug
+TOOL_VCC100_LDFLAGS.dbgopt   ?= -debug
+TOOL_VCC100_LDFLAGS.profile  ?= -debug
 TOOL_VCC100_LDFLAGS.release  ?=
 TOOL_VCC100_LIBPATH.amd64    ?= $(PATH_TOOL_VCC100_LIB.amd64) $(PATH_TOOL_VCC100_ATLMFC_LIB.amd64)
 TOOL_VCC100_LIBPATH.x86      ?= $(PATH_TOOL_VCC100_LIB.x86) $(PATH_TOOL_VCC100_ATLMFC_LIB.x86)
@@ -146,6 +162,25 @@ TOOL_VCC100_LIBPATH.x86      ?= $(PATH_TOOL_VCC100_LIB.x86) $(PATH_TOOL_VCC100_A
 # @param    $(objsuff)  Object suffix.
 TOOL_VCC100_COMPILE_C_DEPEND =
 TOOL_VCC100_COMPILE_C_DEPORD =
+ifdef KBUILD_USE_KOBJCACHE
+TOOL_VCC100_COMPILE_C_USES_KOBJCACHE = 1
+TOOL_VCC100_COMPILE_C_OUTPUT = $(outbase).i
+TOOL_VCC100_COMPILE_C_OUTPUT_MAYBE =
+define TOOL_VCC100_COMPILE_C_CMDS
+	$(QUIET)$(KOBJCACHE) -f $(outbase).koc -d $(PATH_OBJCACHE) -t $(bld_trg).$(bld_trg_arch) -O2 -r\
+		--make-dep-fix-case --make-dep-gen-stubs --make-dep-quiet --make-dep-file $(dep)\
+		--kObjCache-cpp $(outbase).i\
+		$(TOOL_VCC100_CC) -E\
+		$(subst -Zi,-Z7,$(flags))\
+		$(addprefix -I, $(incs)) $(addprefix -D, $(defs))\
+		$(subst /,\\,$(abspath $(source))) \
+		--kObjCache-cc $(obj)\
+		$(TOOL_VCC100_CC) -c\
+		$(subst -Zi,-Z7,$(flags))\
+		-Fo$(obj)\
+		$(outbase).i
+endef
+else  # !KBUILD_USE_KOBJCACHE
 TOOL_VCC100_COMPILE_C_OUTPUT = $(call TOOL_VCC100_PDB, $(outbase)-obj,idb)
 TOOL_VCC100_COMPILE_C_OUTPUT_MAYBE = $(call TOOL_VCC100_PDB, $(outbase)-obj,pdb)
 define TOOL_VCC100_COMPILE_C_CMDS
@@ -157,6 +192,7 @@ define TOOL_VCC100_COMPILE_C_CMDS
 		$(subst /,\\,$(abspath $(source)))
 	$(QUIET)$(DEP_IDB) -f -s -q -o $(dep) -t $(obj) $(call TOOL_VCC100_PDB,$(outbase)-obj,idb)
 endef
+endif # !KBUILD_USE_KOBJCACHE
 
 
 ## Compile C++ source.
@@ -174,6 +210,25 @@ endef
 # @param    $(objsuff)  Object suffix.
 TOOL_VCC100_COMPILE_CXX_DEPEND =
 TOOL_VCC100_COMPILE_CXX_DEPORD =
+ifdef KBUILD_USE_KOBJCACHE
+TOOL_VCC100_COMPILE_CXX_USES_KOBJCACHE = 1
+TOOL_VCC100_COMPILE_CXX_OUTPUT = $(outbase).ii
+TOOL_VCC100_COMPILE_CXX_OUTPUT_MAYBE =
+define TOOL_VCC100_COMPILE_CXX_CMDS
+	$(QUIET)$(KOBJCACHE) -f $(outbase).koc -d $(PATH_OBJCACHE) -t $(bld_trg).$(bld_trg_arch) -O2 -r\
+		--make-dep-fix-case --make-dep-gen-stubs --make-dep-quiet --make-dep-file $(dep)\
+		--kObjCache-cpp $(outbase).ii\
+		$(TOOL_VCC100_CXX) -E\
+		$(subst -Zi,-Z7,$(flags))\
+		$(addprefix -I, $(incs)) $(addprefix -D, $(defs))\
+		$(subst /,\\,$(abspath $(source))) \
+		--kObjCache-cc $(obj)\
+		$(TOOL_VCC100_CXX) -c\
+		$(subst -Zi,-Z7,$(flags))\
+		-Fo$(obj)\
+		$(outbase).ii
+endef
+else  # !KBUILD_USE_KOBJCACHE
 TOOL_VCC100_COMPILE_CXX_OUTPUT = $(call TOOL_VCC100_PDB, $(outbase)-obj,idb)
 TOOL_VCC100_COMPILE_CXX_OUTPUT_MAYBE = $(call TOOL_VCC100_PDB, $(outbase)-obj,pdb)
 define TOOL_VCC100_COMPILE_CXX_CMDS
@@ -185,7 +240,9 @@ define TOOL_VCC100_COMPILE_CXX_CMDS
 		$(subst /,\\,$(abspath $(source)))
 	$(QUIET)$(DEP_IDB) -f -s -q -o $(dep) -t $(obj) $(call TOOL_VCC100_PDB,$(outbase)-obj,idb)
 endef
+endif # !KBUILD_USE_KOBJCACHE
 
+## @todo configure the assembler template.
 
 ## Compile resource source.
 # @param    $(target)   Normalized main target name.
@@ -255,7 +312,7 @@ endef
 TOOL_VCC100_LINK_PROGRAM_DEPEND = $(foreach lib,$(libs),$(if $(findstring $(lib),$(subst /,x,$(lib))),, $(lib))) $(othersrc)
 TOOL_VCC100_LINK_PROGRAM_DEPORD =
 TOOL_VCC100_LINK_PROGRAM_OUTPUT = $(outbase).map $(outbase).rsp
-TOOL_VCC100_LINK_PROGRAM_OUTPUT_MAYBE = $(outbase).map $(outbase).lib $(outbase).exp $(outbase).ilk $(out).manifest
+TOOL_VCC100_LINK_PROGRAM_OUTPUT_MAYBE = $(outbase).lib $(outbase).exp $(outbase).ilk $(out).manifest
 TOOL_VCC100_LINK_PROGRAM_OUTPUT_DEBUG = $(outbase).pdb
 TOOL_VCC100_LINK_PROGRAM_DEBUG_INSTALL_FN = $(2).pdb=>$(basename $(3)).pdb
 define TOOL_VCC100_LINK_PROGRAM_CMDS

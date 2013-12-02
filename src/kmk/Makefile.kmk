@@ -1,4 +1,4 @@
-# $Id: Makefile.kmk 2548 2011-11-08 21:28:16Z bird $
+# $Id: Makefile.kmk 2667 2012-11-25 19:52:26Z bird $
 ## @file
 # Sub-makefile for kmk / GNU Make.
 #
@@ -130,7 +130,8 @@ kmkmissing_SOURCES.win += \
 	w32/subproc/sub_proc.c \
 	w32/subproc/w32err.c \
 	w32/compat/dirent.c \
-	w32/pathstuff.c
+	w32/pathstuff.c \
+	w32/imagecache.c
 
 #
 # kmk
@@ -377,6 +378,8 @@ kmk_redirect_TEMPLATE = BIN-KMK
 kmk_redirect_DEFS = kmk_builtin_redirect=main
 kmk_redirect_SOURCES = \
 	kmkbuiltin/redirect.c
+kmk_redirect_SOURCES.win = \
+	../lib/startuphacks-win.c
 
 kmk_rmdir_TEMPLATE = BIN-KMK
 kmk_rmdir_DEFS = kmk_builtin_rmdir=main

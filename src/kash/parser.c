@@ -766,7 +766,7 @@ out:
 	if (!alreadyseen)
 	    TRACE((psh, "token %s %s\n", tokname[t], t == TWORD ? psh->wordtext : ""));
 	else
-	    TRACE((psh, "reread token %s %s\n", tokname[t], t == TWORD ? psh->wordtext : ""));
+	    TRACE((psh, "reread token %s \"%s\"\n", tokname[t], t == TWORD ? psh->wordtext : ""));
 #endif
 	return (t);
 }
@@ -1614,8 +1614,12 @@ synexpect(shinstance *psh, int token)
 SH_NORETURN_1 STATIC void
 synerror(shinstance *psh, const char *msg)
 {
-	if (psh->commandname)
+	if (psh->commandname) {
+		TRACE((psh, "synerror: %s: %d: Syntax error: %s", psh->commandname, psh->startlinno, msg));
 		outfmt(&psh->errout, "%s: %d: ", psh->commandname, psh->startlinno);
+	} else {
+		TRACE((psh, "synerror: Syntax error: %s\n", msg));
+	}
 	outfmt(&psh->errout, "Syntax error: %s\n", msg);
 	error(psh, (char *)NULL);
 	/* NOTREACHED */
