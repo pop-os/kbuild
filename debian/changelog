@@ -3,8 +3,9 @@ kbuild (1:0.1.9998svn2695+dfsg-1) unstable; urgency=low
   [ Ritesh Raj Sarraf ]
   * [8c3dfc1] Exclude src/kmk/doc/make.texi from dfsg archive
   * [00cc15e] Imported Upstream version 0.1.9998svn2695+dfsg
+  * [34ffb72] Add myself to Uploaders
 
- -- Ritesh Raj Sarraf <rrs@debian.org>  Mon, 02 Dec 2013 14:28:37 -0500
+ -- Ritesh Raj Sarraf <rrs@debian.org>  Tue, 03 Dec 2013 12:06:57 +0530
 
 kbuild (1:0.1.9998svn2577+dfsg-3) unstable; urgency=low
 
