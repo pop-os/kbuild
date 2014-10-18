@@ -6,3 +6,4 @@
 06_binutils-gold.diff
 07_special-chars-build-path.diff
 08_no_o3_optimization.diff
+09_read.c_record_files_SV_33034_Changes_fatal_to_error.patch
