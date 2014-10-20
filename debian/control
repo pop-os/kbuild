@@ -3,7 +3,8 @@ Section: devel
 Priority: extra
 Maintainer: Debian Virtualbox Team <pkg-virtualbox-devel@lists.alioth.debian.org>
 Uploaders: Michael Meskes <meskes@debian.org>,
-           Ritesh Raj Sarraf <rrs@debian.org>
+           Ritesh Raj Sarraf <rrs@debian.org>,
+           Gianfranco Costamagna <costamagnagianfranco@yahoo.it>
 Build-Depends: debhelper (>= 9),
                autoconf,
                automake,
@@ -12,7 +13,7 @@ Build-Depends: debhelper (>= 9),
                flex,
                libacl1-dev,
                texinfo
-Standards-Version: 3.9.5
+Standards-Version: 3.9.6
 Homepage: http://svn.netlabs.org/kbuild
 Vcs-Browser: http://anonscm.debian.org/gitweb/?p=pkg-virtualbox/kbuild.git
 Vcs-Git: git://anonscm.debian.org/pkg-virtualbox/kbuild.git
