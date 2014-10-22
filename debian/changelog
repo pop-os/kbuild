@@ -2,6 +2,8 @@ kbuild (1:0.1.9998svn2695+dfsg-3) UNRELEASED; urgency=medium
 
   * Add myself to uploaders.
   * Bump Standards-Version to 3.9.6, no changes needed.
+  [ Fernando Seiti Furusato ]
+  * Added ppc64el to build to fix ftbfs (Closes: #760605).
 
  -- Gianfranco Costamagna <costamagnagianfranco@yahoo.it>  Mon, 20 Oct 2014 09:53:59 +0200
 
