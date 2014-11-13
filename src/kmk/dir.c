@@ -119,6 +119,7 @@ dosify (const char *filename)
 #endif /* __MSDOS__ */
 
 #ifdef WINDOWS32
+#include <Windows.h>
 #include "pathstuff.h"
 #endif
 
@@ -241,6 +242,9 @@ struct directory_contents
 # define FS_FAT      0x1
 # define FS_NTFS     0x2
 # define FS_UNKNOWN  0x4
+# ifdef KMK
+    time_t last_updated; /**< The last time the directory was re-read. */
+# endif
 #else
 # ifdef VMS
     ino_t ino[3];
@@ -607,6 +611,9 @@ find_directory (const char *name)
 
 	      dc->ctime = st.st_ctime;
               dc->mtime = st.st_mtime;
+# ifdef KMK
+              dc->last_updated = time(NULL);
+# endif
 
               /*
                * NTFS is the only WINDOWS32 filesystem that bumps mtime
@@ -686,8 +693,13 @@ dir_contents_file_exists_p (struct directory_contents *dir,
   struct dirfile *df;
   struct dirent *d;
 #ifdef WINDOWS32
+# ifndef KMK
   struct stat st;
+# endif
   int rehash = 0;
+#endif
+#ifdef KMK
+  int ret = 0;
 #endif
 
   if (dir == 0 || dir->dirfiles.ht_vec == 0)
@@ -740,25 +752,35 @@ dir_contents_file_exists_p (struct directory_contents *dir,
 
   if (dir->dirstream == 0)
     {
-#ifdef WINDOWS32
+#if defined(WINDOWS32) && !defined(KMK)
       /*
        * Check to see if directory has changed since last read. FAT
        * filesystems force a rehash always as mtime does not change
        * on directories (ugh!).
        */
+# ifdef KMK
+      if (dir->path_key && time(NULL) > dc->last_updated + 2) /* KMK: Only recheck every 2 seconds. */
+# else
       if (dir->path_key)
+# endif
 	{
           if ((dir->fs_flags & FS_FAT) != 0)
 	    {
 	      dir->mtime = time ((time_t *) 0);
 	      rehash = 1;
 	    }
+# ifdef KMK
+	  else if (   birdStatModTimeOnly (dir->path_key, &st.st_mtim, 1) == 0
+                   && st.st_mtime > dir->mtime)
+# else
 	  else if (stat (dir->path_key, &st) == 0 && st.st_mtime > dir->mtime)
+# endif
 	    {
 	      /* reset date stamp to show most recent re-process.  */
 	      dir->mtime = st.st_mtime;
 	      rehash = 1;
 	    }
+
 
           /* If it has been already read in, all done.  */
 	  if (!rehash)
@@ -768,6 +790,9 @@ dir_contents_file_exists_p (struct directory_contents *dir,
           dir->dirstream = opendir (dir->path_key);
           if (!dir->dirstream)
             return 0;
+# ifdef KMK
+          dc->last_updated = time(NULL);
+# endif
 	}
       else
 #endif
@@ -867,7 +892,11 @@ dir_contents_file_exists_p (struct directory_contents *dir,
 #else
       if (filename != 0 && dirfile_key.name == filename)
 #endif
+#ifdef KMK
+        ret = 1; /* Cache the whole dir. Prevents trouble on windows and os2 during 'rebuild'. */
+#else
         return 1;
+#endif
     }
 
   /* If the directory has been completely read in,
@@ -878,7 +907,11 @@ dir_contents_file_exists_p (struct directory_contents *dir,
       closedir (dir->dirstream);
       dir->dirstream = 0;
     }
+#ifdef KMK
+  return ret;
+#else
   return 0;
+#endif
 }
 
 /* Return 1 if the name FILENAME in directory DIRNAME
@@ -1389,6 +1422,19 @@ local_stat (const char *path, struct stat *buf)
 }
 #endif
 
+#ifdef KMK
+static int dir_exists_p (const char *dirname)
+{
+  if (file_exists_p (dirname))
+    {
+      struct directory *dir = find_directory (dirname);
+      if (dir != NULL && dir->contents && dir->contents->dirfiles.ht_vec != NULL)
+        return 1;
+    }
+  return 0;
+}
+#endif
+
 void
 dir_setup_glob (glob_t *gl)
 {
@@ -1398,6 +1444,10 @@ dir_setup_glob (glob_t *gl)
   gl->gl_stat = local_stat;
 #ifdef __EMX__ /* The FreeBSD implementation actually uses gl_lstat!! */
   gl->gl_lstat = local_stat;
+#endif
+#if defined(KMK) && !defined(__OS2__)
+  gl->gl_exists = file_exists_p;
+  gl->gl_isdir = dir_exists_p;
 #endif
   /* We don't bother setting gl_lstat, since glob never calls it.
      The slot is only there for compatibility with 4.4 BSD.  */
@@ -1425,3 +1475,4 @@ hash_init_directories (void)
                    "dirfile", NULL, NULL);
 #endif /* CONFIG_WITH_ALLOC_CACHES */
 }
+

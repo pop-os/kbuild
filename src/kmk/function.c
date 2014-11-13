@@ -2854,37 +2854,50 @@ func_substr (char *o, char **argv, const char *funcname UNUSED)
             }
         }
       length = math_int_from_string (argv[2]);
-      if (length < 0 || (pad != NULL && length > 16*1024*1024 /* 16MB */))
-        fatal (NILF, _("$(substr ): length=%s is out of bounds\n"), argv[3]);
+      if (pad != NULL && length > 16*1024*1024 /* 16MB */)
+        fatal (NILF, _("$(substr ): length=%s is out of bounds\n"), argv[2]);
+      if (pad != NULL && length < 0)
+        fatal (NILF, _("$(substr ): negative length (%s) and padding doesn't mix.\n"), argv[2]);
       if (length == 0)
         return o;
     }
 
-  /* adjust start and length. */
+  /* Note that negative start is and length are used for referencing from the
+     end of the string. */
   if (pad == NULL)
     {
       if (start > 0)
-        {
-          start--;      /* one-origin */
-          if (start >= str_len)
-            return o;
-          if (length == 0 || start + length > str_len)
-            length = str_len - start;
-        }
+        start--;      /* one-origin */
       else
         {
           start = str_len + start;
           if (start <= 0)
             {
+              if (length < 0)
+                return o;
               start += length;
               if (start <= 0)
                 return o;
               length = start;
               start = 0;
             }
-          else if (length == 0 || start + length > str_len)
-            length = str_len - start;
         }
+
+      if (start >= str_len)
+        return o;
+      if (length == 0)
+        length = str_len - start;
+      else if (length < 0)
+        {
+          if (str_len <= -length)
+            return o;
+          length += str_len;
+          if (length <= start)
+            return o;
+          length -= start;
+        }
+      else if (start + length > str_len)
+        length = str_len - start;
 
       o = variable_buffer_output (o, str + start, length);
     }
@@ -4407,18 +4420,18 @@ func_which (char *o, char **argv, const char *funcname UNUSED)
                 {
                   const char *src = comp;
                   const char *end = strchr (comp, PATH_SEPARATOR_CHAR);
-                  size_t comp_len = end ? (size_t)(end - comp) : strlen (comp);
-                  if (!comp_len)
+                  size_t src_len = end ? (size_t)(end - comp) : strlen (comp);
+                  if (!src_len)
                     {
-                      comp_len = 1;
+                      src_len = 1;
                       src = ".";
                     }
-                  if (len + comp_len + 2 + 4 < GET_PATH_MAX) /* +4 for .exe */
+                  if (len + src_len + 2 + 4 < GET_PATH_MAX) /* +4 for .exe */
                     {
-                      memcpy (buf, comp, comp_len);
-                      buf [comp_len] = '/';
-                      memcpy (&buf[comp_len + 1], cur, len);
-                      buf[comp_len + 1 + len] = '\0';
+                      memcpy (buf, src, src_len);
+                      buf [src_len] = '/';
+                      memcpy (&buf[src_len + 1], cur, len);
+                      buf[src_len + 1 + len] = '\0';
 
                       if (func_which_test_x (buf))
                         {

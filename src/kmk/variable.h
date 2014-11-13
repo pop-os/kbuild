@@ -89,6 +89,10 @@ struct variable
 #ifdef CONFIG_WITH_RDONLY_VARIABLE_VALUE
     unsigned int rdonly_val:1;  /* VALUE is read only (strcache/const). */
 #endif
+#ifdef KMK
+    unsigned int alias:1;       /* Nonzero if alias. VALUE points to the real variable. */
+    unsigned int aliased:1;     /* Nonzero if aliased. Cannot be undefined. */
+#endif
     enum variable_flavor
       flavor ENUM_BITFIELD (3);	/* Variable flavor.  */
     enum variable_origin
@@ -142,6 +146,8 @@ extern struct variable_set_list *current_variable_set_list;
 extern struct variable *default_goal_var;
 
 #ifdef KMK
+extern struct variable_set global_variable_set;
+extern struct variable_set_list global_setlist;
 extern unsigned int variable_buffer_length;
 # define VARIABLE_BUFFER_ZONE   5
 #endif
@@ -350,6 +356,10 @@ struct variable *lookup_variable_in_set (const char *name, unsigned int length,
 #ifdef CONFIG_WITH_VALUE_LENGTH
 void append_string_to_variable (struct variable *v, const char *value,
                                 unsigned int value_len, int append);
+struct variable * do_variable_definition_append (const struct floc *flocp, struct variable *v,
+                                                 const char *value, unsigned int value_len,
+                                                 int simple_value, enum variable_origin origin,
+                                                 int append);
 
 struct variable *define_variable_in_set (const char *name, unsigned int length,
                                          const char *value,
@@ -442,6 +452,13 @@ void undefine_variable_in_set (const char *name, unsigned int length,
 
 #define undefine_variable_global(n,l,o) \
           undefine_variable_in_set((n),(l),(o),NULL)
+
+#ifdef KMK
+struct variable *
+define_variable_alias_in_set (const char *name, unsigned int length,
+                              struct variable *target, enum variable_origin origin,
+                              struct variable_set *set, const struct floc *flocp);
+#endif
 
 /* Warn that NAME is an undefined variable.  */
 

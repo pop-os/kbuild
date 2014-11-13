@@ -1,10 +1,10 @@
-/* $Id: redirect.c 2684 2013-06-19 11:01:48Z bird $ */
+/* $Id: redirect.c 2728 2014-03-05 13:09:47Z bird $ */
 /** @file
  * kmk_redirect - Do simple program <-> file redirection (++).
  */
 
 /*
- * Copyright (c) 2007-2012 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
+ * Copyright (c) 2007-2014 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
  *
  * This file is part of kBuild.
  *
@@ -72,11 +72,17 @@ static void quoteArguments(int argc, char **argv)
         const char *pszQuotes = (const char *)memchr(pszOrg, '"', cchOrg);
         if (   pszQuotes
             || cchOrg == 0
+            || memchr(pszOrg, ' ', cchOrg)
+            || memchr(pszOrg, '\t', cchOrg)
+            || memchr(pszOrg, '\n', cchOrg)
+            || memchr(pszOrg, '\r', cchOrg)
             || memchr(pszOrg, '&', cchOrg)
             || memchr(pszOrg, '>', cchOrg)
             || memchr(pszOrg, '<', cchOrg)
             || memchr(pszOrg, '|', cchOrg)
             || memchr(pszOrg, '%', cchOrg)
+            || memchr(pszOrg, '\'', cchOrg)
+            || memchr(pszOrg, '=', cchOrg)
             )
         {
             char   ch;
@@ -133,7 +139,7 @@ static void quoteArguments(int argc, char **argv)
         }
     }
 
-    /*for (i = 0; i < argc; i++) printf("argv[%u]=%s;;\n", i, argv[i]); */
+    /*for (i = 0; i < argc; i++) fprintf(stderr, "argv[%u]=%s;;\n", i, argv[i]);*/
 }
 #endif /* _MSC_VER */
 
@@ -310,10 +316,40 @@ int main(int argc, char **argv, char **envp)
                 }
                 else
 #endif /* __OS2__ */
-                if (putenv(psz))
                 {
-                    fprintf(pStdErr, "%s: error: putenv(\"%s\"): %s\n", name(argv[0]), psz, strerror(errno));
-                    return 1;
+                    const char *pchEqual = strchr(psz, '=');
+                    if (pchEqual && pchEqual[1] != '\0')
+                    {
+                        if (putenv(psz))
+                        {
+                            fprintf(pStdErr, "%s: error: putenv(\"%s\"): %s\n", name(argv[0]), psz, strerror(errno));
+                            return 1;
+                        }
+                    }
+                    else
+                    {
+                        size_t cchVar = pchEqual ? (size_t)(pchEqual - psz) : strlen(psz);
+                        char *pszCopy = (char *)malloc(cchVar + 2);
+                        memcpy(pszCopy, psz, cchVar);
+
+#if defined(_MSC_VER) || defined(__OS2__)
+                        pszCopy[cchVar] = '=';
+                        pszCopy[cchVar + 1] = '\0';
+                        if (putenv(pszCopy))
+                        {
+                            fprintf(pStdErr, "%s: error: putenv(\"%s\"): %s\n", name(argv[0]), pszCopy, strerror(errno));
+                            return 1;
+                        }
+#else
+                        pszCopy[cchVar] = '\0';
+                        if (unsetenv(pszCopy))
+                        {
+                            fprintf(pStdErr, "%s: error: unsetenv(\"%s\"): %s\n", name(argv[0]), pszCopy, strerror(errno));
+                            return 1;
+                        }
+#endif
+                        free(pszCopy);
+                    }
                 }
                 continue;
             }

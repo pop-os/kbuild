@@ -1,10 +1,10 @@
-# $Id: header.kmk 2689 2013-07-11 21:31:43Z bird $
+# $Id: header.kmk 2729 2014-03-16 00:21:49Z bird $
 ## @file
 # kBuild - File included at top of a makefile.
 #
 
 #
-# Copyright (c) 2004-2010 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
+# Copyright (c) 2004-2014 knut st. osmundsen <bird-kBuild-spam-xiv@anduin.net>
 #
 # This file is part of kBuild.
 #
@@ -79,7 +79,7 @@ endif
 # The revision in which this file was last modified.
 # This can be useful when using development versions of kBuild.
 #
-KMK_REVISION := $(patsubst %:,,  $Rev: 2689 $  )
+KMK_REVISION := $(patsubst %:,,  $Rev: 2729 $  )
 
 
 #
@@ -471,42 +471,54 @@ PATH_SYS = $(error kBuild: PATH_SYS is obsoleted in kBuild 0.1.2. Use PATH_STAGE
 PATH_DOC = $(error kBuild: PATH_DOC is obsoleted in kBuild 0.1.2. Use PATH_STAGE_DOC or PATH_INST_DOC instead)
 
 # Development tool tree.
-KBUILD_DEVTOOLS      = $(if $(PATH_DEVTOOLS),$(PATH_DEVTOOLS),$(PATH_ROOT)/tools)
-KBUILD_DEVTOOLS_TRG  = $(KBUILD_DEVTOOLS)/$(KBUILD_TARGET).$(KBUILD_TARGET_ARCH)
-KBUILD_DEVTOOLS_HST  = $(KBUILD_DEVTOOLS)/$(KBUILD_HOST).$(KBUILD_HOST_ARCH)
+ifndef KBUILD_DEVTOOLS
+ ifeq ($(PATH_DEVTOOLS),)
+  KBUILD_DEVTOOLS    = $(PATH_ROOT)/tools
+ else  
+  KBUILD_DEVTOOLS   := $(PATH_DEVTOOLS)
+ endif 
+endif 
+KBUILD_DEVTOOLS_TRG ?= $(KBUILD_DEVTOOLS)/$(KBUILD_TARGET).$(KBUILD_TARGET_ARCH)
+KBUILD_DEVTOOLS_HST ?= $(KBUILD_DEVTOOLS)/$(KBUILD_HOST).$(KBUILD_HOST_ARCH)
 
 if1of ($(KBUILD_TARGET_ARCH), amd64 hppa64 mips64 ppc64 s390x sparc64)
  ifeq ($(KBUILD_TARGET_ARCH),amd64)
-  KBUILD_DEVTOOLS_TRG_ALT = $(PATH_DEVTOOLS)/$(KBUILD_TARGET).x86
+  KBUILD_DEVTOOLS_TRG_ALT ?= $(KBUILD_DEVTOOLS)/$(KBUILD_TARGET).x86
  else ifeq ($(KBUILD_TARGET_ARCH),hppa64)
-  KBUILD_DEVTOOLS_TRG_ALT = $(PATH_DEVTOOLS)/$(KBUILD_TARGET).hppa32
+  KBUILD_DEVTOOLS_TRG_ALT ?= $(KBUILD_DEVTOOLS)/$(KBUILD_TARGET).hppa32
  else ifeq ($(KBUILD_TARGET_ARCH),mips64)
-  KBUILD_DEVTOOLS_TRG_ALT = $(PATH_DEVTOOLS)/$(KBUILD_TARGET).mips32
+  KBUILD_DEVTOOLS_TRG_ALT ?= $(KBUILD_DEVTOOLS)/$(KBUILD_TARGET).mips32
  else ifeq ($(KBUILD_TARGET_ARCH),ppc64)
-  KBUILD_DEVTOOLS_TRG_ALT = $(PATH_DEVTOOLS)/$(KBUILD_TARGET).ppc32
+  KBUILD_DEVTOOLS_TRG_ALT ?= $(KBUILD_DEVTOOLS)/$(KBUILD_TARGET).ppc32
  else ifeq ($(KBUILD_TARGET_ARCH),s390x)
-  KBUILD_DEVTOOLS_TRG_ALT = $(PATH_DEVTOOLS)/$(KBUILD_TARGET).s390
+  KBUILD_DEVTOOLS_TRG_ALT ?= $(KBUILD_DEVTOOLS)/$(KBUILD_TARGET).s390
  else ifeq ($(KBUILD_TARGET_ARCH),sparc64)
-  KBUILD_DEVTOOLS_TRG_ALT = $(PATH_DEVTOOLS)/$(KBUILD_TARGET).sparc32
+  KBUILD_DEVTOOLS_TRG_ALT ?= $(KBUILD_DEVTOOLS)/$(KBUILD_TARGET).sparc32
  endif
 endif
 
 if1of ($(KBUILD_HOST_ARCH), amd64 hppa64 mips64 ppc64 s390x sparc64)
  ifeq ($(KBUILD_HOST_ARCH),amd64)
-  KBUILD_DEVTOOLS_HST_ALT = $(PATH_DEVTOOLS)/$(KBUILD_HOST).x86
+  KBUILD_DEVTOOLS_HST_ALT ?= $(KBUILD_DEVTOOLS)/$(KBUILD_HOST).x86
  else ifeq ($(KBUILD_HOST_ARCH),hppa64)
-  KBUILD_DEVTOOLS_HST_ALT = $(PATH_DEVTOOLS)/$(KBUILD_HOST).hppa32
+  KBUILD_DEVTOOLS_HST_ALT ?= $(KBUILD_DEVTOOLS)/$(KBUILD_HOST).hppa32
  else ifeq ($(KBUILD_HOST_ARCH),mips64)
-  KBUILD_DEVTOOLS_HST_ALT = $(PATH_DEVTOOLS)/$(KBUILD_HOST).mips32
+  KBUILD_DEVTOOLS_HST_ALT ?= $(KBUILD_DEVTOOLS)/$(KBUILD_HOST).mips32
  else ifeq ($(KBUILD_HOST_ARCH),ppc64)
-  KBUILD_DEVTOOLS_HST_ALT = $(PATH_DEVTOOLS)/$(KBUILD_HOST).ppc32
+  KBUILD_DEVTOOLS_HST_ALT ?= $(KBUILD_DEVTOOLS)/$(KBUILD_HOST).ppc32
  else ifeq ($(KBUILD_HOST_ARCH),s390x)
-  KBUILD_DEVTOOLS_HST_ALT = $(PATH_DEVTOOLS)/$(KBUILD_HOST).s390
+  KBUILD_DEVTOOLS_HST_ALT ?= $(KBUILD_DEVTOOLS)/$(KBUILD_HOST).s390
  else ifeq ($(KBUILD_HOST_ARCH),sparc64)
-  KBUILD_DEVTOOLS_HST_ALT = $(PATH_DEVTOOLS)/$(KBUILD_HOST).sparc32
+  KBUILD_DEVTOOLS_HST_ALT ?= $(KBUILD_DEVTOOLS)/$(KBUILD_HOST).sparc32
  endif
 endif
 
+# Deprecated legacy names.
+PATH_DEVTOOLS         ?= $(KBUILD_DEVTOOLS)
+PATH_DEVTOOLS_TRG     ?= $(KBUILD_DEVTOOLS_TRG)
+PATH_DEVTOOLS_TRG_ALT ?= $(KBUILD_DEVTOOLS_TRG_ALT)
+PATH_DEVTOOLS_HST     ?= $(KBUILD_DEVTOOLS_HST)
+PATH_DEVTOOLS_HST_ALT ?= $(KBUILD_DEVTOOLS_HST_ALT)
 
 # KBUILD_PATH / PATH_KBUILD is determined by kmk.
 ifndef KBUILD_PATH
@@ -1399,6 +1411,14 @@ PATH_$(y)_$(x) := $(val)
 endef
 $(foreach y, INST STAGE, $(foreach x, $(KBUILD_INST_PATHS), $(evalcall def_kbuild_finalize_inst)))
 
+# No abspath for devtools since they might've been referenced already and we
+# don't want conflicting variable expansions.
+KBUILD_DEVTOOLS         := $(KBUILD_DEVTOOLS)
+KBUILD_DEVTOOLS_TRG     := $(KBUILD_DEVTOOLS_TRG)
+KBUILD_DEVTOOLS_TRG_ALT := $(KBUILD_DEVTOOLS_TRG_ALT)
+KBUILD_DEVTOOLS_HST     := $(KBUILD_DEVTOOLS_HST)
+KBUILD_DEVTOOLS_HST_ALT := $(KBUILD_DEVTOOLS_HST_ALT)
+
 
 #
 # Setup the message style. The default one is inlined.
@@ -1570,5 +1590,4 @@ endif
 # end-of-file-content
 __header_kmk__ := 1
 endif # !__header_kmk__
-
 
