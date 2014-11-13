@@ -1,4 +1,4 @@
-/* $Id: mscfakes.c 2645 2012-09-09 02:29:23Z bird $ */
+/* $Id: mscfakes.c 2733 2014-10-16 18:29:41Z bird $ */
 /** @file
  * Fake Unix stuff for MSC.
  */
@@ -108,8 +108,8 @@ msc_fix_path(const char **ppszPath, int *pfMustBeDir)
 }
 
 
-static int
-msc_set_errno(DWORD dwErr)
+int
+birdSetErrno(unsigned dwErr)
 {
     switch (dwErr)
     {
@@ -183,7 +183,7 @@ int lchmod(const char *pszPath, mode_t mode)
      */
     DWORD fAttr = GetFileAttributes(pszPath);
     if (fAttr == INVALID_FILE_ATTRIBUTES)
-        rc = msc_set_errno(GetLastError());
+        rc = birdSetErrno(GetLastError());
     else if (fMustBeDir & !(fAttr & FILE_ATTRIBUTE_DIRECTORY))
     {
         errno = ENOTDIR;
@@ -199,7 +199,7 @@ int lchmod(const char *pszPath, mode_t mode)
         else
             fAttr |= FILE_ATTRIBUTE_READONLY;
         if (!SetFileAttributes(pszPath, fAttr))
-            rc = msc_set_errno(GetLastError());
+            rc = birdSetErrno(GetLastError());
     }
 
     if (pszPathFree)
@@ -223,7 +223,7 @@ int msc_chmod(const char *pszPath, mode_t mode)
      */
     DWORD fAttr = GetFileAttributes(pszPath);
     if (fAttr == INVALID_FILE_ATTRIBUTES)
-        rc = msc_set_errno(GetLastError());
+        rc = birdSetErrno(GetLastError());
     else if (fMustBeDir & !(fAttr & FILE_ATTRIBUTE_DIRECTORY))
     {
         errno = ENOTDIR;
@@ -244,7 +244,7 @@ int msc_chmod(const char *pszPath, mode_t mode)
         else
             fAttr |= FILE_ATTRIBUTE_READONLY;
         if (!SetFileAttributes(pszPath, fAttr))
-            rc = msc_set_errno(GetLastError());
+            rc = birdSetErrno(GetLastError());
     }
 
     if (pszPathFree)
@@ -282,7 +282,7 @@ int link(const char *pszDst, const char *pszLink)
 
     if (s_pfnCreateHardLinkA(pszLink, pszDst, NULL))
         return 0;
-    return msc_set_errno(GetLastError());
+    return birdSetErrno(GetLastError());
 }
 
 
@@ -534,43 +534,59 @@ int vasprintf(char **strp, const char *fmt, va_list va)
 }
 
 
-/*
- * Workaround for directory names with trailing slashes.
+/**
+ * This is a kludge to make pipe handles blocking.
+ *
+ * @returns TRUE if it's now blocking, FALSE if not a pipe or we failed to fix
+ *          the blocking mode.
+ * @param   fd                  The libc file descriptor number.
  */
-#undef stat
-int
-bird_w32_stat(const char *path, struct stat *st)
+static BOOL makePipeBlocking(int fd)
 {
-    int rc = stat(path, st);
-    if (    rc != 0
-        &&  errno == ENOENT
-        &&  *path != '\0')
+    /* Is pipe? */
+    HANDLE hFile = (HANDLE)_get_osfhandle(fd);
+    if (hFile != INVALID_HANDLE_VALUE)
     {
-        char *slash = strchr(path, '\0') - 1;
-        if (*slash == '/' || *slash == '\\')
+        DWORD fType = GetFileType(hFile);
+        fType &= ~FILE_TYPE_REMOTE;
+        if (fType == FILE_TYPE_PIPE)
         {
-            size_t len_path = slash - path + 1;
-            char *tmp = alloca(len_path + 4);
-            memcpy(tmp, path, len_path);
-            tmp[len_path] = '.';
-            tmp[len_path + 1] = '\0';
-            errno = 0;
-            rc = stat(tmp, st);
-            if (    rc == 0
-                &&  !S_ISDIR(st->st_mode))
+            /* Try fix it. */
+            DWORD fState = 0;
+            if (GetNamedPipeHandleState(hFile, &fState, NULL, NULL, NULL, NULL,  0))
             {
-                errno = ENOTDIR;
-                rc = -1;
+                fState &= ~PIPE_NOWAIT;
+                fState |= PIPE_WAIT;
+                if (SetNamedPipeHandleState(hFile, &fState, NULL, NULL))
+                    return TRUE;
             }
         }
     }
-#ifdef KMK_PRF
-    {
-        int err = errno;
-        fprintf(stderr, "stat(%s,) -> %d/%d\n", path, rc, errno);
-        errno = err;
-    }
-#endif
-    return rc;
+    return FALSE;
 }
+
+
+/**
+ * Initializes the msc fake stuff.
+ * @returns 0 on success (non-zero would indicate failure, see rterr.h).
+ */
+int mscfake_init(void)
+{
+    /*
+     * Kludge against _write returning ENOSPC on non-blocking pipes.
+     */
+    makePipeBlocking(STDOUT_FILENO);
+    makePipeBlocking(STDERR_FILENO);
+
+    return 0;
+}
+
+/*
+ * Do this before main is called.
+ */
+#pragma section(".CRT$XIA", read)
+#pragma section(".CRT$XIU", read)
+#pragma section(".CRT$XIZ", read)
+typedef int (__cdecl *PFNCRTINIT)(void);
+static __declspec(allocate(".CRT$XIU")) PFNCRTINIT g_MscFakeInitVectorEntry = mscfake_init;
 

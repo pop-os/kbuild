@@ -1579,6 +1579,9 @@ main (int argc, char **argv, char **envp)
   initialize_global_alloc_caches ();
 #endif
   initialize_global_hash_tables ();
+#ifdef KMK
+  init_kbuild_object ();
+#endif
 
   /* Figure out where we are.  */
 
@@ -3743,7 +3746,7 @@ print_version (void)
 #ifdef KMK
   printf ("\n\
 %skBuild modifications:\n\
-%s Copyright (c) 2005-2009 knut st. osmundsen.\n\
+%s Copyright (c) 2005-2013 knut st. osmundsen.\n\
 \n\
 %skmkbuiltin commands derived from *BSD sources:\n\
 %s Copyright (c) 1983 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994\n\

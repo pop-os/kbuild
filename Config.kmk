@@ -1,4 +1,4 @@
-# $Id: Config.kmk 2668 2012-11-25 19:53:45Z bird $
+# $Id: Config.kmk 2722 2014-02-19 15:28:22Z bird $
 ## @file
 # Build Configuration.
 #
@@ -59,7 +59,7 @@ $(PATH_OBJ)/SvnInfo.ts +| $(KBUILD_SVN_INFO_KMK): $(wildcard $(PATH_ROOT)/.svn $
 	@$(MKDIR) -p $(@D)
 	@$(REDIRECT) -o $@.tmp -E 'LC_ALL=C' -- svn info $(DEPTH)
 	@$(SED) \
-		-e 's/URL: */KBUILD_SVN_URL := /' \
+		-e 's/^URL: */KBUILD_SVN_URL := /' \
 		-e 's/Revision: */KBUILD_SVN_REV := /' \
 		-e '/KBUILD_SVN_/!d' \
 		--append $@ \
@@ -88,6 +88,14 @@ OTHER_CLEAN += $(KBUILD_SVN_INFO_KMK)
 
 endif
 include $(KBUILD_SVN_INFO_KMK)
+
+
+#
+# Local config, optional.
+#
+ifneq ($(wildcard $(PATH_ROOT)/LocalConfig.kmk),)
+ include $(PATH_ROOT)/LocalConfig.kmk
+endif
 
 
 #
@@ -229,7 +237,12 @@ ifeq ($(KBUILD_TARGET),darwin)
   TOOL_GCC4MACHO_SUFFIX	        = -4.2
   TOOL_GXX4MACHO_SUFFIX		= -4.2
  endif
- KBUILD_MACOSX_SDK             ?= /Developer/SDKs/MacOSX10.$(KBUILD_MACOSX_TARGET_VERSION)$(if-expr $(KBUILD_MACOSX_TARGET_VERSION)==4,u,).sdk
+ ifndef KBUILD_MACOSX_SDK
+  KBUILD_MACOSX_SDK            := /Developer/SDKs/MacOSX10.$(KBUILD_MACOSX_TARGET_VERSION)$(if-expr $(KBUILD_MACOSX_TARGET_VERSION)==4,u,).sdk
+  ifeq ($(wildcard $(KBUILD_MACOSX_SDK)),)
+   KBUILD_MACOSX_SDK           := /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform$(KBUILD_MACOSX_SDK)
+  endif
+ endif
  TEMPLATE_BIN_TOOL              = GCC4MACHO
  TEMPLATE_BIN_CFLAGS            = -g -mmacosx-version-min=10.$(KBUILD_MACOSX_TARGET_VERSION) -isysroot $(KBUILD_MACOSX_SDK)
  ifeq ($(USER),bird)
