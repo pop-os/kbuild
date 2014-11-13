@@ -4,7 +4,7 @@ Bug-Ubuntu: https://bugs.launchpad.net/bugs/535093
 
 --- a/kBuild/env.sh
 +++ b/kBuild/env.sh
-@@ -362,7 +362,7 @@ if test -z "$KBUILD_HOST_ARCH"; then
+@@ -366,7 +366,7 @@ if test -z "$KBUILD_HOST_ARCH"; then
          hppa64|parisc64)
              KBUILD_HOST_ARCH='hppa64'
              ;;

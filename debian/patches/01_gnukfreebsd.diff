@@ -6,7 +6,7 @@ Bug-Debian: http://bugs.debian.org/540665
 
 --- a/src/kmk/dir.c
 +++ b/src/kmk/dir.c
-@@ -42,7 +42,7 @@ char *vmsify (char *name, int type);
+@@ -43,7 +43,7 @@ char *vmsify (char *name, int type);
  # endif /* HAVE_VMSDIR_H */
  #endif
  /* bird: FreeBSD + smbfs -> readdir() + EBADF */
@@ -15,7 +15,7 @@ Bug-Debian: http://bugs.debian.org/540665
  # include <sys/mount.h>
  #endif
  /* bird: end */
-@@ -783,7 +783,7 @@ dir_contents_file_exists_p (struct direc
+@@ -814,7 +814,7 @@ dir_contents_file_exists_p (struct direc
           To exactly determin the cause here, I should probably do some smbfs
           tracing, but for now just ignoring the EBADF on seems to work.
           (The smb server is 64-bit vista, btw.) */
@@ -26,7 +26,7 @@ Bug-Debian: http://bugs.debian.org/540665
            errno = 0;
 --- a/src/kmk/incdep.c
 +++ b/src/kmk/incdep.c
-@@ -606,7 +606,7 @@ incdep_are_threads_enabled (void)
+@@ -602,7 +602,7 @@ incdep_are_threads_enabled (void)
    if (getenv ("KMK_THREADS_ENABLED"))
      return 1;
  
@@ -70,7 +70,7 @@ Bug-Debian: http://bugs.debian.org/540665
  # ifdef __OS2__
 --- a/src/kmk/make.h
 +++ b/src/kmk/make.h
-@@ -218,7 +218,7 @@ extern unsigned long make_stats_ht_colli
+@@ -215,7 +215,7 @@ extern unsigned long make_stats_ht_colli
  #  include <malloc/malloc.h>
  #  define SIZE_OF_HEAP_BLOCK(ptr)   malloc_good_size(ptr)
  
@@ -81,7 +81,7 @@ Bug-Debian: http://bugs.debian.org/540665
  
 --- a/src/lib/k/kDefs.h
 +++ b/src/lib/k/kDefs.h
-@@ -56,8 +56,10 @@
+@@ -58,8 +58,10 @@
  #define K_OS_SOLARIS    10
  /** Windows. */
  #define K_OS_WINDOWS    11
@@ -93,7 +93,7 @@ Bug-Debian: http://bugs.debian.org/540665
  /** @} */
  
  /** @def K_OS
-@@ -78,6 +80,8 @@
+@@ -80,6 +82,8 @@
  #  define K_OS      K_OS_DRAGONFLY
  # elif defined(__FreeBSD__) /*??*/
  #  define K_OS      K_OS_FREEBSD
@@ -104,7 +104,7 @@ Bug-Debian: http://bugs.debian.org/540665
  # elif defined(__gnu_linux__)
 --- a/Config.kmk
 +++ b/Config.kmk
-@@ -111,6 +111,7 @@ endif
+@@ -119,6 +119,7 @@ endif
  #
  DEFS.darwin  += KBUILD_OS_DARWIN
  DEFS.freebsd += KBUILD_OS_FREEBSD
@@ -112,7 +112,7 @@ Bug-Debian: http://bugs.debian.org/540665
  DEFS.linux   += KBUILD_OS_LINUX
  DEFS.netbsd  += KBUILD_OS_NETBSD
  DEFS.openbsd += KBUILD_OS_OPENBSD
-@@ -287,7 +288,7 @@ endif
+@@ -304,7 +305,7 @@ endif
  
  ifndef TEMPLATE_BIN_TOOL
   # Use GCC3 when we're certain that the system is using GNU ld and ar.
@@ -145,7 +145,7 @@ Bug-Debian: http://bugs.debian.org/540665
  KBUILD_ARCHES    := x86 amd64 sparc32 sparc64 s390 s390x ppc32 ppc64 mips32 mips64 ia64 hppa32 hppa64 arm alpha
  KBUILD_ARCHES_64 := amd64 sparc64 s390x ppc64 mips64 ia64 hppa64 alpha
  KBUILD_ARCHES_32 := x86 sparc32 s390 ppc32 mips32 hppa32 arm
-@@ -551,7 +551,7 @@ else ifeq ($(KBUILD_HOST),os2)
+@@ -565,7 +565,7 @@ else ifeq ($(KBUILD_HOST),os2)
  EXEC_X86_WIN32      := innopec.exe
  HOSTSUFF_EXE        := .exe
  
@@ -154,7 +154,7 @@ Bug-Debian: http://bugs.debian.org/540665
  # Unix (like) systems with wine.
  EXEC_X86_WIN32      := wine
  HOSTSUFF_EXE        :=
-@@ -595,7 +595,7 @@ SUFF_OBJ    := .o
+@@ -609,7 +609,7 @@ SUFF_OBJ    := .o
  SUFF_LIB    := .a
  SUFF_DLL    := .so
  SUFF_EXE    :=
@@ -203,31 +203,9 @@ Bug-Debian: http://bugs.debian.org/540665
  TOOL_GXX64_LD_SONAME ?= -Wl,-soname=$(firstword $($(1)_SONAME.$(KBUILD_TARGET).$(KBUILD_TYPE)) $($(1)_SONAME.$(KBUILD_TARGET)) $($(1)_SONAME.$(KBUILD_TYPE)) $($(1)_SONAME) $(notdir $(2)))
  ifeq ($(KBUILD_TARGET),os2)
  TOOL_GXX64_LD_MAP ?= -Zmap=$(1)
---- a/src/ash/Makefile.kmk
-+++ b/src/ash/Makefile.kmk
-@@ -45,6 +45,8 @@ kmk_ash_DEFS.darwin = \
- 	HAVE_SYS_SIGNAME HAVE_SYSCTL_H HAVE_SETPROGNAME
- kmk_ash_DEFS.dragonfly = \
- 	HAVE_SYS_SIGNAME HAVE_SYSCTL_H HAVE_SETPROGNAME
-+kmk_ash_DEFS.gnukfreebsd = \
-+	HAVE_SYSCTL_H
- kmk_ash_DEFS.freebsd = \
- 	HAVE_SYS_SIGNAME HAVE_SYSCTL_H HAVE_SETPROGNAME
- kmk_ash_DEFS.openbsd = \
-@@ -81,6 +83,10 @@ kmk_ash_SOURCES = \
- 	$(kmk_ash_0_OUTDIR)/builtins.c \
- 	$(kmk_ash_0_OUTDIR)/init.c \
- 	$(kmk_ash_0_OUTDIR)/nodes.c
-+kmk_ash_SOURCES.gnukfreebsd = \
-+	sys_signame.c \
-+	strlcpy.c \
-+	setmode.c
- kmk_ash_SOURCES.linux = \
- 	sys_signame.c \
- 	strlcpy.c \
 --- a/src/kash/Makefile.kmk
 +++ b/src/kash/Makefile.kmk
-@@ -48,6 +48,8 @@ kash_DEFS.darwin = \
+@@ -50,6 +50,8 @@ kash_DEFS.darwin = \
  	HAVE_SYS_SIGNAME HAVE_SYSCTL_H HAVE_SETPROGNAME
  kash_DEFS.dragonfly = \
  	HAVE_SYS_SIGNAME HAVE_SYSCTL_H HAVE_SETPROGNAME
@@ -236,7 +214,7 @@ Bug-Debian: http://bugs.debian.org/540665
  kash_DEFS.freebsd = \
  	HAVE_SYS_SIGNAME HAVE_SYSCTL_H HAVE_SETPROGNAME
  kash_DEFS.openbsd = \
-@@ -96,6 +98,9 @@ kash_SOURCES = \
+@@ -102,6 +104,9 @@ kash_SOURCES = \
  kash_SOURCES.haiku = \
  	sys_signame.c \
  	strlcpy.c
@@ -248,7 +226,7 @@ Bug-Debian: http://bugs.debian.org/540665
  	strlcpy.c
 --- a/src/kmk/kmkbuiltin/install.c
 +++ b/src/kmk/kmkbuiltin/install.c
-@@ -202,7 +202,8 @@ kmk_builtin_install(int argc, char *argv
+@@ -209,7 +209,8 @@ kmk_builtin_install(int argc, char *argv
  			dodir = 1;
  			break;
  		case 'f':
@@ -260,7 +238,7 @@ Bug-Debian: http://bugs.debian.org/540665
  				return errx(EX_USAGE, "%s: invalid flag", flags);
 --- a/src/kmk/kmkbuiltin/rm.c
 +++ b/src/kmk/kmkbuiltin/rm.c
-@@ -630,7 +630,8 @@ check(char *path, char *name, struct sta
+@@ -657,7 +657,8 @@ check(char *path, char *name, struct sta
                      )
  			return (1);
  		bsd_strmode(sp->st_mode, modep);
@@ -272,7 +250,7 @@ Bug-Debian: http://bugs.debian.org/540665
  		(void)fprintf(stderr, "override %s%s%s/%s %s%sfor %s? ",
 --- a/src/kmk/Makefile.kmk
 +++ b/src/kmk/Makefile.kmk
-@@ -101,6 +101,9 @@ kmkmissing_SOURCES.freebsd = \
+@@ -107,6 +107,9 @@ kmkmissing_SOURCES.freebsd = \
  	glob/glob.c \
  	glob/fnmatch.c
  
@@ -282,7 +260,7 @@ Bug-Debian: http://bugs.debian.org/540665
  kmkmissing_SOURCES.linux += \
  	kmkbuiltin/strlcpy.c
  
-@@ -224,6 +227,7 @@ kmk_SOURCES = \
+@@ -231,6 +234,7 @@ kmk_SOURCES = \
  	vpath.c \
  	remote-stub.c
  
@@ -302,14 +280,3 @@ Bug-Debian: http://bugs.debian.org/540665
    {
      struct timespec timespec;
      if (clock_gettime (CLOCK_REALTIME, &timespec) == 0)
---- a/src/ash/jobs.c
-+++ b/src/ash/jobs.c
-@@ -58,7 +58,7 @@ __RCSID("$NetBSD: jobs.c,v 1.63 2005/06/
- #endif
- #include <sys/types.h>
- #include <sys/param.h>
--#if defined(BSD) || defined(__sun__)
-+#if defined(BSD) || defined(__sun__) || defined(__FreeBSD_kernel__)
- #include <sys/wait.h>
- #include <sys/time.h>
- #include <sys/resource.h>

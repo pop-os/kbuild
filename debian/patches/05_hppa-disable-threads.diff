@@ -3,7 +3,7 @@ Author: Felix Geyer <debfx-pkg@fobos.de>
 
 --- a/src/kmk/Makefile.kmk
 +++ b/src/kmk/Makefile.kmk
-@@ -227,6 +227,9 @@ kmk_SOURCES = \
+@@ -234,6 +234,9 @@ kmk_SOURCES = \
  	vpath.c \
  	remote-stub.c
  

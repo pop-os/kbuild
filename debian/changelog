@@ -1,5 +1,7 @@
-kbuild (1:0.1.9998svn2695+dfsg-3) UNRELEASED; urgency=medium
+kbuild (1:0.1.9998svn2734+dfsg-1) UNRELEASED; urgency=medium
 
+  * New upstream snapshot, patch refresh.
+    - drop 03_dprintf-posix2008.diff code removed upstream.
   * Add myself to uploaders.
   * Bump Standards-Version to 3.9.6, no changes needed.
   [ Fernando Seiti Furusato ]
