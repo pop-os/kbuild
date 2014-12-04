@@ -1,4 +1,4 @@
-kbuild (1:0.1.9998svn2734+dfsg-1) UNRELEASED; urgency=medium
+kbuild (1:0.1.9998svn2734+dfsg-1) experimental; urgency=medium
 
   * New upstream snapshot, patch refresh.
     - drop 03_dprintf-posix2008.diff code removed upstream.
