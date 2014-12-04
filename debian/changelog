@@ -1,9 +1,11 @@
 kbuild (1:0.1.9998svn2734+dfsg-1) experimental; urgency=medium
 
+  [ Gianfranco Costamagna ]
   * New upstream snapshot, patch refresh.
     - drop 03_dprintf-posix2008.diff code removed upstream.
   * Add myself to uploaders.
   * Bump Standards-Version to 3.9.6, no changes needed.
+
   [ Fernando Seiti Furusato ]
   * Added ppc64el to build to fix ftbfs (Closes: #760605).
 
