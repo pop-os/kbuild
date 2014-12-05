@@ -1,8 +1,9 @@
-Index: kbuild-0.1.9998svn2695+dfsg/kBuild/env.sh
+Add patch to fix issues on ppc64el
+Index: kbuild/kBuild/env.sh
 ===================================================================
---- kbuild-0.1.9998svn2695+dfsg.orig/kBuild/env.sh
-+++ kbuild-0.1.9998svn2695+dfsg/kBuild/env.sh
-@@ -351,6 +351,9 @@ if test -z "$KBUILD_HOST_ARCH"; then
+--- kbuild.orig/kBuild/env.sh	2014-12-05 15:57:43.546393368 +0530
++++ kbuild/kBuild/env.sh	2014-12-05 15:57:43.546393368 +0530
+@@ -351,6 +351,9 @@
          ppc64|powerpc64)
              KBUILD_HOST_ARCH='ppc64'
              ;;
@@ -12,11 +13,11 @@ Index: kbuild-0.1.9998svn2695+dfsg/kBuild/env.sh
          mips32|mips)
              KBUILD_HOST_ARCH='mips32'
              ;;
-Index: kbuild-0.1.9998svn2695+dfsg/kBuild/header.kmk
+Index: kbuild/kBuild/header.kmk
 ===================================================================
---- kbuild-0.1.9998svn2695+dfsg.orig/kBuild/header.kmk
-+++ kbuild-0.1.9998svn2695+dfsg/kBuild/header.kmk
-@@ -189,8 +189,8 @@ KBUILD_BLD_TYPES := release profile debu
+--- kbuild.orig/kBuild/header.kmk	2014-12-05 15:57:43.546393368 +0530
++++ kbuild/kBuild/header.kmk	2014-12-05 15:57:43.546393368 +0530
+@@ -189,8 +189,8 @@
  # build types. (PORTME)
  #
  KBUILD_OSES      := darwin dos dragonfly freebsd gnukfreebsd haiku l4 linux netbsd nt openbsd os2 solaris win os-agnostic
