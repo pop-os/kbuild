@@ -2,6 +2,7 @@ kbuild (1:0.1.9998svn2734+dfsg-2) experimental; urgency=medium
 
   [ Logan Rosen ]
   * debian/patches/12_arm64.diff: Add arm64 support to fix FTBFS.
+    (Closes: #759457)
 
  -- Gianfranco Costamagna <costamagnagianfranco@yahoo.it>  Wed, 07 Jan 2015 14:09:08 +0100
 
