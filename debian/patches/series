@@ -8,3 +8,4 @@
 09_read.c_record_files_SV_33034_Changes_fatal_to_error.patch
 10_ppc64el.diff
 11_find-glob.patch
+12_arm64.diff
