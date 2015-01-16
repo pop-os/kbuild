@@ -40,4 +40,4 @@ get-orig-info:
 	svn info $(SVNROOT) | grep "Last Changed Rev:" | cut -d' ' -f4
 
 get-orig-source:
-	sh debian/orig-tar.sh $(SVNROOT) $(UPSTREAM_VERSION) $(REVISION)
+	sh debian/orig-tar.sh $(SVNROOT) $(UPSTREAM_VERSION)
