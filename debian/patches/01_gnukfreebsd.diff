@@ -26,7 +26,7 @@ Bug-Debian: http://bugs.debian.org/540665
            errno = 0;
 --- a/src/kmk/incdep.c
 +++ b/src/kmk/incdep.c
-@@ -602,7 +602,7 @@ incdep_are_threads_enabled (void)
+@@ -638,7 +638,7 @@ incdep_are_threads_enabled (void)
    if (getenv ("KMK_THREADS_ENABLED"))
      return 1;
  
@@ -72,7 +72,7 @@ Bug-Debian: http://bugs.debian.org/540665
 +++ b/src/kmk/make.h
 @@ -215,7 +215,7 @@ extern unsigned long make_stats_ht_colli
  #  include <malloc/malloc.h>
- #  define SIZE_OF_HEAP_BLOCK(ptr)   malloc_good_size(ptr)
+ #  define SIZE_OF_HEAP_BLOCK(ptr)   malloc_size(ptr)
  
 -# elif defined(__linux__) /* glibc */
 +# elif defined(__linux__) || defined(__GLIBC__) /* glibc */
@@ -112,7 +112,7 @@ Bug-Debian: http://bugs.debian.org/540665
  DEFS.linux   += KBUILD_OS_LINUX
  DEFS.netbsd  += KBUILD_OS_NETBSD
  DEFS.openbsd += KBUILD_OS_OPENBSD
-@@ -304,7 +305,7 @@ endif
+@@ -312,7 +313,7 @@ endif
  
  ifndef TEMPLATE_BIN_TOOL
   # Use GCC3 when we're certain that the system is using GNU ld and ar.
@@ -270,7 +270,7 @@ Bug-Debian: http://bugs.debian.org/540665
  #kmk_LIBS.solaris = malloc
 --- a/src/kmk/file.c
 +++ b/src/kmk/file.c
-@@ -1042,7 +1042,8 @@ file_timestamp_now (int *resolution)
+@@ -1053,7 +1053,8 @@ file_timestamp_now (int *resolution)
       only one-second resolution.  The code below should work, but it's
       not worth the hassle of debugging it on hosts where it fails.  */
  #if FILE_TIMESTAMP_HI_RES

@@ -4,7 +4,7 @@ Bug-Debian: http://bugs.debian.org/697892
 
 --- a/Config.kmk
 +++ b/Config.kmk
-@@ -317,8 +317,8 @@ ifndef TEMPLATE_BIN_TOOL
+@@ -325,8 +325,8 @@ ifndef TEMPLATE_BIN_TOOL
   endif
   TEMPLATE_BIN_LDFLAGS           = -g
   TEMPLATE_BIN_LDFLAGS.profile   = -pg -p
