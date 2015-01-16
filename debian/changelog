@@ -1,4 +1,4 @@
-kbuild (1:0.1.9998svn2745+dfsg-1) UNRELEASED; urgency=medium
+kbuild (1:0.1.9998svn2745+dfsg-1) experimental; urgency=medium
 
   * New upstream snapshot, patch refresh.
   * Fix get-orig-source script, to avoid the epoch bump.
@@ -8,7 +8,7 @@ kbuild (1:0.1.9998svn2745+dfsg-1) UNRELEASED; urgency=medium
   * debian/patches/12_arm64.diff: Add arm64 support to fix FTBFS.
     (Closes: #759457)
 
- -- Gianfranco Costamagna <costamagnagianfranco@yahoo.it>  Thu, 15 Jan 2015 18:16:18 +0100
+ -- Gianfranco Costamagna <costamagnagianfranco@yahoo.it>  Fri, 16 Jan 2015 10:31:12 +0100
 
 kbuild (1:0.1.9998svn2734+dfsg-1) experimental; urgency=medium
 
