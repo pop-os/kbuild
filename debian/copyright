@@ -6,9 +6,9 @@ Files: *
 Copyright: 2005-2009 Knut St. Osmundsen <bird-kBuild-spam@anduin.net>
 License: GPL-3+
 
-Files: src/ash/*, src/kash/*
+Files: src/kash/*
 Copyright: 1991-1993 The Regents of the University of California
-License: BSD
+License: BSD-3-clause
 
 Files: src/kmk/*
 Copyright: 1988-2009 Free Software Foundation, Inc.
@@ -63,7 +63,7 @@ License: GPL-3+
  On Debian systems, the complete text of the GNU General Public License
  can be found in /usr/share/common-licenses/GPL-3 file.
 
-License: BSD
+License: BSD-3-clause
  Redistribution and use in source and binary forms, with or without
  modification, are permitted provided that the following conditions
  are met:
