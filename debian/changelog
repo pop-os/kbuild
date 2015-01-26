@@ -1,9 +1,11 @@
 kbuild (1:0.1.9998svn2745+dfsg-1) experimental; urgency=medium
 
+  [ Gianfranco Costamagna ]
   * New upstream snapshot, patch refresh.
   * Fix get-orig-source script, to avoid the epoch bump.
   * Tweak orig-tar.sh to always get the latest release, instead of the
     release in d/changelog.
+
   [ Logan Rosen ]
   * debian/patches/12_arm64.diff: Add arm64 support to fix FTBFS.
     (Closes: #759457)
