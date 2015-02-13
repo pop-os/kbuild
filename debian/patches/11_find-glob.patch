@@ -52,7 +52,7 @@ Last-Update: <2014-11-15>
  
  /* Some system header files erroneously define these.
 -   We want our own definitions from <glob.h> to take precedence.  */
-+   We want our own definitions from <"glob.h"> to take precedence.  */
++   We want our own definitions from "glob.h" to take precedence.  */
  #ifndef __GNU_LIBRARY__
  # undef	GLOB_ERR
  # undef	GLOB_MARK
