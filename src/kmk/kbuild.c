@@ -1,4 +1,4 @@
-/* $Id: kbuild.c 2540 2011-08-02 20:13:24Z bird $ */
+/* $Id: kbuild.c 2771 2015-02-01 20:48:36Z bird $ */
 /** @file
  * kBuild specific make functionality.
  */
@@ -569,6 +569,7 @@ kbuild_simplify_variable(struct variable *pVar)
         pVar->value_alloc_len = value_len + 1;
     }
     pVar->recursive = 0;
+    VARIABLE_CHANGED(pVar);
     return pVar;
 }
 
@@ -1573,8 +1574,8 @@ kbuild_collect_source_prop(struct variable *pTarget, struct variable *pSource,
         if (pVar) \
         { \
             paVars[iVar].pVar = pVar; \
-            if (    !pVar->recursive \
-                ||  !memchr(pVar->value, '$', pVar->value_length)) \
+            if (   !pVar->recursive \
+                || IS_VARIABLE_RECURSIVE_WITHOUT_DOLLAR(pVar)) \
             { \
                 paVars[iVar].pszExp = pVar->value; \
                 paVars[iVar].cchExp = pVar->value_length; \
@@ -2620,6 +2621,8 @@ func_kbuild_expand_template(char *o, char **argv, const char *pszFuncName)
                 off--;
             pDefTemplate->value_length = off;
             pDefTemplate->value[off] = '\0';
+
+            VARIABLE_CHANGED(pDefTemplate);
         }
 
         if (!pDefTemplate->value_length)

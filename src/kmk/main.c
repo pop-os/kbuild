@@ -46,6 +46,9 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #ifdef HAVE_FCNTL_H
 # include <fcntl.h>
 #endif
+#ifdef CONFIG_WITH_COMPILER
+# include "kmk_cc_exec.h"
+#endif
 
 #ifdef KMK /* for get_online_cpu_count */
 # if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
@@ -1160,6 +1163,7 @@ static BOOL WINAPI ctrl_event(DWORD CtrlType)
     HANDLE hThread;
     CONTEXT Ctx;
 
+    /*fprintf(stderr, "dbg: ctrl_event sig=%d\n", sig);*/
 #ifndef _M_IX86
     /* only once. */
     if (InterlockedExchange(&g_lTriggered, 1))
@@ -1192,9 +1196,10 @@ static BOOL WINAPI ctrl_event(DWORD CtrlType)
         Ctx.Eip = (uintptr_t)&dispatch_stub;
 #else
         g_Ctx = Ctx;
-        Ctx.Rsp -= 0x20;
+        Ctx.Rsp -= 0x80;
         Ctx.Rsp &= ~(uintptr_t)0xf;
-        Ctx.Rip = (uintptr_t)&dispatch_stub;
+        Ctx.Rsp += 8;   /* (Stack aligned before call instruction, not after.) */
+        Ctx.Rip  = (uintptr_t)&dispatch_stub;
 #endif
 
         SetThreadContext(hThread, &Ctx);
@@ -1363,6 +1368,9 @@ main (int argc, char **argv, char **envp)
   struct dep *read_makefiles;
   PATH_VAR (current_directory);
   unsigned int restarts = 0;
+#ifdef CONFIG_WITH_MAKE_STATS
+  unsigned long long uStartTick = CURRENT_CLOCK_TICK();
+#endif
 #ifdef WINDOWS32
   char *unix_path = NULL;
   char *windows32_path = NULL;
@@ -1575,6 +1583,9 @@ main (int argc, char **argv, char **envp)
   /* Set up to access user data (files).  */
   user_access ();
 
+# ifdef CONFIG_WITH_COMPILER
+  kmk_cc_init ();
+# endif
 #ifdef CONFIG_WITH_ALLOC_CACHES
   initialize_global_alloc_caches ();
 #endif
@@ -2917,6 +2928,7 @@ main (int argc, char **argv, char **envp)
       error (NILF,
              _("warning:  Clock skew detected.  Your build may be incomplete."));
 
+    MAKE_STATS_2(if (uStartTick) printf("main ticks elapsed: %ull\n", (unsigned long long)(CURRENT_CLOCK_TICK() - uStartTick)) );
     /* Exit.  */
     die (status);
   }
@@ -3811,6 +3823,9 @@ print_data_base ()
 #endif
 #ifdef CONFIG_WITH_ALLOC_CACHES
   alloccache_print_all ();
+#endif
+#ifdef CONFIG_WITH_COMPILER
+  kmk_cc_print_stats ();
 #endif
 
   when = time ((time_t *) 0);

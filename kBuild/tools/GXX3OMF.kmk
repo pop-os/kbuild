@@ -1,4 +1,4 @@
-# $Id: GXX3OMF.kmk 2545 2011-09-13 19:09:05Z bird $
+# $Id: GXX3OMF.kmk 2776 2015-02-03 20:38:12Z bird $
 ## @file
 # kBuild Tool Config - GCC v3 targeting OS/2 OMF, for building C++ code.
 #
@@ -49,6 +49,7 @@ endif
 TOOL_GXX3OMF_LDFLAGS.sysmod ?= -nostdlib
 TOOL_GXX3OMF_LD_MAP ?= -Zmap=$(1)
 TOOL_GXX3OMF_LD_SYSMOD_MAP ?= -Zmap=$(1)
+TOOL_GXX3OMF_RC = rc$(HOSTSUFF_EXE)
 
 ifdef SLKRUNS
 TOOL_GXX3OMF_CC  += -fmessage-length=0
@@ -77,6 +78,11 @@ TOOL_GXX3OMF_ASFLAGS          ?= -x assembler-with-cpp -Zomf
 TOOL_GXX3OMF_ASFLAGS.debug    ?= -g
 TOOL_GXX3OMF_ASFLAGS.profile  ?= -g
 TOOL_GXX3OMF_ASOBJSUFF        ?= .obj
+
+TOOL_GXX3OMF_RCOBJSUFF        ?= .res
+TOOL_GXX3OMF_RCFLAGS          ?= -n
+TOOL_GXX3OMF_RCINCS           ?= $(shell $(TOOL_GXX3OMF_CXX) -E -x c++ - 2>&1 < /dev/null \
+	| $(SED_EXT) -e "/search starts here/,/[Ee]nd of search list/!d" -e "/^ /!d")
 
 TOOL_GXX3OMF_ARFLAGS          ?= cr
 TOOL_GXX3OMF_ARLIBSUFF        ?= .lib
@@ -202,6 +208,30 @@ define TOOL_GXX3OMF_COMPILE_AS_CMDS
 endef
 
 
+## Compile resource source.
+# @param    $(target)   Normalized main target name.
+# @param    $(source)   Source filename (relative).
+# @param    $(obj)      Object file name. This shall be (re)created by the compilation.
+# @param    $(dep)      Dependcy file. This shall be (re)created by the compilation.
+# @param    $(flags)    Flags.
+# @param    $(defs)     Definitions. No -D or something.
+# @param    $(incs)     Includes. No -I or something.
+# @param    $(dirdep)   Directory creation dependency.
+# @param    $(deps)     Other dependencies.
+#
+# @param    $(outbase)  Output basename (full). Use this for list files and such.
+# @param    $(objsuff)  Object suffix.
+TOOL_GXX3OMF_COMPILE_RC_OUTPUT =
+TOOL_GXX3OMF_COMPILE_RC_DEPEND =
+TOOL_GXX3OMF_COMPILE_RC_DEPORD =
+define TOOL_GXX3OMF_COMPILE_RC_CMDS
+	$(QUIET)$(REDIRECT) -E 'INCLUDE=' -- $(TOOL_GXX3OMF_RC) -r \
+		$(flags) $(addprefix -i, $(subst /,\\,$(subst /@unixroot,$(UNIXROOT),$(incs)))) $(addprefix -d, $(defs))\
+		$(subst /,\\,$(abspath $(source))) \
+		$(obj)
+endef
+
+
 ## Link library
 # @param    $(target)   Normalized main target name.
 # @param    $(out)		Library name.
@@ -216,12 +246,12 @@ TOOL_GXX3OMF_LINK_LIBRARY_OUTPUT = $(outbase).rsp
 TOOL_GXX3OMF_LINK_LIBRARY_DEPEND = $(othersrc)
 TOOL_GXX3OMF_LINK_LIBRARY_DEPORD =
 define TOOL_GXX3OMF_LINK_LIBRARY_CMDS
-	$(if $(filter %.def %.imp,$(othersrc))\
-		,$(QUIET)$(APPEND) -n $(outbase).rsp $(filter %.def %.imp,$(othersrc))\
+	$(if $(filter %.def %.imp %.dll,$(othersrc))\
+		,$(QUIET)$(APPEND) -n $(outbase).rsp $(filter %.def %.imp %.dll,$(othersrc))\
 		 $(NL)$(TAB)$(QUIET)$(QUIET)$(TOOL_GXX3OMF_AR_IMP) -o $(out) @$(outbase).rsp\
 		 $(NL)$(TAB)$(QUIET)$(RM) -f $(outbase).rsp)
-	$(QUIET)$(APPEND) -n $(outbase).rsp $(flags) $(out) $(objs) $(filter-out %.def %.imp,$(othersrc))
-	$(TOOL_GXX3OMF_AR) @$(outbase).rsp
+	$(QUIET)$(APPEND) -n $(outbase).rsp $(flags) $(out) $(objs) $(filter-out %.def %.imp %.dll,$(othersrc))
+	$(QUIET)$(TOOL_GXX3OMF_AR) @$(outbase).rsp
 endef
 
 
@@ -282,7 +312,7 @@ define TOOL_GXX3OMF_LINK_DLL_CMDS
 		$(othersrc)\
 		$(foreach lib,$(libs), $(if $(findstring $(lib),$(subst /,x,$(lib))), -l$(patsubst lib%,%,$(lib)), $(lib)))\
 		-Zmap=$(outbase).map
-	$(TOOL_GXX3OMF_LD) @$(outbase).rsp
+	$(QUIET)$(TOOL_GXX3OMF_LD) @$(outbase).rsp
 endef
 
 

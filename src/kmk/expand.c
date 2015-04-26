@@ -25,6 +25,9 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #include "commands.h"
 #include "variable.h"
 #include "rule.h"
+#ifdef CONFIG_WITH_COMPILER
+# include "kmk_cc_exec.h"
+#endif
 
 /* Initially, any errors reported when expanding strings will be reported
    against the file where the error appears.  */
@@ -185,7 +188,19 @@ recursively_expand_for_file (struct variable *v, struct file *file,
     value = allocated_variable_expand (v->value);
 #else  /* CONFIG_WITH_VALUE_LENGTH */
   if (!v->append)
-    value = allocated_variable_expand_2 (v->value, v->value_length, value_lenp);
+    {
+      if (!IS_VARIABLE_RECURSIVE_WITHOUT_DOLLAR (v))
+        value = allocated_variable_expand_2 (v->value, v->value_length, value_lenp);
+      else
+        {
+          unsigned int len = v->value_length;
+          value = xmalloc (len + 2);
+          memcpy (value, v->value, len + 1);
+          value[len + 1] = '\0'; /* Extra terminator like allocated_variable_expand_2 returns. Why? */
+          if (value_lenp)
+            *value_lenp = len;
+        }
+    }
   else
     {
       value = allocated_variable_append (v);
@@ -207,11 +222,11 @@ recursively_expand_for_file (struct variable *v, struct file *file,
 }
 
 #ifdef CONFIG_WITH_VALUE_LENGTH
-/* Static worker for reference_variable() that expands the recursive
+/* Worker for reference_variable() and kmk_exec_* that expands the recursive
    variable V. The main difference between this and
    recursively_expand[_for_file] is that this worker avoids the temporary
    buffer and outputs directly into the current variable buffer (O).  */
-static char *
+char *
 reference_recursive_variable (char *o, struct variable *v)
 {
   const struct floc *this_var;
@@ -246,8 +261,20 @@ reference_recursive_variable (char *o, struct variable *v)
 
   v->expanding = 1;
   if (!v->append)
-    /* Expand directly into the variable buffer.  */
-    variable_expand_string_2 (o, v->value, v->value_length, &o);
+    {
+      /* Expand directly into the variable buffer.  */
+# ifdef CONFIG_WITH_COMPILER
+      v->expand_count++;
+      if (   v->expandprog
+          || (v->expand_count == 3 && kmk_cc_compile_variable_for_expand (v)) )
+        o = kmk_exec_expand_to_var_buf (v, o);
+      else
+        variable_expand_string_2 (o, v->value, v->value_length, &o);
+# else
+      MAKE_STATS_2 (v->expand_count++);
+      variable_expand_string_2 (o, v->value, v->value_length, &o);
+# endif
+    }
   else
     {
       /* XXX: Feel free to optimize appending target variables as well.  */
@@ -295,7 +322,7 @@ reference_variable (char *o, const char *name, unsigned int length)
 
 #ifdef CONFIG_WITH_VALUE_LENGTH
   assert (v->value_length == strlen (v->value));
-  if (!v->recursive)
+  if (!v->recursive || IS_VARIABLE_RECURSIVE_WITHOUT_DOLLAR (v))
     o = variable_buffer_output (o, v->value, v->value_length);
   else
     o = reference_recursive_variable (o, v);
@@ -987,7 +1014,7 @@ variable_append (const char *name, unsigned int length,
 #endif
 
   /* Either expand it or copy it, depending.  */
-  if (! v->recursive)
+  if (! v->recursive || IS_VARIABLE_RECURSIVE_WITHOUT_DOLLAR (v))
 #ifdef CONFIG_WITH_VALUE_LENGTH
     return variable_buffer_output (buf, v->value, v->value_length);
 #else
@@ -1058,6 +1085,7 @@ append_expanded_string_to_variable (struct variable *v, const char *value,
       v->value = variable_buffer;
       v->value_length = p - v->value;
       v->value_alloc_len = variable_buffer_length;
+      VARIABLE_CHANGED(v);
 
       /* Restore the variable buffer, but without freeing the current. */
       variable_buffer = NULL;
@@ -1195,8 +1223,42 @@ install_variable_buffer (char **bufp, unsigned int *lenp)
   initialize_variable_output ();
 }
 
-/* Restore a previously-saved variable_buffer setting (free the current one).
- */
+#ifdef CONFIG_WITH_COMPILER
+/* Same as install_variable_buffer, except we supply a size hint.  */
+
+char *
+install_variable_buffer_with_hint (char **bufp, unsigned int *lenp, unsigned int size_hint)
+{
+  struct recycled_buffer *recycled;
+  char *buf;
+
+  *bufp = variable_buffer;
+  *lenp = variable_buffer_length;
+
+  recycled = recycled_head;
+  if (recycled)
+    {
+      recycled_head = recycled->next;
+      variable_buffer_length = recycled->length;
+      variable_buffer = buf = (char *)recycled;
+    }
+  else
+    {
+      if (size_hint < 512)
+        variable_buffer_length = (size_hint + 1 + 63) & ~(unsigned int)63;
+      else if (size_hint < 4096)
+        variable_buffer_length = (size_hint + 1 + 1023) & ~(unsigned int)1023;
+      else
+        variable_buffer_length = (size_hint + 1 + 4095) & ~(unsigned int)4095;
+      variable_buffer = buf = xmalloc (variable_buffer_length);
+    }
+  buf[0] = '\0';
+  return buf;
+}
+#endif /* CONFIG_WITH_COMPILER */
+
+/* Restore a previously-saved variable_buffer setting (free the
+   current one). */
 
 void
 restore_variable_buffer (char *buf, unsigned int len)
@@ -1211,3 +1273,24 @@ restore_variable_buffer (char *buf, unsigned int len)
   variable_buffer = buf;
   variable_buffer_length = len;
 }
+
+
+/* Used to make sure there is at least SIZE bytes of buffer space
+   available starting at PTR.  */
+char *
+ensure_variable_buffer_space(char *ptr, unsigned int size)
+{
+  unsigned int offset = (unsigned int)(ptr - variable_buffer);
+  assert(offset <= variable_buffer_length);
+  if (variable_buffer_length - offset < size)
+    {
+      unsigned minlen = size + offset;
+      variable_buffer_length *= 2;
+      if (variable_buffer_length < minlen + 100)
+        variable_buffer_length = (minlen + 100 + 63) & ~(unsigned int)63;
+      variable_buffer = xrealloc (variable_buffer, variable_buffer_length);
+      ptr = variable_buffer + offset;
+    }
+  return ptr;
+}
+
