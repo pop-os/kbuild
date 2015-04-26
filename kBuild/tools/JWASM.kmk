@@ -1,4 +1,4 @@
-# $Id: JWASM.kmk 2730 2014-03-16 20:30:59Z bird $
+# $Id: JWASM.kmk 2774 2015-02-03 19:56:24Z bird $
 ## @file
 # kBuild Tool Config - JWasm
 #
@@ -36,7 +36,7 @@ TOOL_JWASM := JWasm - MASM clone based on the Open Watcom assembler.
 
 # Tool Specific Properties
 ifndef TOOL_JWASM_AS
- TOOL_JWASM_AS := $(firstword $(rsort $(wildcard $(KBUILD_DEVTOOLS_BLD)/jwasm/*/jwasm$(HOSTSUFF_EXE))))
+ TOOL_JWASM_AS := $(firstword $(rsort $(wildcard $(KBUILD_DEVTOOLS_HST)/jwasm/*/jwasm$(HOSTSUFF_EXE))))
  ifeq ($(TOOL_JWASM_AS),)
   TOOL_JWASM_AS := $(firstword $(rsort $(wildcard $(KBUILD_DEVTOOLS_TRG)/jwasm/*/jwasm$(HOSTSUFF_EXE))))
  endif
@@ -52,7 +52,7 @@ TOOL_JWASM_COMPILE_AS_OUTPUT = $(outbase).lst
 TOOL_JWASM_COMPILE_AS_DEPEND =
 TOOL_JWASM_COMPILE_AS_DEPORD =
 define TOOL_JWASM_COMPILE_AS_CMDS
-	$(TOOL_JWASM_AS) -c \
+	$(QUIET)$(TOOL_JWASM_AS) -c \
 			$(strip $(flags)) \
 			$(addprefix -D,$(defs)) \
 			$(addprefix -I,$(incs)) \

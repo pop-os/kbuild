@@ -1,10 +1,10 @@
-/* $Id: mscfakes.c 2733 2014-10-16 18:29:41Z bird $ */
+/* $Id: mscfakes.c 2759 2015-01-28 16:14:00Z bird $ */
 /** @file
  * Fake Unix stuff for MSC.
  */
 
 /*
- * Copyright (c) 2005-2010 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
+ * Copyright (c) 2005-2015 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
  *
  * This file is part of kBuild.
  *
@@ -27,6 +27,7 @@
 *   Header Files                                                               *
 *******************************************************************************/
 #include "config.h"
+#include <assert.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,6 +42,11 @@
 #define timeval windows_timeval
 #include <Windows.h>
 #undef timeval
+
+/*******************************************************************************
+*   Internal Functions                                                         *
+*******************************************************************************/
+static BOOL isPipeFd(int fd);
 
 
 /**
@@ -460,15 +466,125 @@ int utimes(const char *pszPath, const struct timeval *paTimes)
 }
 
 
-int writev(int fd, const struct iovec *vector, int count)
+/* We override the libc write function (in our modules only, unfortunately) so
+   we can kludge our way around a ENOSPC problem observed on build servers
+   capturing STDOUT and STDERR via pipes.  Apparently this may happen when the
+   pipe buffer is full, even with the mscfake_init hack in place.
+
+   XXX: Probably need to hook into fwrite as well. */
+ssize_t msc_write(int fd, const void *pvSrc, size_t cbSrc)
+{
+    ssize_t cbRet;
+    if (cbSrc < UINT_MAX / 4)
+    {
+#ifndef MSC_WRITE_TEST
+        cbRet = _write(fd, pvSrc, (unsigned int)cbSrc);
+#else
+        cbRet = -1; errno = ENOSPC;
+#endif
+        if (cbRet < 0)
+        {
+            /* ENOSPC on pipe kludge. */
+            int cbLimit;
+            int cSinceLastSuccess;
+
+            if (cbSrc == 0)
+                return 0;
+            if (errno != ENOSPC)
+                return -1;
+#ifndef MSC_WRITE_TEST
+            if (!isPipeFd(fd))
+            {
+                errno = ENOSPC;
+                return -1;
+            }
+#endif
+
+            /* Likely a full pipe buffer, try write smaller amounts and do some
+               sleeping inbetween each unsuccessful one. */
+            cbLimit = cbSrc / 4;
+            if (cbLimit < 4)
+                cbLimit = 4;
+            else if (cbLimit > 512)
+                cbLimit = 512;
+            cSinceLastSuccess = 0;
+            cbRet = 0;
+#ifdef MSC_WRITE_TEST
+            cbLimit = 4;
+#endif
+
+            while (cbSrc > 0)
+            {
+                unsigned int cbAttempt = cbSrc > cbLimit ? (int)cbLimit : (int)cbSrc;
+                ssize_t cbActual = _write(fd, pvSrc, cbAttempt);
+                if (cbActual > 0)
+                {
+                    assert(cbActual <= (ssize_t)cbAttempt);
+                    pvSrc  = (char *)pvSrc + cbActual;
+                    cbSrc -= cbActual;
+                    cbRet += cbActual;
+#ifndef MSC_WRITE_TEST
+                    if (cbLimit < 32)
+                        cbLimit = 32;
+#endif
+                    cSinceLastSuccess = 0;
+                }
+                else if (errno != ENOSPC)
+                    return -1;
+                else
+                {
+                    /* Delay for about 30 seconds, then just give up. */
+                    cSinceLastSuccess++;
+                    if (cSinceLastSuccess > 1860)
+                        return -1;
+                    if (cSinceLastSuccess <= 2)
+                        Sleep(0);
+                    else if (cSinceLastSuccess <= 66)
+                    {
+                        if (cbLimit >= 8)
+                            cbLimit /= 2; /* Just in case the pipe buffer is very very small. */
+                        Sleep(1);
+                    }
+                    else
+                        Sleep(16);
+                }
+            }
+        }
+    }
+    else
+    {
+        /*
+         * Type limit exceeded. Split the job up.
+         */
+        cbRet = 0;
+        while (cbSrc > 0)
+        {
+            size_t  cbToWrite = cbSrc > UINT_MAX / 4 ? UINT_MAX / 4 : cbSrc;
+            ssize_t cbWritten = msc_write(fd, pvSrc, cbToWrite);
+            if (cbWritten > 0)
+            {
+                pvSrc  = (char *)pvSrc + (size_t)cbWritten;
+                cbSrc -= (size_t)cbWritten;
+                cbRet += (size_t)cbWritten;
+            }
+            else if (cbWritten == 0 || cbRet > 0)
+                break;
+            else
+                return -1;
+        }
+    }
+    return cbRet;
+}
+
+ssize_t writev(int fd, const struct iovec *vector, int count)
 {
     int size = 0;
     int i;
     for (i = 0; i < count; i++)
     {
-        int cb = (int)write(fd, vector[i].iov_base, (int)vector[i].iov_len);
+        int cb = msc_write(fd, vector[i].iov_base, (int)vector[i].iov_len);
         if (cb < 0)
-            return -1;
+            return cb;
         size += cb;
     }
     return size;
@@ -535,13 +651,12 @@ int vasprintf(char **strp, const char *fmt, va_list va)
 
 
 /**
- * This is a kludge to make pipe handles blocking.
+ * Checks if the given file descriptor is a pipe or not.
  *
- * @returns TRUE if it's now blocking, FALSE if not a pipe or we failed to fix
- *          the blocking mode.
+ * @returns TRUE if pipe, FALSE if not.
  * @param   fd                  The libc file descriptor number.
  */
-static BOOL makePipeBlocking(int fd)
+static BOOL isPipeFd(int fd)
 {
     /* Is pipe? */
     HANDLE hFile = (HANDLE)_get_osfhandle(fd);
@@ -550,16 +665,32 @@ static BOOL makePipeBlocking(int fd)
         DWORD fType = GetFileType(hFile);
         fType &= ~FILE_TYPE_REMOTE;
         if (fType == FILE_TYPE_PIPE)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+
+/**
+ * This is a kludge to make pipe handles blocking.
+ *
+ * @returns TRUE if it's now blocking, FALSE if not a pipe or we failed to fix
+ *          the blocking mode.
+ * @param   fd                  The libc file descriptor number.
+ */
+static BOOL makePipeBlocking(int fd)
+{
+    if (isPipeFd(fd))
+    {
+        /* Try fix it. */
+        HANDLE hFile = (HANDLE)_get_osfhandle(fd);
+        DWORD fState = 0;
+        if (GetNamedPipeHandleState(hFile, &fState, NULL, NULL, NULL, NULL,  0))
         {
-            /* Try fix it. */
-            DWORD fState = 0;
-            if (GetNamedPipeHandleState(hFile, &fState, NULL, NULL, NULL, NULL,  0))
-            {
-                fState &= ~PIPE_NOWAIT;
-                fState |= PIPE_WAIT;
-                if (SetNamedPipeHandleState(hFile, &fState, NULL, NULL))
-                    return TRUE;
-            }
+            fState &= ~PIPE_NOWAIT;
+            fState |= PIPE_WAIT;
+            if (SetNamedPipeHandleState(hFile, &fState, NULL, NULL))
+                return TRUE;
         }
     }
     return FALSE;

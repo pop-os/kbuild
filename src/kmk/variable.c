@@ -41,6 +41,9 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #ifdef CONFIG_WITH_STRCACHE2
 # include <stddef.h>
 #endif
+#ifdef CONFIG_WITH_COMPILER
+# include "kmk_cc_exec.h"
+#endif
 
 #ifdef KMK
 /** Gets the real variable if alias.  For use when looking up variables. */
@@ -380,7 +383,7 @@ define_variable_in_set (const char *name, unsigned int length,
             v->fileinfo.filenm = 0;
 	  v->origin = origin;
 	  v->recursive = recursive;
-          MAKE_STATS_2(v->changes++);
+         VARIABLE_CHANGED (v);
 	}
       return v;
     }
@@ -442,8 +445,20 @@ define_variable_in_set (const char *name, unsigned int length,
   v->aliased = 0;
 #endif
   v->export = v_default;
+#ifdef CONFIG_WITH_COMPILER
+  v->recursive_without_dollar = 0;
+  v->evalprog = 0;
+  v->expandprog = 0;
+  v->evalval_count = 0;
+  v->expand_count = 0;
+#else
+  MAKE_STATS_2(v->expand_count = 0);
+  MAKE_STATS_2(v->evalval_count = 0);
+#endif
   MAKE_STATS_2(v->changes = 0);
   MAKE_STATS_2(v->reallocs = 0);
+  MAKE_STATS_2(v->references = 0);
+  MAKE_STATS_2(v->cTicksEvalVal = 0);
 
   v->exportable = 1;
   if (*name != '_' && (*name < 'A' || *name > 'Z')
@@ -581,7 +596,7 @@ define_variable_alias_in_set (const char *name, unsigned int length,
 
       if (v->value != 0 && !v->rdonly_val)
           free (v->value);
-      MAKE_STATS_2(v->changes++);
+      VARIABLE_CHANGED (v);
     }
   else
     {
@@ -598,8 +613,20 @@ define_variable_alias_in_set (const char *name, unsigned int length,
       v->private_var = 0;
       v->aliased = 0;
       v->export = v_default;
+#ifdef CONFIG_WITH_COMPILER
+      v->recursive_without_dollar = 0;
+      v->evalprog = 0;
+      v->expandprog = 0;
+      v->evalval_count = 0;
+      v->expand_count = 0;
+#else
+      MAKE_STATS_2(v->expand_count = 0);
+      MAKE_STATS_2(v->evalval_count = 0);
+#endif
       MAKE_STATS_2(v->changes = 0);
       MAKE_STATS_2(v->reallocs = 0);
+      MAKE_STATS_2(v->references = 0);
+      MAKE_STATS_2(v->cTicksEvalVal = 0);
       v->exportable = 1;
       if (*name != '_' && (*name < 'A' || *name > 'Z')
           && (*name < 'a' || *name > 'z'))
@@ -727,6 +754,7 @@ lookup_special_var (struct variable *var)
       var->value_length = p - var->value - 1;
       var->value_alloc_len = max;
 #endif
+      VARIABLE_CHANGED (var);
 
       /* Remember how many variables are in our current count.  Since we never
          remove variables from the list, this is a reliable way to know whether
@@ -887,7 +915,10 @@ lookup_variable (const char *name, unsigned int length)
     {
       struct variable *v = lookup_kbuild_object_variable_accessor(name, length);
       if (v != VAR_NOT_KBUILD_ACCESSOR)
-        return v;
+        {
+          MAKE_STATS_2 (v->references++);
+          return v;
+        }
     }
 # endif
 
@@ -920,7 +951,8 @@ lookup_variable (const char *name, unsigned int length)
 # ifdef KMK
           RESOLVE_ALIAS_VARIABLE(v);
 # endif
-	  return v->special ? lookup_special_var (v) : v;
+          MAKE_STATS_2 (v->references++);
+	   return v->special ? lookup_special_var (v) : v;
         }
 
       is_parent |= setlist->next_is_parent;
@@ -993,6 +1025,76 @@ lookup_variable (const char *name, unsigned int length)
 
   return 0;
 }
+
+#ifdef CONFIG_WITH_STRCACHE2
+/* Alternative version of lookup_variable that takes a name that's already in
+   the variable string cache. */
+struct variable *
+lookup_variable_strcached (const char *name)
+{
+  struct variable *v;
+#if 1 /*FIX THIS - ndef KMK*/
+  const struct variable_set_list *setlist;
+  struct variable var_key;
+#endif /* KMK */
+  int is_parent = 0;
+
+#ifndef NDEBUG
+  strcache2_verify_entry (&variable_strcache, name);
+#endif
+
+#ifdef KMK
+  /* Check for kBuild-define- local variable accesses and handle these first. */
+  if (strcache2_get_len(&variable_strcache, name) > 3 && name[0] == '[')
+    {
+      v = lookup_kbuild_object_variable_accessor(name, strcache2_get_len(&variable_strcache, name));
+      if (v != VAR_NOT_KBUILD_ACCESSOR)
+        {
+          MAKE_STATS_2 (v->references++);
+          return v;
+        }
+    }
+#endif
+
+#if 1  /*FIX THIS - ndef KMK */
+
+  var_key.name = (char *) name;
+  var_key.length = strcache2_get_len(&variable_strcache, name);
+
+  for (setlist = current_variable_set_list;
+       setlist != 0; setlist = setlist->next)
+    {
+      const struct variable_set *set = setlist->set;
+
+      v = (struct variable *) hash_find_item_strcached ((struct hash_table *) &set->table, &var_key);
+      if (v && (!is_parent || !v->private_var))
+        {
+# ifdef KMK
+          RESOLVE_ALIAS_VARIABLE(v);
+# endif
+          MAKE_STATS_2 (v->references++);
+	   return v->special ? lookup_special_var (v) : v;
+        }
+
+      is_parent |= setlist->next_is_parent;
+    }
+
+#else  /* KMK - need for speed */
+
+  v = lookup_cached_variable (name);
+  assert (lookup_variable_for_assert(name, length) == v);
+#ifdef VMS
+  if (v)
+#endif
+    return v;
+#endif /* KMK - need for speed */
+#ifdef VMS
+# error "Port me (split out the relevant code from lookup_varaible and call it)"
+#endif
+  return 0;
+}
+#endif
+
 
 /* Lookup a variable whose name is a string starting at NAME
    and with LENGTH chars in set SET.  NAME need not be null-terminated.
@@ -1004,7 +1106,6 @@ lookup_variable_in_set (const char *name, unsigned int length,
                         const struct variable_set *set)
 {
   struct variable var_key;
-  struct variable *v;
 #ifndef CONFIG_WITH_STRCACHE2
   var_key.name = (char *) name;
   var_key.length = length;
@@ -1012,6 +1113,7 @@ lookup_variable_in_set (const char *name, unsigned int length,
   return (struct variable *) hash_find_item ((struct hash_table *) &set->table, &var_key);
 #else  /* CONFIG_WITH_STRCACHE2 */
   const char *cached_name;
+  struct variable *v;
 
 # ifdef KMK
   /* Check for kBuild-define- local variable accesses and handle these first. */
@@ -1021,6 +1123,7 @@ lookup_variable_in_set (const char *name, unsigned int length,
       if (v != VAR_NOT_KBUILD_ACCESSOR)
         {
           RESOLVE_ALIAS_VARIABLE(v);
+          MAKE_STATS_2 (v->references++);
           return v;
         }
     }
@@ -1048,6 +1151,7 @@ lookup_variable_in_set (const char *name, unsigned int length,
 # ifdef KMK
   RESOLVE_ALIAS_VARIABLE(v);
 # endif
+  MAKE_STATS_2 (if (v) v->references++);
   return v;
 #endif /* CONFIG_WITH_STRCACHE2 */
 }
@@ -1223,6 +1327,10 @@ free_variable_name_and_value (const void *item)
 #ifndef CONFIG_WITH_STRCACHE2
   free (v->name);
 #endif
+#ifdef CONFIG_WITH_COMPILER
+  if (v->evalprog || v->expandprog)
+    kmk_cc_variable_deleted (v);
+#endif
 #ifdef CONFIG_WITH_RDONLY_VARIABLE_VALUE
   if (!v->rdonly_val)
 #endif
@@ -1341,6 +1449,10 @@ merge_variable_sets (struct variable_set *to_set,
               fatal(NULL, ("Attempting to delete aliased variable '%s'"), from_var->name);
             if (from_var->alias)
               fatal(NULL, ("Attempting to delete variable aliased '%s'"), from_var->name);
+#endif
+#ifdef CONFIG_WITH_COMPILER
+            if (from_var->evalprog || from_var->expandprog)
+              kmk_cc_variable_deleted (from_var);
 #endif
 #ifdef CONFIG_WITH_RDONLY_VARIABLE_VALUE
             if (!from_var->rdonly_val)
@@ -2095,6 +2207,7 @@ void append_string_to_variable (struct variable *v, const char *value, unsigned 
   else
     memcpy (v->value, value, value_len + 1);
   v->value_length = new_value_len;
+  VARIABLE_CHANGED (v);
 }
 
 struct variable *
@@ -2307,7 +2420,6 @@ do_variable_definition_2 (const struct floc *flocp,
 # endif
             if (free_value)
                free (free_value);
-            MAKE_STATS_2(v->changes++);
             return v;
 #else /* !CONFIG_WITH_VALUE_LENGTH */
 
@@ -2734,9 +2846,17 @@ try_variable_definition (const struct floc *flocp, char *line
   return vp;
 }
 
+#if defined (CONFIG_WITH_COMPILER) || defined (CONFIG_WITH_MAKE_STATS)
+static unsigned long var_stats_evalvals, var_stats_evalvaled;
+static unsigned long var_stats_expands, var_stats_expanded;
+#endif
+#ifdef CONFIG_WITH_COMPILER
+static unsigned long var_stats_expandprogs, var_stats_evalprogs;
+#endif
 #ifdef CONFIG_WITH_MAKE_STATS
 static unsigned long var_stats_changes, var_stats_changed;
 static unsigned long var_stats_reallocs, var_stats_realloced;
+static unsigned long var_stats_references, var_stats_referenced;
 static unsigned long var_stats_val_len, var_stats_val_alloc_len;
 static unsigned long var_stats_val_rdonly_len;
 #endif
@@ -2804,15 +2924,61 @@ print_variable (const void *item, void *arg)
     printf (_(", alias for '%s'"), v->name);
 #endif /* KMK */
 
+#if defined (CONFIG_WITH_COMPILER) || defined (CONFIG_WITH_MAKE_STATS)
+  if (v->evalval_count != 0)
+    {
+# ifdef CONFIG_WITH_MAKE_STATS
+      printf (_(", %u evalvals (%llu ticks)"), v->evalval_count, v->cTicksEvalVal);
+# else
+      printf (_(", %u evalvals"), v->evalval_count);
+# endif
+      var_stats_evalvaled++;
+    }
+  var_stats_evalvals += v->evalval_count;
+
+  if (v->expand_count != 0)
+    {
+      printf (_(", %u expands"), v->expand_count);
+      var_stats_expanded++;
+    }
+  var_stats_expands += v->expand_count;
+
+# ifdef CONFIG_WITH_COMPILER
+  if (v->evalprog != 0)
+    {
+      printf (_(", evalprog"));
+      var_stats_evalprogs++;
+    }
+  if (v->expandprog != 0)
+    {
+      printf (_(", expandprog"));
+      var_stats_expandprogs++;
+    }
+# endif
+#endif
+
 #ifdef CONFIG_WITH_MAKE_STATS
   if (v->changes != 0)
+    {
       printf (_(", %u changes"), v->changes);
+      var_stats_changed++;
+    }
   var_stats_changes += v->changes;
-  var_stats_changed += (v->changes != 0);
+
   if (v->reallocs != 0)
+    {
       printf (_(", %u reallocs"), v->reallocs);
+      var_stats_realloced++;
+    }
   var_stats_reallocs += v->reallocs;
-  var_stats_realloced += (v->reallocs != 0);
+
+  if (v->references != 0)
+    {
+      printf (_(", %u references"), v->references);
+      var_stats_referenced++;
+    }
+  var_stats_references += v->references;
+
   var_stats_val_len += v->value_length;
   if (v->value_alloc_len)
     var_stats_val_alloc_len += v->value_alloc_len;
@@ -2867,15 +3033,25 @@ print_variable (const void *item, void *arg)
 void
 print_variable_set (struct variable_set *set, char *prefix)
 {
+#if defined (CONFIG_WITH_COMPILER) || defined (CONFIG_WITH_MAKE_STATS)
+  var_stats_expands = var_stats_expanded = var_stats_evalvals
+    = var_stats_evalvaled = 0;
+#endif
+#ifdef CONFIG_WITH_COMPILER
+  var_stats_expandprogs = var_stats_evalprogs = 0;
+#endif
 #ifdef CONFIG_WITH_MAKE_STATS
   var_stats_changes = var_stats_changed = var_stats_reallocs
-      = var_stats_realloced = var_stats_val_len = var_stats_val_alloc_len
-      = var_stats_val_rdonly_len = 0;
+    = var_stats_realloced = var_stats_references = var_stats_referenced
+    = var_stats_val_len = var_stats_val_alloc_len
+    = var_stats_val_rdonly_len = 0;
+#endif
 
   hash_map_arg (&set->table, print_variable, prefix);
 
   if (set->table.ht_fill)
     {
+#ifdef CONFIG_WITH_MAKE_STATS
       unsigned long fragmentation;
 
       fragmentation = var_stats_val_alloc_len - (var_stats_val_len - var_stats_val_rdonly_len);
@@ -2899,10 +3075,34 @@ print_variable_set (struct variable_set *set, char *prefix)
                var_stats_realloced,
                (unsigned int)((100.0 * var_stats_realloced) / set->table.ht_fill),
                var_stats_reallocs);
-      }
-#else
-  hash_map_arg (&set->table, print_variable, prefix);
+
+      if (var_stats_referenced)
+        printf(_("#  referenced %5lu (%2u%%),       references %6lu\n"),
+               var_stats_referenced,
+               (unsigned int)((100.0 * var_stats_referenced) / set->table.ht_fill),
+               var_stats_references);
 #endif
+#if defined (CONFIG_WITH_COMPILER) || defined (CONFIG_WITH_MAKE_STATS)
+      if (var_stats_evalvals)
+        printf(_("#   evalvaled %5lu (%2u%%),    evalval calls %6lu\n"),
+               var_stats_evalvaled,
+               (unsigned int)((100.0 * var_stats_evalvaled) / set->table.ht_fill),
+               var_stats_evalvals);
+      if (var_stats_expands)
+        printf(_("#    expanded %5lu (%2u%%),          expands %6lu\n"),
+               var_stats_expanded,
+               (unsigned int)((100.0 * var_stats_expanded) / set->table.ht_fill),
+               var_stats_expands);
+#endif
+#ifdef CONFIG_WITH_COMPILER
+      if (var_stats_expandprogs || var_stats_evalprogs)
+        printf(_("#  eval progs %5lu (%2u%%),     expand progs %6lu (%2u%%)\n"),
+               var_stats_evalprogs,
+               (unsigned int)((100.0 * var_stats_evalprogs) / set->table.ht_fill),
+               var_stats_expandprogs,
+               (unsigned int)((100.0 * var_stats_expandprogs) / set->table.ht_fill));
+#endif
+      }
 
   fputs (_("# variable set hash-table stats:\n"), stdout);
   fputs ("# ", stdout);

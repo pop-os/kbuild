@@ -1,10 +1,10 @@
-# $Id: header.kmk 2729 2014-03-16 00:21:49Z bird $
+# $Id: header.kmk 2763 2015-01-28 18:25:31Z bird $
 ## @file
 # kBuild - File included at top of a makefile.
 #
 
 #
-# Copyright (c) 2004-2014 knut st. osmundsen <bird-kBuild-spam-xiv@anduin.net>
+# Copyright (c) 2004-2015 knut st. osmundsen <bird-kBuild-spam-xiv@anduin.net>
 #
 # This file is part of kBuild.
 #
@@ -79,7 +79,7 @@ endif
 # The revision in which this file was last modified.
 # This can be useful when using development versions of kBuild.
 #
-KMK_REVISION := $(patsubst %:,,  $Rev: 2729 $  )
+KMK_REVISION := $(patsubst %:,,  $Rev: 2763 $  )
 
 
 #
@@ -516,6 +516,7 @@ endif
 # Deprecated legacy names.
 PATH_DEVTOOLS         ?= $(KBUILD_DEVTOOLS)
 PATH_DEVTOOLS_TRG     ?= $(KBUILD_DEVTOOLS_TRG)
+PATH_DEVTOOLS_BLD     ?= $(KBUILD_DEVTOOLS_TRG)
 PATH_DEVTOOLS_TRG_ALT ?= $(KBUILD_DEVTOOLS_TRG_ALT)
 PATH_DEVTOOLS_HST     ?= $(KBUILD_DEVTOOLS_HST)
 PATH_DEVTOOLS_HST_ALT ?= $(KBUILD_DEVTOOLS_HST_ALT)
@@ -1562,6 +1563,29 @@ else
   MSG_L2 ?= %@$(ECHO) "kBuild: $1"
  endif
 endif
+
+
+#
+# An internal define used by subheader.kmk and subfooter.kmk.
+# We keep them here to avoid redefining them for each sub-makefile.
+#
+define def_subfooter_header_target_pass
+ ifndef $(target)_PATH
+  ifndef $(target)_DEFPATH
+   $(target)_DEFPATH := $(PATH_SUB_CURRENT)
+  endif
+  $(call KB_FN_ASSIGN_DEPRECATED,$(target)_PATH,$($(target)_DEFPATH), $(target)_DEFPATH)
+ else ifndef $(target)_DEFPATH
+  $(target)_DEFPATH := $($(target)_PATH)
+ endif
+ ifndef $(target)_MAKEFILE
+  $(target)_MAKEFILE := $(MAKEFILE_CURRENT)
+ endif
+ ifndef $(target)_0_OUTDIR
+  $(target)_0_OUTDIR := $(call TARGET_PATH,$(target))
+  $(call KB_FN_ASSIGN_DEPRECATED,PATH_$(target),$($(target)_0_OUTDIR), $(target)_0_OUTDIR)
+ endif
+endef
 
 
 #

@@ -1,4 +1,4 @@
-# $Id: GCC32.kmk 2541 2011-08-03 09:51:30Z bird $
+# $Id: GCC32.kmk 2775 2015-02-03 20:00:15Z bird $
 ## @file
 # kBuild Tool Config - Generic 32-bit GCC v3.2.x or later Using The System GCC.
 #
@@ -232,9 +232,9 @@ define TOOL_GCC32_LINK_LIBRARY_CMDS
 	$(QUIET)$(APPEND) $(out).ar-script 'CREATE $(out)'
 	$(QUIET)$(APPEND) -n $(out).ar-script \
 		$(foreach o,$(objs), 'ADDMOD $(o)') \
-		$(foreach o,$(filter-out %.def %.imp,$(othersrc)), 'ADDLIB $(o)')
-	$(if $(filter %.def %.imp,$(othersrc))\
-		,$(TOOL_GCC32_AR_IMP) -o $(outbase).imp.a $(filter %.def %.imp,$(othersrc))\
+		$(foreach o,$(filter-out %.def %.imp %.dll,$(othersrc)), 'ADDLIB $(o)')
+	$(if $(filter %.def %.imp %.dll,$(othersrc))\
+		,$(TOOL_GCC32_AR_IMP) -o $(outbase).imp.a $(filter %.def %.imp %.dll,$(othersrc))\
 		 $(NL)$(TAB)$(QUIET)$(APPEND) $(out).ar-script 'ADDLIB $(outbase).imp.a')
 	$(QUIET)$(APPEND) $(out).ar-script 'SAVE'
 	$(QUIET)$(APPEND) $(out).ar-script 'END'
@@ -268,9 +268,9 @@ define TOOL_GCC32_LINK_PROGRAM_CMDS
 		$(foreach lib,$(libs), $(if $(findstring $(lib),$(subst /,x,$(lib))), -l$(patsubst lib%,%,$(lib)), $(lib)))\
 		$(call TOOL_GCC32_LD_MAP,$(outbase).map)
  ifeq ($(ld_debug),split)
-	$(TOOL_GCC32_OBJCOPY) --only-keep-debug $(out) $(outbase).debug
-	$(CHMOD) a-x $(outbase).debug
-	$(TOOL_GCC32_OBJCOPY) --strip-debug --strip-unneeded --add-gnu-debuglink=$(outbase).debug $(out)
+	$(QUIET)$(TOOL_GCC32_OBJCOPY) --only-keep-debug $(out) $(outbase).debug
+	$(QUIET)$(CHMOD) a-x $(outbase).debug
+	$(QUIET)$(TOOL_GCC32_OBJCOPY) --strip-debug --strip-unneeded --add-gnu-debuglink=$(outbase).debug $(out)
  endif
 endef
 
@@ -303,9 +303,9 @@ define TOOL_GCC32_LINK_DLL_CMDS
 		$(foreach lib,$(libs), $(if $(findstring $(lib),$(subst /,x,$(lib))), -l$(patsubst lib%,%,$(lib)), $(lib)))\
 		$(call TOOL_GCC32_LD_MAP,$(outbase).map)
  ifeq ($(ld_debug),split)
-	$(TOOL_GCC32_OBJCOPY) --only-keep-debug $(out) $(outbase).debug
-	$(CHMOD) a-x $(outbase).debug
-	$(TOOL_GCC32_OBJCOPY) --strip-debug --strip-unneeded --add-gnu-debuglink=$(outbase).debug $(out)
+	$(QUIET)$(TOOL_GCC32_OBJCOPY) --only-keep-debug $(out) $(outbase).debug
+	$(QUIET)$(CHMOD) a-x $(outbase).debug
+	$(QUIET)$(TOOL_GCC32_OBJCOPY) --strip-debug --strip-unneeded --add-gnu-debuglink=$(outbase).debug $(out)
  endif
 endef
 
@@ -337,9 +337,9 @@ define TOOL_GCC32_LINK_SYSMOD_CMDS
 		$(foreach lib,$(libs), $(if $(findstring $(lib),$(subst /,x,$(lib))), -l$(patsubst lib%,%,$(lib)), $(lib)))\
 		$(call TOOL_GCC32_LD_SYSMOD_MAP,$(outbase).map)
  ifeq ($(ld_debug),split)
-	$(TOOL_GCC32_OBJCOPY) --only-keep-debug $(out) $(outbase).debug
-	$(CHMOD) a-x $(outbase).debug
-	$(TOOL_GCC32_OBJCOPY) --strip-debug --strip-unneeded --add-gnu-debuglink=$(outbase).debug $(out)
+	$(QUIET)$(TOOL_GCC32_OBJCOPY) --only-keep-debug $(out) $(outbase).debug
+	$(QUIET)$(CHMOD) a-x $(outbase).debug
+	$(QUIET)$(TOOL_GCC32_OBJCOPY) --strip-debug --strip-unneeded --add-gnu-debuglink=$(outbase).debug $(out)
  endif
 endef
 
