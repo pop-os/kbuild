@@ -26,9 +26,9 @@ Bug: http://svn.netlabs.org/kbuild/ticket/94
 -	$(QUIET)$(APPEND) $(out).ar-script 'CREATE $(out)'
 -	$(QUIET)$(APPEND) -n $(out).ar-script \
 -		$(foreach o,$(objs), 'ADDMOD $(o)') \
--		$(foreach o,$(filter-out %.def %.imp,$(othersrc)), 'ADDLIB $(o)')
--	$(if $(filter %.def %.imp,$(othersrc))\
--		,$(TOOL_GCC32_AR_IMP) -o $(outbase).imp.a $(filter %.def %.imp,$(othersrc))\
+-		$(foreach o,$(filter-out %.def %.imp %.dll,$(othersrc)), 'ADDLIB $(o)')
+-	$(if $(filter %.def %.imp %.dll,$(othersrc))\
+-		,$(TOOL_GCC32_AR_IMP) -o $(outbase).imp.a $(filter %.def %.imp %.dll,$(othersrc))\
 -		 $(NL)$(TAB)$(QUIET)$(APPEND) $(out).ar-script 'ADDLIB $(outbase).imp.a')
 -	$(QUIET)$(APPEND) $(out).ar-script 'SAVE'
 -	$(QUIET)$(APPEND) $(out).ar-script 'END'
@@ -70,9 +70,9 @@ Bug: http://svn.netlabs.org/kbuild/ticket/94
 -	$(QUIET)$(APPEND) $(out).ar-script 'CREATE $(out)'
 -	$(QUIET)$(APPEND) -n $(out).ar-script \
 -		$(foreach o,$(objs), 'ADDMOD $(o)') \
--		$(foreach o,$(filter-out %.def %.imp,$(othersrc)), 'ADDLIB $(o)')
--	$(if $(filter %.def %.imp,$(othersrc))\
--		,$(TOOL_GCC3_AR_IMP) -o $(outbase).imp.a $(filter %.def %.imp,$(othersrc))\
+-		$(foreach o,$(filter-out %.def %.imp %.dll,$(othersrc)), 'ADDLIB $(o)')
+-	$(if $(filter %.def %.imp %.dll,$(othersrc))\
+-		,$(TOOL_GCC3_AR_IMP) -o $(outbase).imp.a $(filter %.def %.imp %.dll,$(othersrc))\
 -		 $(NL)$(TAB)$(QUIET)$(APPEND) $(out).ar-script 'ADDLIB $(outbase).imp.a')
 -	$(QUIET)$(APPEND) $(out).ar-script 'SAVE'
 -	$(QUIET)$(APPEND) $(out).ar-script 'END'
@@ -153,9 +153,9 @@ Bug: http://svn.netlabs.org/kbuild/ticket/94
 -	$(QUIET)$(APPEND) $(out).ar-script 'CREATE $(out)'
 -	$(QUIET)$(APPEND) -n $(out).ar-script \
 -		$(foreach o,$(objs), 'ADDMOD $(o)') \
--		$(foreach o,$(filter-out %.def %.imp,$(othersrc)), 'ADDLIB $(o)')
--	$(if $(filter %.def %.imp,$(othersrc))\
--		,$(TOOL_GXX3_AR_IMP) -o $(outbase).imp.a $(filter %.def %.imp,$(othersrc))\
+-		$(foreach o,$(filter-out %.def %.imp %.dll,$(othersrc)), 'ADDLIB $(o)')
+-	$(if $(filter %.def %.imp %.dll,$(othersrc))\
+-		,$(TOOL_GXX3_AR_IMP) -o $(outbase).imp.a $(filter %.def %.imp %.dll,$(othersrc))\
 -		 $(NL)$(TAB)$(QUIET)$(APPEND) $(out).ar-script 'ADDLIB $(outbase).imp.a')
 -	$(QUIET)$(APPEND) $(out).ar-script 'SAVE'
 -	$(QUIET)$(APPEND) $(out).ar-script 'END'
@@ -197,9 +197,9 @@ Bug: http://svn.netlabs.org/kbuild/ticket/94
 -	$(QUIET)$(APPEND) $(out).ar-script 'CREATE $(out)'
 -	$(QUIET)$(APPEND) -n $(out).ar-script \
 -		$(foreach o,$(objs), 'ADDMOD $(o)') \
--		$(foreach o,$(filter-out %.def %.imp,$(othersrc)), 'ADDLIB $(o)')
--	$(if $(filter %.def %.imp,$(othersrc))\
--		,$(TOOL_GXX3_AR_IMP) -o $(outbase).imp.a $(filter %.def %.imp,$(othersrc))\
+-		$(foreach o,$(filter-out %.def %.imp %.dll,$(othersrc)), 'ADDLIB $(o)')
+-	$(if $(filter %.def %.imp %.dll,$(othersrc))\
+-		,$(TOOL_GXX3_AR_IMP) -o $(outbase).imp.a $(filter %.def %.imp %.dll,$(othersrc))\
 -		 $(NL)$(TAB)$(QUIET)$(APPEND) $(out).ar-script 'ADDLIB $(outbase).imp.a')
 -	$(QUIET)$(APPEND) $(out).ar-script 'SAVE'
 -	$(QUIET)$(APPEND) $(out).ar-script 'END'

@@ -1,3 +1,9 @@
+kbuild (1:0.1.9998svn2780+dfsg-1) UNRELEASED; urgency=medium
+
+  * New upstream snapshot, patch refresh.
+
+ -- Gianfranco Costamagna <costamagnagianfranco@yahoo.it>  Mon, 27 Apr 2015 00:42:00 +0200
+
 kbuild (1:0.1.9998svn2745+dfsg-1) experimental; urgency=medium
 
   [ Gianfranco Costamagna ]

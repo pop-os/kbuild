@@ -4,7 +4,7 @@ Bug-Debian: http://bugs.debian.org/554937
 
 --- a/src/kmk/Makefile.kmk
 +++ b/src/kmk/Makefile.kmk
-@@ -280,6 +280,12 @@ kmk_SOURCES += \
+@@ -286,6 +286,12 @@ kmk_SOURCES += \
  ##kmk_DEFS += KMK_PRF=1
  ##kmkmissing_DEFS += KMK_PRF=1
  

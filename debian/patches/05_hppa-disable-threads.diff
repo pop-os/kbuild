@@ -3,9 +3,9 @@ Author: Felix Geyer <debfx-pkg@fobos.de>
 
 --- a/src/kmk/Makefile.kmk
 +++ b/src/kmk/Makefile.kmk
-@@ -234,6 +234,9 @@ kmk_SOURCES = \
- 	vpath.c \
- 	remote-stub.c
+@@ -240,6 +240,9 @@ kmk_SOURCES = \
+ 	kbuild.c \
+ 	kbuild-object.c
  
 +kmk_DEFS.hppa32 = CONFIG_WITHOUT_THREADS
 +kmk_DEFS.hppa64 = CONFIG_WITHOUT_THREADS
