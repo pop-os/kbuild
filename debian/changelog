@@ -1,6 +1,10 @@
-kbuild (1:0.1.9998svn2780+dfsg-1) UNRELEASED; urgency=medium
+kbuild (1:0.1.9998svn2780+dfsg-1) unstable; urgency=medium
 
+  [ Gianfranco Costamagna ]
   * New upstream snapshot, patch refresh.
+
+  [ Ritesh Raj Sarraf ]
+  * Upload to Unstable
 
  -- Gianfranco Costamagna <costamagnagianfranco@yahoo.it>  Mon, 27 Apr 2015 00:42:00 +0200
 
