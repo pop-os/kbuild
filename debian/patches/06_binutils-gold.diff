@@ -2,18 +2,15 @@ Description: Fix FTBFS with binutils-gold
 Author: Felix Geyer <debfx-pkg@fobos.de>
 Bug-Debian: http://bugs.debian.org/554937
 
---- a/src/kmk/Makefile.kmk
-+++ b/src/kmk/Makefile.kmk
-@@ -286,6 +286,12 @@ kmk_SOURCES += \
- ##kmk_DEFS += KMK_PRF=1
- ##kmkmissing_DEFS += KMK_PRF=1
- 
-+if1of ($(KBUILD_TARGET), linux gnukfreebsd)
-+ ifn1of ($(KBUILD_TARGET_ARCH), hppa32 hppa64)
-+  TEMPLATE_BIN-THREADED_LIBS = pthread
-+ endif
-+endif
-+
- #
- # Standalone kmkbuiltin commands.
- #
+diff -up kBuild-0.1.5-p1/Config.kmk.pthreads kBuild-0.1.5-p1/Config.kmk
+--- kBuild-0.1.5-p1/Config.kmk.pthreads	2010-02-18 08:27:24.287688965 +0100
++++ kBuild-0.1.5-p1/Config.kmk	2010-02-18 08:28:07.505493345 +0100
+@@ -332,6 +332,8 @@ ifndef TEMPLATE_BIN_TOOL
+  endif
+  ifeq ($(KBUILD_TARGET),linux)
+   TEMPLATE_BIN_LIBS            += rt
++  TEMPLATE_BIN_LIBS            += pthread
++  TEMPLATE_BIN_LDFLAGS         += -Wl,--as-needed
+  endif
+   TEMPLATE_BIN_CFLAGS.x86      += -m32
+   TEMPLATE_BIN_CFLAGS.sparc32  += -m32

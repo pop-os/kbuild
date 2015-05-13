@@ -3,87 +3,16 @@ Author: Gianfranco Costamagna <costamagnagianfranco@yahoo.it>
 
 Last-Update: <2014-11-15>
 
---- kbuild-0.1.9998svn2734+dfsg.orig/src/kmk/configure.in
-+++ kbuild-0.1.9998svn2734+dfsg/src/kmk/configure.in
-@@ -357,7 +357,7 @@ AC_MSG_CHECKING(if system libc has GNU g
- AC_CACHE_VAL(make_cv_sys_gnu_glob, [
-  AC_EGREP_CPP(gnu glob,[
- #include <features.h>
--#include <glob.h>
-+#include "glob/glob.h"
- #include <fnmatch.h>
- 
- #define GLOB_INTERFACE_VERSION 1
---- kbuild-0.1.9998svn2734+dfsg.orig/src/kmk/expreval.c
-+++ kbuild-0.1.9998svn2734+dfsg/src/kmk/expreval.c
-@@ -30,7 +30,7 @@
- #include "make.h"
- #include <assert.h>
- 
--#include <glob.h>
-+#include "glob/glob.h"
- 
- #include "dep.h"
- #include "filedef.h"
---- kbuild-0.1.9998svn2734+dfsg.orig/src/kmk/glob/glob.c
-+++ kbuild-0.1.9998svn2734+dfsg/src/kmk/glob/glob.c
-@@ -25,7 +25,7 @@ USA.  */
- # include <config.h>
+diff --git a/src/kmk/dir.c b/src/kmk/dir.c
+index 2bef610..2c39119 100644
+--- a/src/kmk/dir.c
++++ b/src/kmk/dir.c
+@@ -1449,7 +1449,7 @@ dir_setup_glob (glob_t *gl)
+ #ifdef __EMX__ /* The FreeBSD implementation actually uses gl_lstat!! */
+   gl->gl_lstat = local_stat;
  #endif
- 
--/* Enable GNU extensions in glob.h.  */
-+/* Enable GNU extensions in "glob.h".  */
- #ifndef _GNU_SOURCE
- # define _GNU_SOURCE	1
+-#if defined(KMK) && !defined(__OS2__)
++#if defined(WINDOWS32) && defined(KMK) && !defined(__OS2__)
+   gl->gl_exists = file_exists_p;
+   gl->gl_isdir = dir_exists_p;
  #endif
-@@ -271,7 +271,7 @@ extern char *alloca ();
- #include <fnmatch.h>
- 
- /* Some system header files erroneously define these.
--   We want our own definitions from <glob.h> to take precedence.  */
-+   We want our own definitions from "glob.h" to take precedence.  */
- #ifndef __GNU_LIBRARY__
- # undef	GLOB_ERR
- # undef	GLOB_MARK
-@@ -282,7 +282,7 @@ extern char *alloca ();
- # undef	GLOB_NOESCAPE
- # undef	GLOB_PERIOD
- #endif
--#include <glob.h>
-+#include "glob.h"
- 
- #ifdef HAVE_GETLOGIN_R
- extern int getlogin_r __P ((char *, size_t));
---- kbuild-0.1.9998svn2734+dfsg.orig/src/kmk/incdep.c
-+++ kbuild-0.1.9998svn2734+dfsg/src/kmk/incdep.c
-@@ -40,7 +40,7 @@
- 
- #include <assert.h>
- 
--#include <glob.h>
-+#include "glob/glob.h"
- 
- #include "dep.h"
- #include "filedef.h"
---- kbuild-0.1.9998svn2734+dfsg.orig/src/kmk/kdepdb.c
-+++ kbuild-0.1.9998svn2734+dfsg/src/kmk/kdepdb.c
-@@ -30,7 +30,7 @@
- #include "../lib/k/kDefs.h"
- #include "../lib/k/kTypes.h"
- #include <assert.h>
--#include <glob.h>
-+#include "glob/glob.h"
- 
- #include "dep.h"
- #include "filedef.h"
---- kbuild-0.1.9998svn2734+dfsg.orig/src/kmk/read.c
-+++ kbuild-0.1.9998svn2734+dfsg/src/kmk/read.c
-@@ -20,7 +20,7 @@ this program.  If not, see <http://www.g
- 
- #include <assert.h>
- 
--#include <glob.h>
-+#include "glob/glob.h"
- 
- #include "dep.h"
- #include "filedef.h"

@@ -2,7 +2,7 @@ Description: Add arm64 to supported architectures
 --- a/kBuild/env.sh
 +++ b/kBuild/env.sh
 @@ -372,6 +372,9 @@
-         arm|armv4l|armv5tel|armv5tejl|armv7l)
+         armv3l|armv4b|armv4l|armv4tl|armv5tel|armv5tejl|armv6l|armv7l|armv7hl|armv7hnl)
              KBUILD_HOST_ARCH='arm'
              ;;
 +        aarch64)

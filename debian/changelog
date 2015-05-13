@@ -1,3 +1,14 @@
+kbuild (1:0.1.9998svn2780+dfsg-2) unstable; urgency=low
+
+  * Sync kbuild with Fedora patches (thanks Sérgio Basto!):
+    - sync 04_armv7l.diff, adding some more arm archs
+    - 06_binutils-gold.diff add pthread for all archs, and
+      -Wl,--as-needed to strip where not needed.
+    - simplify a lot 11_find-glob.patch
+    - disable 08_no_o3_optimization.diff the problem was fixed upstream.
+
+ -- Gianfranco Costamagna <costamagnagianfranco@yahoo.it>  Wed, 13 May 2015 16:29:22 +0200
+
 kbuild (1:0.1.9998svn2780+dfsg-1) unstable; urgency=medium
 
   [ Gianfranco Costamagna ]
