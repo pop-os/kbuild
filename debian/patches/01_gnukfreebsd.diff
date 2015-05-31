@@ -121,6 +121,15 @@ Bug-Debian: http://bugs.debian.org/540665
    TEMPLATE_BIN_TOOL              = GCC3
   else
    TEMPLATE_BIN_TOOL              = GCC3PLAIN
+@@ -361,7 +362,7 @@ endif
+ TEMPLATE_BIN-THREADED = Threaded command line binary
+ TEMPLATE_BIN-THREADED_EXTENDS = BIN
+ TEMPLATE_BIN-THREADED_EXTENDS_BY = appending
+-if1of ($(KBUILD_TARGET), dragonfly freebsd linux openbsd)
++if1of ($(KBUILD_TARGET), dragonfly freebsd linux openbsd gnukfreebsd)
+  TEMPLATE_BIN-THREADED_LIBS = pthread
+ endif
+ 
 --- a/kBuild/env.sh
 +++ b/kBuild/env.sh
 @@ -260,6 +260,10 @@ if test -z "$KBUILD_HOST"; then

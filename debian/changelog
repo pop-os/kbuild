@@ -1,3 +1,13 @@
+kbuild (1:0.1.9998svn2780+dfsg-3) UNRELEASED; urgency=medium
+
+  * Remove 08_no_o3_optimization.diff
+  * d/p/01_gnukfreebsd.diff
+    - Fix kfreebsd-* build failures, due to missing pthreads.
+      this patch was originally under 06_binutils-gold.diff,
+      but this is now a specific kfreebsd porting issue.
+
+ -- Gianfranco Costamagna <costamagnagianfranco@yahoo.it>  Sun, 31 May 2015 23:25:15 +0200
+
 kbuild (1:0.1.9998svn2780+dfsg-2) unstable; urgency=low
 
   * Sync kbuild with Fedora patches (thanks Sérgio Basto!):
