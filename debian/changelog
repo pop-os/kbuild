@@ -1,4 +1,4 @@
-kbuild (1:0.1.9998svn2784+dfsg-1) UNRELEASED; urgency=medium
+kbuild (1:0.1.9998svn2786+dfsg-1) UNRELEASED; urgency=medium
 
   * New upstream snapshot, patch refresh.
   * Remove 08_no_o3_optimization.diff
@@ -6,6 +6,15 @@ kbuild (1:0.1.9998svn2784+dfsg-1) UNRELEASED; urgency=medium
     - Fix kfreebsd-* build failures, due to missing pthreads.
       this patch was originally under 06_binutils-gold.diff,
       but this is now a specific kfreebsd porting issue.
+    - Fix also a cosmetic issue.
+  * d/p/02_sh4.diff: fix a cosmetic issue (space) and a possible
+      clash in duplicated value.
+  * d/p/11_find-glob.patch:
+    - sync with Fedora patch (Thanks Sérgio Basto).
+  * d/p/10_ppc64el.diff:
+    - sync with Fedora patch, with a little tweak for el instead of le.
+    (Thanks again Sérgio Basto!)
+  * d/p/12_arm64.diff: patch refresh.
 
  -- Gianfranco Costamagna <costamagnagianfranco@yahoo.it>  Sun, 31 May 2015 23:25:15 +0200
 
