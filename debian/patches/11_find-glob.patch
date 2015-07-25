@@ -1,18 +1,26 @@
 Description: Avoid build failures by finding the correct glob.h header
-Author: Gianfranco Costamagna <costamagnagianfranco@yahoo.it>
+Author: Sérgio Basto <sergio@serjux.com>
 
-Last-Update: <2014-11-15>
+Last-Update: <2015-06-22>
 
-diff --git a/src/kmk/dir.c b/src/kmk/dir.c
-index 2bef610..2c39119 100644
---- a/src/kmk/dir.c
-+++ b/src/kmk/dir.c
+#Bug: http://trac.netlabs.org/kbuild/ticket/117
+--- a/src/kmk/dir.c	2015-06-22 00:19:25.132189626 +0100
++++ b/src/kmk/dir.c	2015-06-22 00:21:27.247583054 +0100
+@@ -1310,7 +1310,7 @@ print_dir_data_base (void)
+ 
+ /* Hooks for globbing.  */
+ 
+-#if defined(KMK) && !defined(__OS2__)
++#if defined(KMK) && !defined(__GLIBC__)
+ # include "glob/glob.h"
+ #else
+ #include <glob.h>
 @@ -1449,7 +1449,7 @@ dir_setup_glob (glob_t *gl)
  #ifdef __EMX__ /* The FreeBSD implementation actually uses gl_lstat!! */
    gl->gl_lstat = local_stat;
  #endif
 -#if defined(KMK) && !defined(__OS2__)
-+#if defined(WINDOWS32) && defined(KMK) && !defined(__OS2__)
++#if defined(KMK) && !defined(__GLIBC__)
    gl->gl_exists = file_exists_p;
    gl->gl_isdir = dir_exists_p;
  #endif
