@@ -85,7 +85,7 @@ Bug-Debian: http://bugs.debian.org/540665
  #define K_OS_SOLARIS    10
  /** Windows. */
  #define K_OS_WINDOWS    11
-+/** GNU/kFreeBSD (move to 4 probably) */
++/** GNU/kFreeBSD (move to 3 probably) */
 +#define K_OS_GNUKFREEBSD 12
  /** The max K_OS_* value (exclusive). */
 -#define K_OS_MAX        12
