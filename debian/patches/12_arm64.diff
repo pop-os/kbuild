@@ -26,7 +26,7 @@ Description: Add arm64 to supported architectures
  
 --- a/src/lib/k/kDefs.h
 +++ b/src/lib/k/kDefs.h
-@@ -192,6 +192,8 @@
+@@ -194,6 +194,8 @@
  #  define K_ARCH    K_ARCH_ALPHA
  # elif defined(__arm__) || defined(__arm32__)
  #  define K_ARCH    K_ARCH_ARM_32
