@@ -3,7 +3,7 @@ Section: devel
 Priority: extra
 Maintainer: Debian Virtualbox Team <pkg-virtualbox-devel@lists.alioth.debian.org>
 Uploaders: Ritesh Raj Sarraf <rrs@debian.org>,
-           Gianfranco Costamagna <costamagnagianfranco@yahoo.it>
+           Gianfranco Costamagna <locutusofborg@debian.org>
 Build-Depends: debhelper (>= 9),
                autoconf,
                automake,

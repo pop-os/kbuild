@@ -15,8 +15,9 @@ kbuild (1:0.1.9998svn2786+dfsg-1) UNRELEASED; urgency=medium
     - sync with Fedora patch, with a little tweak for el instead of le.
     (Thanks again Sérgio Basto!)
   * d/p/12_arm64.diff: patch refresh.
+  * Update my uid.
 
- -- Gianfranco Costamagna <costamagnagianfranco@yahoo.it>  Sun, 31 May 2015 23:25:15 +0200
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Sun, 26 Jul 2015 15:43:17 +0200
 
 kbuild (1:0.1.9998svn2780+dfsg-2) unstable; urgency=low
 
