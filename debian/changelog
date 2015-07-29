@@ -1,4 +1,4 @@
-kbuild (1:0.1.9998svn2786+dfsg-1) UNRELEASED; urgency=medium
+kbuild (1:0.1.9998svn2786+dfsg-1) unstable; urgency=medium
 
   * New upstream snapshot, patch refresh.
   * Remove 08_no_o3_optimization.diff
