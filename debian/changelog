@@ -1,8 +1,8 @@
-kbuild (1:0.1.9998svn2801+dfsg-1) unstable; urgency=medium
+kbuild (1:0.1.9998svn2801+dfsg-1) UNRELEASED; urgency=medium
 
   * New upstream snapshot, patch refresh.
 
- -- Gianfranco Costamagna <locutusofborg@debian.org>  Wed, 09 Sep 2015 17:32:49 +0200
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Mon, 28 Sep 2015 12:09:43 +0200
 
 kbuild (1:0.1.9998svn2786+dfsg-1) unstable; urgency=medium
 
