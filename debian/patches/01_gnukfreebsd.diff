@@ -259,8 +259,8 @@ Bug-Debian: http://bugs.debian.org/540665
  		(void)fprintf(stderr, "override %s%s%s/%s %s%sfor %s? ",
 --- a/src/kmk/Makefile.kmk
 +++ b/src/kmk/Makefile.kmk
-@@ -107,6 +107,9 @@ kmkmissing_SOURCES.freebsd = \
- 	glob/glob.c \
+@@ -111,6 +111,9 @@ kmkmissing_SOURCES.freebsd = \
+ 	kmkbuiltin/haikufakes.c \
  	glob/fnmatch.c
  
 +kmkmissing_SOURCES.gnukfreebsd += \
@@ -269,7 +269,7 @@ Bug-Debian: http://bugs.debian.org/540665
  kmkmissing_SOURCES.linux += \
  	kmkbuiltin/strlcpy.c
  
-@@ -237,6 +240,7 @@ kmk_SOURCES = \
+@@ -244,6 +247,7 @@ kmk_SOURCES = \
  	kbuild.c \
  	kbuild-object.c
  

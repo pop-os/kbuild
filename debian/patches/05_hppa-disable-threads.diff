@@ -3,7 +3,7 @@ Author: Felix Geyer <debfx-pkg@fobos.de>
 
 --- a/src/kmk/Makefile.kmk
 +++ b/src/kmk/Makefile.kmk
-@@ -240,6 +240,9 @@ kmk_SOURCES = \
+@@ -247,6 +247,9 @@ kmk_SOURCES = \
  	kbuild.c \
  	kbuild-object.c
  
