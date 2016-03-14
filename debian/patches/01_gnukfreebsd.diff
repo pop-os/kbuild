@@ -151,7 +151,7 @@ Bug-Debian: http://bugs.debian.org/540665
  #
 -KBUILD_OSES      := darwin dos dragonfly freebsd haiku l4 linux netbsd nt openbsd os2 solaris win os-agnostic
 +KBUILD_OSES      := darwin dos dragonfly freebsd gnukfreebsd haiku l4 linux netbsd nt openbsd os2 solaris win os-agnostic
- KBUILD_ARCHES    := x86 amd64 sparc32 sparc64 s390 s390x ppc32 ppc64 mips32 mips64 ia64 hppa32 hppa64 arm alpha
+ KBUILD_ARCHES    := x86 amd64 sparc32 sparc64 s390 s390x ppc32 ppc64 mips32 mips64 ia64 hppa32 hppa64 arm alpha noarch
  KBUILD_ARCHES_64 := amd64 sparc64 s390x ppc64 mips64 ia64 hppa64 alpha
  KBUILD_ARCHES_32 := x86 sparc32 s390 ppc32 mips32 hppa32 arm
 @@ -566,7 +566,7 @@ else ifeq ($(KBUILD_HOST),os2)
