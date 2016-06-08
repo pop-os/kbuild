@@ -1,7 +1,8 @@
-kbuild (1:0.1.9998svn2813+dfsg-1) unstable; urgency=medium
+kbuild (1:0.1.9998svn2814+dfsg-1) experimental; urgency=medium
 
   * New upstream snapshot, patch refresh.
-  * Update standard-version to 3.9.7, no changes required.
+  * Update standard-version to 3.9.8, no changes required.
+  * update VCS in https mode.
 
  -- Gianfranco Costamagna <locutusofborg@debian.org>  Mon, 28 Sep 2015 12:09:43 +0200
 

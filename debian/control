@@ -12,10 +12,10 @@ Build-Depends: debhelper (>= 9),
                flex,
                libacl1-dev,
                texinfo
-Standards-Version: 3.9.7
+Standards-Version: 3.9.8
 Homepage: http://svn.netlabs.org/kbuild
-Vcs-Browser: http://anonscm.debian.org/gitweb/?p=pkg-virtualbox/kbuild.git
-Vcs-Git: git://anonscm.debian.org/pkg-virtualbox/kbuild.git
+Vcs-Browser: https://anonscm.debian.org/cgit/pkg-virtualbox/kbuild.git
+Vcs-Git: https://anonscm.debian.org/git/pkg-virtualbox/kbuild.git
 
 Package: kbuild
 Architecture: any
