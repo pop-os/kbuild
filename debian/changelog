@@ -1,3 +1,9 @@
+kbuild (1:0.1.9998svn2814+dfsg-2) unstable; urgency=medium
+
+  * Upload to unstable.
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Wed, 13 Jul 2016 18:32:24 +0200
+
 kbuild (1:0.1.9998svn2814+dfsg-1) experimental; urgency=medium
 
   * New upstream snapshot, patch refresh.
