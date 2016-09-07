@@ -28,8 +28,8 @@ Bug-Debian: http://bugs.debian.org/544974
  
  
  #
---- a/src/lib/k/kDefs.h
-+++ b/src/lib/k/kDefs.h
+--- a/src/lib/kStuff/include/k/kDefs.h
++++ b/src/lib/kStuff/include/k/kDefs.h
 @@ -170,8 +170,10 @@
  #define K_ARCH_SPARC_32         (17 | K_ARCH_BIT_32 | K_ARCH_END_BIG)
  /** 64-bit SPARC. */

@@ -52,8 +52,8 @@ Index: kbuild/kBuild/header.kmk
   else ifeq ($(KBUILD_TARGET_ARCH),hppa64)
 diff --git a/src/lib/k/kDefs.h b/src/lib/k/kDefs.h
 index b67886f..47d8c58 100644
---- a/src/lib/k/kDefs.h
-+++ b/src/lib/k/kDefs.h
+--- a/src/lib/kStuff/include/k/kDefs.h
++++ b/src/lib/kStuff/include/k/kDefs.h
 @@ -162,18 +164,20 @@
  #define K_ARCH_POWERPC_32       (13 | K_ARCH_BIT_32 | K_ARCH_END_BI)
  /** 64-bit PowerPC. */

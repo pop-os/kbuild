@@ -44,7 +44,7 @@ diff --git a/src/kmk/read.c b/src/kmk/read.c
 index ebc6a63..9a326bb 100644
 --- a/src/kmk/read.c
 +++ b/src/kmk/read.c
-@@ -2782,7 +2782,7 @@ l_next:
+@@ -2786,7 +2786,7 @@ l_next:
        /* Reduce escaped percents.  If there are any unescaped it's an error  */
        name = filenames->name;
        if (find_percent_cached (&name))

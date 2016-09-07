@@ -1,3 +1,10 @@
+kbuild (1:0.1.9998svn2885+dfsg-1) UNRELEASED; urgency=medium
+
+  * New upstream release, update copyright.
+    (don't upload now, there is an incompatible GPL-2 only source file)
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Wed, 07 Sep 2016 09:55:18 +0200
+
 kbuild (1:0.1.9998svn2814+dfsg-2) unstable; urgency=medium
 
   * Upload to unstable.

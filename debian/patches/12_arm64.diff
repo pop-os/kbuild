@@ -24,8 +24,8 @@ Description: Add arm64 to supported architectures
  KBUILD_ARCHES_32 := x86 sparc32 s390 ppc32 mips32 hppa32 arm sh
  
  
---- a/src/lib/k/kDefs.h
-+++ b/src/lib/k/kDefs.h
+--- a/src/lib/kStuff/include/k/kDefs.h
++++ b/src/lib/kStuff/include/k/kDefs.h
 @@ -194,6 +194,8 @@
  #  define K_ARCH    K_ARCH_ALPHA
  # elif defined(__arm__) || defined(__arm32__)

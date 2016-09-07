@@ -3,9 +3,9 @@ Author: Felix Geyer <debfx-pkg@fobos.de>
 
 --- a/src/kmk/Makefile.kmk
 +++ b/src/kmk/Makefile.kmk
-@@ -247,6 +247,9 @@ kmk_SOURCES = \
- 	kbuild.c \
- 	kbuild-object.c
+@@ -252,6 +252,9 @@ kmk_SOURCES = \
+ kmk_SOURCES.win = \
+ 	w32/subproc/sub_proc.c
  
 +kmk_DEFS.hppa32 = CONFIG_WITHOUT_THREADS
 +kmk_DEFS.hppa64 = CONFIG_WITHOUT_THREADS
