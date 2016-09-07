@@ -1,4 +1,4 @@
-/* $Id: kdev.e 2785 2015-07-11 14:58:52Z bird $  -*- tab-width: 4 c-indent-level: 4 -*- */
+/* $Id: kdev.e 2826 2016-08-14 13:58:02Z bird $  -*- tab-width: 4 c-indent-level: 4 -*- */
 /** @file
  * Visual SlickEdit Documentation Macros.
  */
@@ -190,9 +190,9 @@ static boolean k_commentconfig(_str &sLeft, _str &sRight, int &iColumn, _str sEx
     if (sLexer)
     {
         /* multiline */
-#if __VERSION__>=14.0
-        _str aComments[];
-        GetComments(aComments, "mlcomment", sLexer)
+#if __VERSION__ >= 14.0
+        _str aComments[] = null;
+        GetComments(aComments, "mlcomment", sLexer);
         for (i = 0; i < aComments._length(); i++)
             if (!pos("documentation", aComments[i]) > 0)
             {
@@ -214,7 +214,7 @@ static boolean k_commentconfig(_str &sLeft, _str &sRight, int &iColumn, _str sEx
         }
 
         /* failed, try single line. */
-#if __VERSION__>=14.0
+#if __VERSION__ >= 14.0
         GetComments(aComments, "linecomment", sLexer)
         for (i = 0; i < aComments._length(); i++)
             if (!pos("documentation", aComments[i]) > 0)
@@ -3638,15 +3638,17 @@ _command void kdev_load_settings()
                      | VSCODEHELPFLAG_RESERVED_ON \
                      | VSCODEHELPFLAG_MOUSE_OVER_INFO \
                      | VSCODEHELPFLAG_AUTO_LIST_VALUES \
-                     | VSCODEHELPFLAG_FIND_TAG_PREFERS_DEFINITION \
-                     | VSCODEHELPFLAG_FIND_TAG_PREFERS_ALTERNATE \
                      | VSCODEHELPFLAG_HIGHLIGHT_TAGS \
+                     | VSCODEHELPFLAG_FIND_TAG_PREFERS_ALTERNATE \
                      ;
     fNewCodeHelp &= ~(  VSCODEHELPFLAG_SPACE_COMPLETION \
                       | VSCODEHELPFLAG_AUTO_SYNTAX_HELP \
                       | VSCODEHELPFLAG_NO_SPACE_AFTER_COMMA \
                       | VSCODEHELPFLAG_STRICT_LIST_SELECT \
                       | VSCODEHELPFLAG_AUTO_LIST_VALUES \
+                      | VSCODEHELPFLAG_FIND_TAG_PREFERS_DECLARATION \
+                      | VSCODEHELPFLAG_FIND_TAG_PREFERS_DEFINITION \
+                      | VSCODEHELPFLAG_FIND_TAG_HIDE_OPTIONS \
                      );
     def_codehelp_flags = fNewCodeHelp;
     foreach (sLangId in aMyLangIds)
@@ -3665,6 +3667,60 @@ _command void kdev_load_settings()
 
     message("Please restart SlickEdit.")
 }
+
+
+static int kfile_to_array(_str sFile, _str (&asLines)[])
+{
+    asLines._makeempty();
+
+    int idTempView = 0;
+    int idOrgView  = 0;
+    int rc = _open_temp_view(sFile, idTempView, idOrgView);
+    if (!rc)
+    {
+        _GoToROffset(0); /* top of the file. */
+
+        int i = 0;
+        do
+        {
+            _str sLine = '';
+            get_line(sLine);
+            asLines[i] = sLine;
+            i += 1;
+        } while (down() == 0);
+
+        _delete_temp_view(idTempView);
+        activate_window(idOrgView);
+    }
+    return rc;
+}
+
+
+_command void kload_files(_str sFile = "file-not-specified.lst")
+{
+    _str sFileDir = absolute(_strip_filename(sFile, 'NE'));
+    _str aFiles[];
+    int  rc = kfile_to_array(sFile, asFiles);
+    if (rc == 0)
+    {
+        _str sFile;
+        int i;
+        for (i = 0; i < asFiles._length(); i++)
+        {
+            _str sFile = strip(asFiles[i]);
+            if (length(sFile) > 0)
+            {
+                sAbsFile = absolute(sFile, sFileDir);
+                message("Loading \"" :+ sAbsFile :+ "\"...");
+                //say("sAbsFile=" :+ sAbsFile);
+                edit(sAbsFile);
+            }
+        }
+    }
+    else
+        message("_GetFileContents failed: " :+ rc);
+}
+
 
 /**
  * Module initiation.

@@ -1,4 +1,4 @@
-/* $Id: ntstat.h 2708 2013-11-21 10:26:40Z bird $ */
+/* $Id: ntstat.h 2858 2016-09-01 15:12:24Z bird $ */
 /** @file
  * MSC + NT stat, lstat and fstat implementation and wrappers.
  */
@@ -62,7 +62,8 @@ typedef struct BirdStat
     unsigned __int16    st_rdev;
     __int16             st_uid;
     __int16             st_gid;
-    unsigned __int16    st_padding1[3];
+    unsigned __int16    st_padding1;
+    unsigned __int32    st_attribs;
     unsigned __int32    st_blksize;
     __int64             st_blocks;
 } BirdStat_T;
@@ -77,9 +78,16 @@ typedef struct BirdStat
 int birdStatFollowLink(const char *pszPath, BirdStat_T *pStat);
 int birdStatOnLink(const char *pszPath, BirdStat_T *pStat);
 int birdStatOnFd(int fd, BirdStat_T *pStat);
+int birdStatOnFdJustSize(int fd, __int64 *pcbFile);
 int birdStatModTimeOnly(const char *pszPath, BirdTimeSpec_T *pTimeSpec, int fFollowLink);
 #ifdef ___nt_ntstuff_h
+int  birdStatHandle(HANDLE hFile, BirdStat_T *pStat, const char *pszPath);
 void birdStatFillFromFileIdFullDirInfo(BirdStat_T *pStat, MY_FILE_ID_FULL_DIR_INFORMATION const *pBuf, const char *pszPath);
+void birdStatFillFromFileIdBothDirInfo(BirdStat_T *pStat, MY_FILE_ID_BOTH_DIR_INFORMATION const *pBuf, const char *pszPath);
+void birdStatFillFromFileBothDirInfo(BirdStat_T *pStat, MY_FILE_BOTH_DIR_INFORMATION const *pBuf, const char *pszPath);
+MY_NTSTATUS birdQueryVolumeDeviceNumber(HANDLE hFile, MY_FILE_FS_VOLUME_INFORMATION *pVolInfo, size_t cbVolInfo,
+                                        unsigned __int64 *puDevNo);
+unsigned __int64 birdVolumeInfoToDeviceNumber(MY_FILE_FS_VOLUME_INFORMATION const *pVolInfo);
 #endif
 
 #define STAT_REDEFINED_ALREADY

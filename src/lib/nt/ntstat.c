@@ -1,4 +1,4 @@
-/* $Id: ntstat.c 2710 2013-11-21 14:40:10Z bird $ */
+/* $Id: ntstat.c 2880 2016-09-05 20:36:26Z bird $ */
 /** @file
  * MSC + NT stat, lstat and fstat.
  */
@@ -175,20 +175,13 @@ static unsigned short birdFileInfoToMode(HANDLE hFile, ULONG fAttribs, const cha
 }
 
 
-static void birdNtTimeToTimeSpec(__int64 iNtTime, BirdTimeSpec_T *pTimeSpec)
-{
-    iNtTime -= BIRD_NT_EPOCH_OFFSET_UNIX_100NS;
-    pTimeSpec->tv_sec  = iNtTime / 10000000;
-    pTimeSpec->tv_nsec = (iNtTime % 10000000) * 100;
-}
-
-
 /**
  * Fills in a stat structure from an MY_FILE_ID_FULL_DIR_INFORMATION entry.
  *
  * @param   pStat               The stat structure.
  * @param   pBuf                The MY_FILE_ID_FULL_DIR_INFORMATION entry.
  * @param   pszPath             Optionally, the path for X bit checks.
+ * @remarks Caller sets st_dev.
  */
 void birdStatFillFromFileIdFullDirInfo(BirdStat_T *pStat, MY_FILE_ID_FULL_DIR_INFORMATION const *pBuf, const char *pszPath)
 {
@@ -206,9 +199,72 @@ void birdStatFillFromFileIdFullDirInfo(BirdStat_T *pStat, MY_FILE_ID_FULL_DIR_IN
     pStat->st_rdev          = 0;
     pStat->st_uid           = 0;
     pStat->st_gid           = 0;
-    pStat->st_padding1[0]   = 0;
-    pStat->st_padding1[1]   = 0;
-    pStat->st_padding1[2]   = 0;
+    pStat->st_padding1      = 0;
+    pStat->st_attribs       = pBuf->FileAttributes;
+    pStat->st_blksize       = 65536;
+    pStat->st_blocks        = (pBuf->AllocationSize.QuadPart + BIRD_STAT_BLOCK_SIZE - 1)
+                            / BIRD_STAT_BLOCK_SIZE;
+}
+
+
+/**
+ * Fills in a stat structure from an MY_FILE_ID_BOTH_DIR_INFORMATION entry.
+ *
+ * @param   pStat               The stat structure.
+ * @param   pBuf                The MY_FILE_ID_BOTH_DIR_INFORMATION entry.
+ * @param   pszPath             Optionally, the path for X bit checks.
+ * @remarks Caller sets st_dev.
+ */
+void birdStatFillFromFileIdBothDirInfo(BirdStat_T *pStat, MY_FILE_ID_BOTH_DIR_INFORMATION const *pBuf, const char *pszPath)
+{
+    pStat->st_mode          = birdFileInfoToMode(INVALID_HANDLE_VALUE, pBuf->FileAttributes, pszPath,
+                                                 NULL, &pStat->st_dirsymlink);
+    pStat->st_padding0[0]   = 0;
+    pStat->st_padding0[1]   = 0;
+    pStat->st_size          = pBuf->EndOfFile.QuadPart;
+    birdNtTimeToTimeSpec(pBuf->CreationTime.QuadPart,   &pStat->st_birthtim);
+    birdNtTimeToTimeSpec(pBuf->ChangeTime.QuadPart,     &pStat->st_ctim);
+    birdNtTimeToTimeSpec(pBuf->LastWriteTime.QuadPart,  &pStat->st_mtim);
+    birdNtTimeToTimeSpec(pBuf->LastAccessTime.QuadPart, &pStat->st_atim);
+    pStat->st_ino           = pBuf->FileId.QuadPart;
+    pStat->st_nlink         = 1;
+    pStat->st_rdev          = 0;
+    pStat->st_uid           = 0;
+    pStat->st_gid           = 0;
+    pStat->st_padding1      = 0;
+    pStat->st_attribs       = pBuf->FileAttributes;
+    pStat->st_blksize       = 65536;
+    pStat->st_blocks        = (pBuf->AllocationSize.QuadPart + BIRD_STAT_BLOCK_SIZE - 1)
+                            / BIRD_STAT_BLOCK_SIZE;
+}
+
+
+/**
+ * Fills in a stat structure from an MY_FILE_BOTH_DIR_INFORMATION entry.
+ *
+ * @param   pStat               The stat structure.
+ * @param   pBuf                The MY_FILE_BOTH_DIR_INFORMATION entry.
+ * @param   pszPath             Optionally, the path for X bit checks.
+ * @remarks Caller sets st_dev.
+ */
+void birdStatFillFromFileBothDirInfo(BirdStat_T *pStat, MY_FILE_BOTH_DIR_INFORMATION const *pBuf, const char *pszPath)
+{
+    pStat->st_mode          = birdFileInfoToMode(INVALID_HANDLE_VALUE, pBuf->FileAttributes, pszPath,
+                                                 NULL, &pStat->st_dirsymlink);
+    pStat->st_padding0[0]   = 0;
+    pStat->st_padding0[1]   = 0;
+    pStat->st_size          = pBuf->EndOfFile.QuadPart;
+    birdNtTimeToTimeSpec(pBuf->CreationTime.QuadPart,   &pStat->st_birthtim);
+    birdNtTimeToTimeSpec(pBuf->ChangeTime.QuadPart,     &pStat->st_ctim);
+    birdNtTimeToTimeSpec(pBuf->LastWriteTime.QuadPart,  &pStat->st_mtim);
+    birdNtTimeToTimeSpec(pBuf->LastAccessTime.QuadPart, &pStat->st_atim);
+    pStat->st_ino           = 0;
+    pStat->st_nlink         = 1;
+    pStat->st_rdev          = 0;
+    pStat->st_uid           = 0;
+    pStat->st_gid           = 0;
+    pStat->st_padding1      = 0;
+    pStat->st_attribs       = pBuf->FileAttributes;
     pStat->st_blksize       = 65536;
     pStat->st_blocks        = (pBuf->AllocationSize.QuadPart + BIRD_STAT_BLOCK_SIZE - 1)
                             / BIRD_STAT_BLOCK_SIZE;
@@ -246,9 +302,8 @@ int birdStatHandle(HANDLE hFile, BirdStat_T *pStat, const char *pszPath)
             pStat->st_rdev          = 0;
             pStat->st_uid           = 0;
             pStat->st_gid           = 0;
-            pStat->st_padding1[0]   = 0;
-            pStat->st_padding1[1]   = 0;
-            pStat->st_padding1[2]   = 0;
+            pStat->st_padding1      = 0;
+            pStat->st_attribs       = pAll->StandardInformation.FileAttributes;
             pStat->st_blksize       = 65536;
             pStat->st_blocks        = (pAll->StandardInformation.AllocationSize.QuadPart + BIRD_STAT_BLOCK_SIZE - 1)
                                     / BIRD_STAT_BLOCK_SIZE;
@@ -321,9 +376,8 @@ int birdStatHandle(HANDLE hFile, BirdStat_T *pStat, const char *pszPath)
         pStat->st_rdev          = 0;
         pStat->st_uid           = 0;
         pStat->st_gid           = 0;
-        pStat->st_padding1[0]   = 0;
-        pStat->st_padding1[1]   = 0;
-        pStat->st_padding1[2]   = 0;
+        pStat->st_padding1      = 0;
+        pStat->st_attribs       = BasicInfo.FileAttributes;
         pStat->st_blksize       = 65536;
         pStat->st_blocks        = (StdInfo.AllocationSize.QuadPart + BIRD_STAT_BLOCK_SIZE - 1)
                                 / BIRD_STAT_BLOCK_SIZE;
@@ -355,6 +409,53 @@ int birdStatHandle(HANDLE hFile, BirdStat_T *pStat, const char *pszPath)
 
 #endif
     return rc;
+}
+
+
+/**
+ * Generates a device number from the volume information.
+ *
+ * @returns Device number.
+ * @param   pVolInfo            Volume information.
+ */
+unsigned __int64 birdVolumeInfoToDeviceNumber(const MY_FILE_FS_VOLUME_INFORMATION *pVolInfo)
+{
+    return pVolInfo->VolumeSerialNumber
+         | (pVolInfo->VolumeCreationTime.QuadPart << 32);
+}
+
+
+/**
+ * Quries the volume information and generates a device number from it.
+ *
+ * @returns NT status code.
+ * @param   hFile               The file/dir/whatever to query the volume info
+ *                              and device number for.
+ * @param   pVolInfo            User provided buffer for volume information.
+ * @param   cbVolInfo           The size of the buffer.
+ * @param   puDevNo             Where to return the device number.  This is set
+ *                              to zero on failure.
+ */
+MY_NTSTATUS birdQueryVolumeDeviceNumber(HANDLE hFile, MY_FILE_FS_VOLUME_INFORMATION *pVolInfo, size_t cbVolInfo,
+                                        unsigned __int64 *puDevNo)
+{
+    MY_IO_STATUS_BLOCK  Ios;
+    MY_NTSTATUS         rcNt;
+
+    Ios.u.Status    = -1;
+    Ios.Information = -1;
+
+    pVolInfo->VolumeSerialNumber = 0;
+    pVolInfo->VolumeCreationTime.QuadPart = 0;
+
+    rcNt = g_pfnNtQueryVolumeInformationFile(hFile, &Ios, pVolInfo, (LONG)cbVolInfo, MyFileFsVolumeInformation);
+    if (MY_NT_SUCCESS(rcNt))
+    {
+        *puDevNo = birdVolumeInfoToDeviceNumber(pVolInfo);
+        return Ios.u.Status;
+    }
+    *puDevNo = 0;
+    return rcNt;
 }
 
 
@@ -428,21 +529,11 @@ static int birdStatInternal(const char *pszPath, BirdStat_T *pStat, int fFollow)
                     birdStatFillFromFileIdFullDirInfo(pStat, pBuf, pszPath);
 
                     /* Get the serial number, reusing the buffer from above. */
-                    rcNt = g_pfnNtQueryVolumeInformationFile(hFile, &Ios, pBuf, cbBuf, MyFileFsVolumeInformation);
+                    rcNt = birdQueryVolumeDeviceNumber(hFile, (MY_FILE_FS_VOLUME_INFORMATION *)pBuf, cbBuf, &pStat->st_dev);
                     if (MY_NT_SUCCESS(rcNt))
-                        rcNt = Ios.u.Status;
-                    if (MY_NT_SUCCESS(rcNt))
-                    {
-                        MY_FILE_FS_VOLUME_INFORMATION const *pVolInfo = (MY_FILE_FS_VOLUME_INFORMATION const *)pBuf;
-                        pStat->st_dev       = pVolInfo->VolumeSerialNumber
-                                            | (pVolInfo->VolumeCreationTime.QuadPart << 32);
                         rc = 0;
-                    }
                     else
-                    {
-                        pStat->st_dev       = 0;
                         rc = birdSetErrnoFromNt(rcNt);
-                    }
                 }
 
                 birdFreeNtPath(&NameUniStr);
@@ -503,9 +594,8 @@ int birdStatOnFd(int fd, BirdStat_T *pStat)
                 pStat->st_rdev              = 0;
                 pStat->st_uid               = 0;
                 pStat->st_gid               = 0;
-                pStat->st_padding1[0]       = 0;
-                pStat->st_padding1[1]       = 0;
-                pStat->st_padding1[2]       = 0;
+                pStat->st_padding1          = 0;
+                pStat->st_attribs           = fFileType == FILE_TYPE_PIPE ? FILE_ATTRIBUTE_NORMAL : FILE_ATTRIBUTE_DEVICE;
                 pStat->st_blksize           = 512;
                 pStat->st_blocks            = 0;
                 if (fFileType == FILE_TYPE_PIPE)
@@ -524,6 +614,35 @@ int birdStatOnFd(int fd, BirdStat_T *pStat)
                 else
                     rc = birdSetErrnoFromWin32(GetLastError());
                 break;
+        }
+    }
+    else
+        rc = -1;
+    return rc;
+}
+
+
+/**
+ * Special case that only gets the file size and nothing else.
+ */
+int birdStatOnFdJustSize(int fd, __int64 *pcbFile)
+{
+    int     rc;
+    HANDLE  hFile = (HANDLE)_get_osfhandle(fd);
+    if (hFile != INVALID_HANDLE_VALUE)
+    {
+        LARGE_INTEGER cbLocal;
+        if (GetFileSizeEx(hFile, &cbLocal))
+        {
+            *pcbFile = cbLocal.QuadPart;
+            rc = 0;
+        }
+        else
+        {
+            BirdStat_T Stat;
+            rc = birdStatOnFd(fd, &Stat);
+            if (rc == 0)
+                *pcbFile = Stat.st_size;
         }
     }
     else
@@ -578,8 +697,13 @@ static int birdStatOnlyInternal(const char *pszPath, int fFollowLink, MY_FILE_BA
         }
         birdCloseFile(hFile);
 
-        if (!MY_NT_SUCCESS(rcNt))
+        if (MY_NT_SUCCESS(rcNt))
+            rc = 0;
+        else
+        {
             birdSetErrnoFromNt(rcNt);
+            rc = -1;
+        }
     }
     else
     {
