@@ -1,4 +1,4 @@
-/* $Id: kLdrModPE.c 85 2016-09-06 03:21:04Z bird $ */
+/* $Id: kLdrModPE.c 89 2016-09-07 13:32:53Z bird $ */
 /** @file
  * kLdr - The Module Interpreter for the Portable Executable (PE) Format.
  */
@@ -229,11 +229,11 @@ static int kldrModPEDoCreate(PKRDR pRdr, KLDRFOFF offNewHdr, PKLDRMODPE *ppModPE
     pMod->pRdr = pRdr;
     pMod->pOps = NULL;      /* set upon success. */
     pMod->cSegments = s.FileHdr.NumberOfSections + 1;
-    pMod->cchFilename = cchFilename;
+    pMod->cchFilename = (KU32)cchFilename;
     pMod->pszFilename = (char *)&pMod->aSegments[pMod->cSegments];
     kHlpMemCopy((char *)pMod->pszFilename, kRdrName(pRdr), cchFilename + 1);
     pMod->pszName = kHlpGetFilename(pMod->pszFilename);
-    pMod->cchName = cchFilename - (pMod->pszName - pMod->pszFilename);
+    pMod->cchName = (KU32)(cchFilename - (pMod->pszName - pMod->pszFilename));
     pMod->fFlags = 0;
     switch (s.FileHdr.Machine)
     {
@@ -324,6 +324,7 @@ static int kldrModPEDoCreate(PKRDR pRdr, KLDRFOFF offNewHdr, PKLDRMODPE *ppModPE
     for (i = 0; i < pModPE->Hdrs.FileHeader.NumberOfSections; i++)
     {
         const char *pch;
+        KU32        cb2;
 
         /* unused */
         pMod->aSegments[i + 1].pvUser = NULL;
@@ -334,24 +335,24 @@ static int kldrModPEDoCreate(PKRDR pRdr, KLDRFOFF offNewHdr, PKLDRMODPE *ppModPE
 
         /* name */
         pMod->aSegments[i + 1].pchName = pch = (const char *)&pModPE->aShdrs[i].Name[0];
-        cb = IMAGE_SIZEOF_SHORT_NAME;
-        while (   cb > 0
-               && (pch[cb - 1] == ' ' || pch[cb - 1] == '\0'))
-            cb--;
-        pMod->aSegments[i + 1].cchName = cb;
+        cb2 = IMAGE_SIZEOF_SHORT_NAME;
+        while (   cb2 > 0
+               && (pch[cb2 - 1] == ' ' || pch[cb2 - 1] == '\0'))
+            cb2--;
+        pMod->aSegments[i + 1].cchName = cb2;
 
         /* size and addresses */
         if (!(pModPE->aShdrs[i].Characteristics & IMAGE_SCN_TYPE_NOLOAD))
         {
             /* Kluge to deal with wlink ".reloc" sections that has a VirtualSize of 0 bytes. */
-            KU32 cb = pModPE->aShdrs[i].Misc.VirtualSize;
-            if (!cb)
-                cb = K_ALIGN_Z(pModPE->aShdrs[i].SizeOfRawData, pModPE->Hdrs.OptionalHeader.SectionAlignment);
+            cb2 = pModPE->aShdrs[i].Misc.VirtualSize;
+            if (!cb2)
+                cb2 = K_ALIGN_Z(pModPE->aShdrs[i].SizeOfRawData, pModPE->Hdrs.OptionalHeader.SectionAlignment);
             pMod->aSegments[i + 1].cb          = pModPE->aShdrs[i].Misc.VirtualSize;
             pMod->aSegments[i + 1].LinkAddress = pModPE->aShdrs[i].VirtualAddress
                                                + pModPE->Hdrs.OptionalHeader.ImageBase;
             pMod->aSegments[i + 1].RVA         = pModPE->aShdrs[i].VirtualAddress;
-            pMod->aSegments[i + 1].cbMapped    = cb;
+            pMod->aSegments[i + 1].cbMapped    = cb2;
             if (i + 2 < pMod->cSegments)
                 pMod->aSegments[i + 1].cbMapped= pModPE->aShdrs[i + 1].VirtualAddress
                                                - pModPE->aShdrs[i].VirtualAddress;
@@ -369,7 +370,7 @@ static int kldrModPEDoCreate(PKRDR pRdr, KLDRFOFF offNewHdr, PKLDRMODPE *ppModPE
         pMod->aSegments[i + 1].cbFile  = pModPE->aShdrs[i].SizeOfRawData;
         if (    pMod->aSegments[i + 1].cbMapped > 0 /* if mapped */
             &&  (KLDRSIZE)pMod->aSegments[i + 1].cbFile > pMod->aSegments[i + 1].cbMapped)
-            pMod->aSegments[i + 1].cbFile = pMod->aSegments[i + 1].cbMapped;
+            pMod->aSegments[i + 1].cbFile = (KLDRFOFF)(pMod->aSegments[i + 1].cbMapped);
 
         /* protection */
         switch (  pModPE->aShdrs[i].Characteristics
@@ -858,7 +859,7 @@ static int kldrModPEDoForwarderQuery(PKLDRMODPE pModPE, const void *pvBits, cons
         pszSymbol++;
     if (!*pszSymbol)
         return KLDR_ERR_PE_BAD_FORWARDER;
-    cchImpModule = pszSymbol - pszForwarder;
+    cchImpModule = (KU32)(pszSymbol - pszForwarder);
 
     pszSymbol++;                        /* skip the dot */
     if (!*pszSymbol)
@@ -1295,7 +1296,7 @@ static int kldrModPEAllocTLS(PKLDRMOD pMod, void *pvMapping)
      */
     if (pvMapping == KLDRMOD_INT_MAP)
     {
-        pvMapping = pModPE->pvMapping;
+        pvMapping = (void *)pModPE->pvMapping;
         if (!pvMapping)
             return KLDR_ERR_NOT_MAPPED;
     }
@@ -1321,7 +1322,7 @@ static void kldrModPEFreeTLS(PKLDRMOD pMod, void *pvMapping)
      */
     if (pvMapping == KLDRMOD_INT_MAP)
     {
-        pvMapping = pModPE->pvMapping;
+        pvMapping = (void *)pModPE->pvMapping;
         if (!pvMapping)
             return;
     }
@@ -1730,7 +1731,7 @@ static int kldrModPECallInit(PKLDRMOD pMod, void *pvMapping, KUPTR uHandle)
      */
     if (pvMapping == KLDRMOD_INT_MAP)
     {
-        pvMapping = pModPE->pvMapping;
+        pvMapping = (void *)pModPE->pvMapping;
         if (!pvMapping)
             return KLDR_ERR_NOT_MAPPED;
     }
@@ -1888,7 +1889,7 @@ static int kldrModPECallTerm(PKLDRMOD pMod, void *pvMapping, KUPTR uHandle)
      */
     if (pvMapping == KLDRMOD_INT_MAP)
     {
-        pvMapping = pModPE->pvMapping;
+        pvMapping = (void *)pModPE->pvMapping;
         if (!pvMapping)
             return KLDR_ERR_NOT_MAPPED;
     }
@@ -1916,7 +1917,7 @@ static int kldrModPECallThread(PKLDRMOD pMod, void *pvMapping, KUPTR uHandle, un
      */
     if (pvMapping == KLDRMOD_INT_MAP)
     {
-        pvMapping = pModPE->pvMapping;
+        pvMapping = (void *)pModPE->pvMapping;
         if (!pvMapping)
             return KLDR_ERR_NOT_MAPPED;
     }
