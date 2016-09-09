@@ -10,7 +10,7 @@ DIR=kbuild-$REVISION
 TAR=../kbuild_$VERSION.orig.tar.gz
 
 svn co -r $REVISION $SVNROOT $DIR
-tar -c -z  --exclude '*/kBuild/bin*' --exclude '*/out/*' --exclude '*/.svn*' --exclude '*/src/kmk/doc/make.texi' -f $TAR $DIR
+tar -c -z  --exclude '*/src/kWorker/tests-gpl2/*' --exclude '*/kBuild/bin*' --exclude '*/out/*' --exclude '*/.svn*' --exclude '*/src/kmk/doc/make.texi' -f $TAR $DIR
 rm -rf $DIR
 
 # move to directory 'tarballs'
