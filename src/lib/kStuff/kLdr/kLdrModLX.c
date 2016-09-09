@@ -1,4 +1,4 @@
-/* $Id: kLdrModLX.c 81 2016-08-18 22:10:38Z bird $ */
+/* $Id: kLdrModLX.c 87 2016-09-07 13:09:12Z bird $ */
 /** @file
  * kLdr - The Module Interpreter for the Linear eXecutable (LX) Format.
  */
@@ -118,9 +118,9 @@ static int kldrModLXHasDbgInfo(PKLDRMOD pMod, const void *pvBits);
 static int kldrModLXRelocateBits(PKLDRMOD pMod, void *pvBits, KLDRADDR NewBaseAddress, KLDRADDR OldBaseAddress,
                                  PFNKLDRMODGETIMPORT pfnGetImport, void *pvUser);
 static int kldrModLXDoCreate(PKRDR pRdr, KLDRFOFF offNewHdr, PKLDRMODLX *ppModLX);
-static const KU8 *kldrModLXDoNameTableLookupByOrdinal(const KU8 *pbNameTable, KI32 cbNameTable, KU32 iOrdinal);
-static int kldrModLXDoNameLookup(PKLDRMODLX pModLX, const char *pchSymbol, KU32 cchSymbol, KU32 *piSymbol);
-static const KU8 *kldrModLXDoNameTableLookupByName(const KU8 *pbNameTable, KI32 cbNameTable,
+static const KU8 *kldrModLXDoNameTableLookupByOrdinal(const KU8 *pbNameTable, KSSIZE cbNameTable, KU32 iOrdinal);
+static int kldrModLXDoNameLookup(PKLDRMODLX pModLX, const char *pchSymbol, KSIZE cchSymbol, KU32 *piSymbol);
+static const KU8 *kldrModLXDoNameTableLookupByName(const KU8 *pbNameTable, KSSIZE cbNameTable,
                                                        const char *pchSymbol, KSIZE cchSymbol);
 static int kldrModLXDoLoadBits(PKLDRMODLX pModLX, void *pvBits);
 static int kldrModLXDoIterDataUnpacking(KU8 *pbDst, const KU8 *pbSrc, int cbSrc);
@@ -297,7 +297,7 @@ static int kldrModLXDoCreate(PKRDR pRdr, KLDRFOFF offNewHdr, PKLDRMODLX *ppModLX
     pMod->pRdr = pRdr;
     pMod->pOps = NULL;      /* set upon success. */
     pMod->cSegments = Hdr.e32_objcnt;
-    pMod->cchFilename = cchFilename;
+    pMod->cchFilename = (KU32)cchFilename;
     pMod->pszFilename = (char *)K_ALIGN_P(&pMod->aSegments[pMod->cSegments], 8);
     kHlpMemCopy((char *)pMod->pszFilename, kRdrName(pRdr), cchFilename + 1);
     pMod->pszName = NULL; /* finalized further down */
@@ -477,7 +477,7 @@ static int kldrModLXDoCreate(PKRDR pRdr, KLDRFOFF offNewHdr, PKLDRMODLX *ppModLX
             pMod->aSegments[i].cbMapped = K_ALIGN_Z(pModLX->paObjs[i].o32_size, OBJPAGELEN);
         else
             pMod->aSegments[i].cbMapped = pModLX->paObjs[i + 1].o32_base - pModLX->paObjs[i].o32_base;
-        NextRVA += pMod->aSegments[i].cbMapped;
+        NextRVA += (KU32)pMod->aSegments[i].cbMapped;
 
         /* protection */
         switch (  pModLX->paObjs[i].o32_flags
@@ -708,7 +708,7 @@ static int kldrModLXQuerySymbol(PKLDRMOD pMod, const void *pvBits, KLDRADDR Base
  * @param   cchSymbol   The symbol name length.
  * @param   piSymbol    Where to store the symbol ordinal.
  */
-static int kldrModLXDoNameLookup(PKLDRMODLX pModLX, const char *pchSymbol, KU32 cchSymbol, KU32 *piSymbol)
+static int kldrModLXDoNameLookup(PKLDRMODLX pModLX, const char *pchSymbol, KSIZE cchSymbol, KU32 *piSymbol)
 {
 
     /*
@@ -783,7 +783,7 @@ static KU32 kldrModLXDoHash(const char *pchSymbol, KU8 cchSymbol)
  * @param   pchSymbol       The name of the symbol we're looking for.
  * @param   cchSymbol       The length of the symbol name.
  */
-static const KU8 *kldrModLXDoNameTableLookupByName(const KU8 *pbNameTable, KI32 cbNameTable,
+static const KU8 *kldrModLXDoNameTableLookupByName(const KU8 *pbNameTable, KSSIZE cbNameTable,
                                                    const char *pchSymbol, KSIZE cchSymbol)
 {
     /*
@@ -1172,7 +1172,7 @@ static int kldrModLXEnumSymbols(PKLDRMOD pMod, const void *pvBits, KLDRADDR Base
  * @param   cbNameTable The size of the name table.
  * @param   iOrdinal    The ordinal to search for.
  */
-static const KU8 *kldrModLXDoNameTableLookupByOrdinal(const KU8 *pbNameTable, KI32 cbNameTable, KU32 iOrdinal)
+static const KU8 *kldrModLXDoNameTableLookupByOrdinal(const KU8 *pbNameTable, KSSIZE cbNameTable, KU32 iOrdinal)
 {
     while (*pbNameTable != 0 && cbNameTable > 0)
     {
@@ -1423,7 +1423,7 @@ static int kldrModLXDoLoadBits(PKLDRMODLX pModLX, void *pvBits)
     for (i = 0; i < pModLX->Hdr.e32_objcnt; i++)
     {
         const struct o32_obj * const pObj = &pModLX->paObjs[i];
-        const KU32      cPages = pModLX->pMod->aSegments[i].cbMapped / OBJPAGELEN;
+        const KU32      cPages = (KU32)(pModLX->pMod->aSegments[i].cbMapped / OBJPAGELEN);
         KU32            iPage;
         KU8            *pbPage = (KU8 *)pvBits + (KUPTR)pModLX->pMod->aSegments[i].RVA;
 
@@ -2038,7 +2038,7 @@ static int kldrModLXCallInit(PKLDRMOD pMod, void *pvMapping, KUPTR uHandle)
      */
     if (pvMapping == KLDRMOD_INT_MAP)
     {
-        pvMapping = pModLX->pvMapping;
+        pvMapping = (void *)pModLX->pvMapping;
         if (!pvMapping)
             return KLDR_ERR_NOT_MAPPED;
     }
@@ -2165,7 +2165,7 @@ static int kldrModLXCallTerm(PKLDRMOD pMod, void *pvMapping, KUPTR uHandle)
      */
     if (pvMapping == KLDRMOD_INT_MAP)
     {
-        pvMapping = pModLX->pvMapping;
+        pvMapping = (void *)pModLX->pvMapping;
         if (!pvMapping)
             return KLDR_ERR_NOT_MAPPED;
     }
@@ -2475,11 +2475,11 @@ static int kldrModLXRelocateBits(PKLDRMOD pMod, void *pvBits, KLDRADDR NewBaseAd
                     if (    (u.prlc->nr_stype & NRSRCMASK) == NROFF32
                         &&  off >= 0
                         &&  off <= OBJPAGELEN - 4)
-                        *(KU32 *)&pbPage[off] = uValue;
+                        *(KU32 *)&pbPage[off] = (KU32)uValue;
                     else if (    (u.prlc->nr_stype & NRSRCMASK) == NRSOFF32
                             &&  off >= 0
                             &&  off <= OBJPAGELEN - 4)
-                        *(KU32 *)&pbPage[off] = uValue - (PageAddress + off + 4);
+                        *(KU32 *)&pbPage[off] = (KU32)(uValue - (PageAddress + off + 4));
                     else
                     {
                         /* generic */
@@ -2500,7 +2500,7 @@ static int kldrModLXRelocateBits(PKLDRMOD pMod, void *pvBits, KLDRADDR NewBaseAd
                         {
                             int off = *poffSrc++;
                             if (off >= 0 && off <= OBJPAGELEN - 4)
-                                *(KU32 *)&pbPage[off] = uValue;
+                                *(KU32 *)&pbPage[off] = (KU32)uValue;
                             else
                             {
                                 rc = kldrModLXDoReloc(pbPage, off, PageAddress, u.prlc, iSelector, uValue, fKind);
@@ -2515,7 +2515,7 @@ static int kldrModLXRelocateBits(PKLDRMOD pMod, void *pvBits, KLDRADDR NewBaseAd
                         {
                             int off = *poffSrc++;
                             if (off >= 0 && off <= OBJPAGELEN - 4)
-                                *(KU32 *)&pbPage[off] = uValue - (PageAddress + off + 4);
+                                *(KU32 *)&pbPage[off] = (KU32)(uValue - (PageAddress + off + 4));
                             else
                             {
                                 rc = kldrModLXDoReloc(pbPage, off, PageAddress, u.prlc, iSelector, uValue, fKind);
@@ -2633,7 +2633,7 @@ static int kldrModLXDoReloc(KU8 *pbPage, int off, KLDRADDR PageAddress, const st
             cb = 4;
             break;
         case NRSOFF32:
-            uData.off32 = (KU32)uValue - (PageAddress + off + 4);
+            uData.off32 = (KU32)(uValue - (PageAddress + off + 4));
             cb = 4;
             break;
         default:

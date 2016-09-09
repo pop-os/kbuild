@@ -1,4 +1,4 @@
-/* $Id: kWorker.c 2888 2016-09-06 15:02:20Z bird $ */
+/* $Id: kWorker.c 2898 2016-09-08 15:38:50Z bird $ */
 /** @file
  * kWorker - experimental process reuse worker for Windows.
  *
@@ -52,6 +52,8 @@ extern void nt_fullpath(const char *pszPath, char *pszFull, size_t cchFull);
 #include "nt/kFsCache.h"
 #include "quote_argv.h"
 #include "md5.h"
+
+#include "../kmk/kmkbuiltin.h"
 
 
 /*********************************************************************************************************************************
@@ -2526,6 +2528,14 @@ static void __cdecl kwSandbox_msvcrt_terminate(void)
 }
 
 
+/** Kernel32 - SetConsoleCtrlHandler(). */
+static BOOL WINAPI kwSandbox_Kernel32_SetConsoleCtrlHandler(PHANDLER_ROUTINE pfnHandler, BOOL fAdd)
+{
+    KW_LOG(("SetConsoleCtrlHandler(%p, %d) - ignoring\n"));
+    return TRUE;
+}
+
+
 /** The CRT internal __getmainargs() API. */
 static int __cdecl kwSandbox_msvcrt___getmainargs(int *pargc, char ***pargv, char ***penvp,
                                                   int dowildcard, int const *piNewMode)
@@ -4179,7 +4189,6 @@ static KBOOL kwFsIsCachableExtensionA(const char *pszExt, KBOOL fAttrQuery)
             && (chThird  == 'x' || chThird  == 'X')
             && pszExt[3] == '\0')
             return K_TRUE;
-
     }
     /* Misc starting with i. */
     else if (chFirst == 'i' || chFirst == 'I')
@@ -4201,6 +4210,18 @@ static KBOOL kwFsIsCachableExtensionA(const char *pszExt, KBOOL fAttrQuery)
                     && pszExt[3] == '\0')
                     return K_TRUE;
             }
+        }
+    }
+    /* Assembly header: .mac */
+    else if (chFirst == 'm' || chFirst == 'M')
+    {
+        char const  chSecond = pszExt[1];
+        if (chSecond == 'a' || chSecond == 'A')
+        {
+            char const chThird = pszExt[2];
+            if (  (chThird == 'c' || chThird == 'C')
+                && pszExt[3] == '\0')
+                return K_TRUE;
         }
     }
     else if (fAttrQuery)
@@ -4464,6 +4485,20 @@ static HANDLE WINAPI kwSandbox_Kernel32_CreateFileA(LPCSTR pszFilename, DWORD dw
                                 KWFS_LOG(("CreateFileA(%s) -> %p [cached]\n", pszFilename, hFile));
                                 return hFile;
                             }
+                        }
+                        /* These are for nasm and yasm header searching.  Cache will already
+                           have checked the directories for the file, no need to call
+                           CreateFile to do it again. */
+                        else if (enmError == KFSLOOKUPERROR_NOT_FOUND)
+                        {
+                            KWFS_LOG(("CreateFileA(%s) -> INVALID_HANDLE_VALUE, ERROR_FILE_NOT_FOUND\n", pszFilename));
+                            return INVALID_HANDLE_VALUE;
+                        }
+                        else if (   enmError == KFSLOOKUPERROR_PATH_COMP_NOT_FOUND
+                                 || enmError == KFSLOOKUPERROR_PATH_COMP_NOT_DIR)
+                        {
+                            KWFS_LOG(("CreateFileA(%s) -> INVALID_HANDLE_VALUE, ERROR_PATH_NOT_FOUND\n", pszFilename));
+                            return INVALID_HANDLE_VALUE;
                         }
 
                         /* fallback */
@@ -6097,6 +6132,8 @@ KWREPLACEMENTFUNCTION const g_aSandboxReplacements[] =
     { TUPLE("FlsAlloc"),                    NULL,       (KUPTR)kwSandbox_Kernel32_FlsAlloc },
     { TUPLE("FlsFree"),                     NULL,       (KUPTR)kwSandbox_Kernel32_FlsFree },
 
+    { TUPLE("SetConsoleCtrlHandler"),       NULL,       (KUPTR)kwSandbox_Kernel32_SetConsoleCtrlHandler },
+
 #ifdef WITH_HASH_MD5_CACHE
     { TUPLE("CryptCreateHash"),             NULL,       (KUPTR)kwSandbox_Advapi32_CryptCreateHash },
     { TUPLE("CryptHashData"),               NULL,       (KUPTR)kwSandbox_Advapi32_CryptHashData },
@@ -6201,6 +6238,7 @@ KWREPLACEMENTFUNCTION const g_aSandboxNativeReplacements[] =
 #ifdef WITH_TEMP_MEMORY_FILES
     { TUPLE("DeleteFileW"),                 NULL,       (KUPTR)kwSandbox_Kernel32_DeleteFileW },
 #endif
+    { TUPLE("SetConsoleCtrlHandler"),       NULL,       (KUPTR)kwSandbox_Kernel32_SetConsoleCtrlHandler },
 
 #ifdef WITH_HASH_MD5_CACHE
     { TUPLE("CryptCreateHash"),             NULL,       (KUPTR)kwSandbox_Advapi32_CryptCreateHash },
@@ -6210,6 +6248,7 @@ KWREPLACEMENTFUNCTION const g_aSandboxNativeReplacements[] =
 #endif
 
     { TUPLE("RtlPcToFileHeader"),           NULL,       (KUPTR)kwSandbox_ntdll_RtlPcToFileHeader },
+
 
     /*
      * MS Visual C++ CRTs.
@@ -6228,6 +6267,49 @@ KWREPLACEMENTFUNCTION const g_aSandboxNativeReplacements[] =
 };
 /** Number of entries in g_aSandboxNativeReplacements. */
 KU32 const                  g_cSandboxNativeReplacements = K_ELEMENTS(g_aSandboxNativeReplacements);
+
+
+/**
+ * Control handler.
+ *
+ * @returns TRUE if handled, FALSE if not.
+ * @param   dwCtrlType          The signal.
+ */
+static BOOL WINAPI kwSandboxCtrlHandler(DWORD dwCtrlType)
+{
+    switch (dwCtrlType)
+    {
+        case CTRL_C_EVENT:
+            fprintf(stderr, "kWorker: Ctrl-C\n");
+            exit(9);
+            break;
+
+        case CTRL_BREAK_EVENT:
+            fprintf(stderr, "kWorker: Ctrl-Break\n");
+            exit(10);
+            break;
+
+        case CTRL_CLOSE_EVENT:
+            fprintf(stderr, "kWorker: console closed\n");
+            exit(11);
+            break;
+
+        case CTRL_LOGOFF_EVENT:
+            fprintf(stderr, "kWorker: logoff event\n");
+            exit(11);
+            break;
+
+        case CTRL_SHUTDOWN_EVENT:
+            fprintf(stderr, "kWorker: shutdown event\n");
+            exit(11);
+            break;
+
+        default:
+            fprintf(stderr, "kwSandboxCtrlHandler: %#x\n", dwCtrlType);
+            break;
+    }
+    return TRUE;
+}
 
 
 /**
@@ -6813,20 +6895,47 @@ static int kwSandboxExec(PKWSANDBOX pSandbox, PKWTOOL pTool, KU32 cArgs, const c
 
 
 /**
+ * Does the post command part of a job (optional).
+ *
+ * @returns The exit code of the job.
+ * @param   cPostCmdArgs        Number of post command arguments (includes cmd).
+ * @param   papszPostCmdArgs    The post command and its argument.
+ */
+static int kSubmitHandleJobPostCmd(KU32 cPostCmdArgs, const char **papszPostCmdArgs)
+{
+    const char *pszCmd = papszPostCmdArgs[0];
+
+    /* Allow the kmk builtin prefix. */
+    static const char s_szKmkBuiltinPrefix[] = "kmk_builtin_";
+    if (kHlpStrNComp(pszCmd, s_szKmkBuiltinPrefix, sizeof(s_szKmkBuiltinPrefix) - 1) == 0)
+        pszCmd += sizeof(s_szKmkBuiltinPrefix) - 1;
+
+    /* Command switch. */
+    if (kHlpStrComp(pszCmd, "kDepObj") == 0)
+        return kmk_builtin_kDepObj(cPostCmdArgs, (char **)papszPostCmdArgs, NULL);
+
+    return kwErrPrintfRc(42 + 5 , "Unknown post command: '%s'\n", pszCmd);
+}
+
+
+/**
  * Part 2 of the "JOB" command handler.
  *
  * @returns The exit code of the job.
- * @param   pszExecutable   The executable to execute.
- * @param   pszCwd          The current working directory of the job.
- * @param   cArgs           The number of arguments.
- * @param   papszArgs       The argument vector.
+ * @param   pszExecutable       The executable to execute.
+ * @param   pszCwd              The current working directory of the job.
+ * @param   cArgs               The number of arguments.
+ * @param   papszArgs           The argument vector.
  * @param   fWatcomBrainDamange Whether to apply watcom rules while quoting.
- * @param   cEnvVars        The number of environment variables.
- * @param   papszEnvVars    The enviornment vector.
+ * @param   cEnvVars            The number of environment variables.
+ * @param   papszEnvVars        The enviornment vector.
+ * @param   cPostCmdArgs        Number of post command arguments (includes cmd).
+ * @param   papszPostCmdArgs    The post command and its argument.
  */
 static int kSubmitHandleJobUnpacked(const char *pszExecutable, const char *pszCwd,
                                     KU32 cArgs, const char **papszArgs, KBOOL fWatcomBrainDamange,
-                                    KU32 cEnvVars, const char **papszEnvVars)
+                                    KU32 cEnvVars, const char **papszEnvVars,
+                                    KU32 cPostCmdArgs, const char **papszPostCmdArgs)
 {
     int rcExit;
     PKWTOOL pTool;
@@ -6891,6 +7000,12 @@ static int kSubmitHandleJobUnpacked(const char *pszExecutable, const char *pszCw
                 g_fRestart = K_TRUE;
                 break;
         }
+
+        /*
+         * Do the post command, if present.
+         */
+        if (cPostCmdArgs && rcExit == 0)
+            rcExit = kSubmitHandleJobPostCmd(cPostCmdArgs, papszPostCmdArgs);
     }
     else
         rcExit = 42 + 1;
@@ -6982,7 +7097,6 @@ static int kSubmitHandleJob(const char *pszMsg, KSIZE cbMsg)
                             char const **papszEnvVars = kHlpAlloc((cEnvVars + 1) * sizeof(papszEnvVars[0]));
                             if (papszEnvVars)
                             {
-                                KU32 i;
                                 for (i = 0; i < cEnvVars; i++)
                                 {
                                     papszEnvVars[i] = pszMsg;
@@ -6997,21 +7111,60 @@ static int kSubmitHandleJob(const char *pszMsg, KSIZE cbMsg)
                                     }
                                 }
                                 papszEnvVars[cEnvVars] = 0;
+
+                                /* Flags (currently just watcom argument brain damanage). */
                                 if (cbMsg >= sizeof(KU8))
                                 {
                                     KBOOL fWatcomBrainDamange = *pszMsg++;
                                     cbMsg--;
-                                    if (cbMsg == 0)
+
+                                    /* Post command argument count (can be zero). */
+                                    if (cbMsg >= sizeof(KU32))
                                     {
-                                        /*
-                                         * The next step.
-                                         */
-                                        rcExit = kSubmitHandleJobUnpacked(pszExecutable, pszCwd,
-                                                                          cArgs, papszArgs, fWatcomBrainDamange,
-                                                                          cEnvVars, papszEnvVars);
+                                        KU32 cPostCmdArgs;
+                                        kHlpMemCopy(&cPostCmdArgs, pszMsg, sizeof(cPostCmdArgs));
+                                        pszMsg += sizeof(cPostCmdArgs);
+                                        cbMsg  -= sizeof(cPostCmdArgs);
+
+                                        if (cPostCmdArgs >= 0 && cPostCmdArgs < 32)
+                                        {
+                                            char const *apszPostCmdArgs[32+1];
+                                            for (i = 0; i < cPostCmdArgs; i++)
+                                            {
+                                                apszPostCmdArgs[i] = pszMsg;
+                                                cbTmp = kHlpStrLen(pszMsg) + 1;
+                                                pszMsg += cbTmp;
+                                                if (   cbTmp < cbMsg
+                                                    || (cbTmp == cbMsg && i + 1 == cPostCmdArgs))
+                                                    cbMsg -= cbTmp;
+                                                else
+                                                {
+                                                    cbMsg = KSIZE_MAX;
+                                                    break;
+                                                }
+                                            }
+                                            if (cbMsg == 0)
+                                            {
+                                                apszPostCmdArgs[cPostCmdArgs] = NULL;
+
+                                                /*
+                                                 * The next step.
+                                                 */
+                                                rcExit = kSubmitHandleJobUnpacked(pszExecutable, pszCwd,
+                                                                                  cArgs, papszArgs, fWatcomBrainDamange,
+                                                                                  cEnvVars, papszEnvVars,
+                                                                                  cPostCmdArgs, apszPostCmdArgs);
+                                            }
+                                            else if (cbMsg == KSIZE_MAX)
+                                                kwErrPrintf("Detected bogus message unpacking post command and its arguments!\n");
+                                            else
+                                                kwErrPrintf("Message has %u bytes unknown trailing bytes\n", cbMsg);
+                                        }
+                                        else
+                                            kwErrPrintf("Bogus post command argument count: %u %#x\n", cPostCmdArgs, cPostCmdArgs);
                                     }
                                     else
-                                        kwErrPrintf("Message has %u bytes unknown trailing bytes\n", cbMsg);
+                                        kwErrPrintf("Detected bogus message looking for the post command argument count!\n");
                                 }
                                 else
                                     kwErrPrintf("Detected bogus message unpacking environment variables!\n");
@@ -7200,7 +7353,8 @@ static int kwTestRun(int argc, char **argv)
     {
         rcExit = kSubmitHandleJobUnpacked(argv[i], pszCwd,
                                           argc - i, &argv[i], fWatcomBrainDamange,
-                                          cEnvVars, environ);
+                                          cEnvVars, environ,
+                                          0, NULL);
         KW_LOG(("rcExit=%d\n", rcExit));
         kwSandboxCleanupLate(&g_Sandbox);
     }
@@ -7221,6 +7375,12 @@ int main(int argc, char **argv)
 #if defined(KBUILD_OS_WINDOWS) && defined(KBUILD_ARCH_X86)
     PVOID           pvVecXcptHandler = AddVectoredExceptionHandler(0 /*called last*/, kwSandboxVecXcptEmulateChained);
 #endif
+
+    /*
+     * Register our Control-C and Control-Break handlers.
+     */
+    if (!SetConsoleCtrlHandler(kwSandboxCtrlHandler, TRUE /*fAdd*/))
+        return kwErrPrintfRc(3, "SetConsoleCtrlHandler failed: %u\n", GetLastError());
 
     /*
      * Create the cache and mark the temporary directory as using the custom revision.
@@ -7434,7 +7594,9 @@ int main(int argc, char **argv)
 //     with:    1m15.165069s = 75.165069 s => 120.016388s - 75.165069s = 44.851319s => 44.85/120.02 = 37% speed up.
 //    r2884 building vbox/debug (r110512):
 //     without: 11m14.446609s = 674.446609 s
-//     with:     9m01.017344s = 540.017344 s => 674.446609s - 540.017344s = 134.429265s => 134.43/674.45 = 20% speed up
+//     with:     9m01.017344s = 541.017344 s => 674.446609s - 541.017344s = 133.429265 => 133.43/674.45 = 19% speed up
+//    r2896 building vbox/debug (r110577):
+//     with:     8m31.182384s = 511.182384 s => 674.446609s - 511.182384s = 163.264225 = 163.26/674.45 = 24% speed up
 //
 // Dell (W7/amd64, infected by mcafee):
 //     kmk 1: 285.278/1024 = 0x0 (0.278591796875)
