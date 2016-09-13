@@ -1,4 +1,4 @@
-# $Id: Makefile.kmk 2886 2016-09-06 14:31:46Z bird $
+# $Id: Makefile.kmk 2906 2016-09-09 22:15:57Z bird $
 ## @file
 # Sub-makefile for various libraries and stuff.
 #
@@ -38,8 +38,11 @@ kUtil_DEFS.win = __WIN__
 kUtil_SOURCES = \
 	crc32.c \
 	md5.c \
+	maybe_con_write.c \
+	maybe_con_fwrite.c \
 	kbuild_version.c
 kUtil_SOURCES.win = \
+	msc_buffered_printf.c \
 	nt_fullpath.c \
 	nt_fullpath_cached.c \
 	quote_argv.c \
