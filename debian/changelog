@@ -1,4 +1,4 @@
-kbuild (1:0.1.9998svn2898+dfsg-1) UNRELEASED; urgency=medium
+kbuild (1:0.1.9998svn2911+dfsg-1) UNRELEASED; urgency=medium
 
   * New upstream release, update copyright.
     (don't upload now, there is an incompatible GPL-2 only source file)
