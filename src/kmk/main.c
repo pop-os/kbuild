@@ -89,6 +89,7 @@ void verify_file_data_base (void);
 
 #ifdef CONFIG_WITH_PRINT_STATS_SWITCH
 void print_variable_stats (void);
+void print_dir_stats (void);
 void print_file_stats (void);
 #endif
 
@@ -915,6 +916,7 @@ set_make_priority_and_affinity (void)
 
 
 #ifdef WINDOWS32
+# ifndef KMK
 /*
  * HANDLE runtime exceptions by avoiding a requestor on the GUI. Capture
  * exception and print it to stderr instead.
@@ -989,6 +991,7 @@ handle_runtime_exceptions( struct _EXCEPTION_POINTERS *exinfo )
   return (255); /* not reached */
 #endif
 }
+# endif /* !KMK */
 
 /*
  * On WIN32 systems we don't have the luxury of a /bin directory that
@@ -1231,16 +1234,33 @@ get_online_cpu_count(void)
 {
 # ifdef WINDOWS32
     /* Windows: Count the active CPUs. */
-    int cpus, i;
-    SYSTEM_INFO si;
-    GetSystemInfo(&si);
-    for (i = cpus = 0; i < sizeof(si.dwActiveProcessorMask) * 8; i++)
+    int cpus;
+
+    /* Process groups (W7+). */
+    typedef DWORD (WINAPI *PFNGETACTIVEPROCESSORCOUNT)(DWORD);
+    PFNGETACTIVEPROCESSORCOUNT pfnGetActiveProcessorCount;
+    pfnGetActiveProcessorCount = (PFNGETACTIVEPROCESSORCOUNT)GetProcAddress(GetModuleHandleW(L"kernel32.dll"),
+                                                                            "GetActiveProcessorCount");
+    if (pfnGetActiveProcessorCount)
+      cpus = pfnGetActiveProcessorCount(ALL_PROCESSOR_GROUPS);
+    /* Legacy (<= Vista). */
+    else
       {
-        if (si.dwActiveProcessorMask & 1)
-          cpus++;
-        si.dwActiveProcessorMask >>= 1;
+        int i;
+        SYSTEM_INFO si;
+        GetSystemInfo(&si);
+        for (i = cpus = 0; i < sizeof(si.dwActiveProcessorMask) * 8; i++)
+          {
+            if (si.dwActiveProcessorMask & 1)
+              cpus++;
+            si.dwActiveProcessorMask >>= 1;
+          }
       }
-    return cpus ? cpus : 1;
+    if (!cpus)
+      cpus = 1;
+    if (cpus > 64)
+      cpus = 64; /* (wait for multiple objects limit) */
+    return cpus;
 
 # elif defined(__OS2__)
     /* OS/2: Count the active CPUs. */
@@ -1376,7 +1396,9 @@ main (int argc, char **argv, char **envp)
   char *windows32_path = NULL;
 
 # ifndef ELECTRIC_HEAP /* Drop this because it prevents JIT debugging. */
+#  ifndef KMK /* Don't want none of this crap. */
   SetUnhandledExceptionFilter(handle_runtime_exceptions);
+#  endif
 # endif /* !ELECTRIC_HEAP */
 
   /* start off assuming we have no shell */
@@ -3858,6 +3880,7 @@ print_stats ()
   /* Make stuff: */
   print_variable_stats ();
   print_file_stats ();
+  print_dir_stats ();
 # ifdef KMK
   print_kbuild_define_stats ();
 # endif

@@ -1,4 +1,4 @@
-/* $Id: nthlp.h 2862 2016-09-02 02:39:56Z bird $ */
+/* $Id: nthlp.h 2997 2016-11-01 23:28:02Z bird $ */
 /** @file
  * MSC + NT helper functions.
  */
@@ -54,16 +54,27 @@ int         birdSetErrnoToInvalidArg(void);
 int         birdSetErrnoToBadFileNo(void);
 
 
-HANDLE      birdOpenFile(const char *pszPath, ACCESS_MASK fDesiredAccess, ULONG fFileAttribs, ULONG fShareAccess,
-                         ULONG fCreateDisposition, ULONG fCreateOptions, ULONG fObjAttribs);
-HANDLE      birdOpenParentDir(const char *pszPath, ACCESS_MASK fDesiredAccess, ULONG fFileAttribs, ULONG fShareAccess,
-                              ULONG fCreateDisposition, ULONG fCreateOptions, ULONG fObjAttribs,
+HANDLE      birdOpenFile(const char *pszPath, ACCESS_MASK fDesiredAccess, ULONG fFileAttribs,
+                         ULONG fShareAccess, ULONG fCreateDisposition, ULONG fCreateOptions, ULONG fObjAttribs);
+HANDLE      birdOpenFileW(const wchar_t *pwszPath, ACCESS_MASK fDesiredAccess, ULONG fFileAttribs,
+                          ULONG fShareAccess, ULONG fCreateDisposition, ULONG fCreateOptions, ULONG fObjAttribs);
+HANDLE      birdOpenFileEx(HANDLE hRoot, const char *pszPath, ACCESS_MASK fDesiredAccess, ULONG fFileAttribs,
+                           ULONG fShareAccess, ULONG fCreateDisposition, ULONG fCreateOptions, ULONG fObjAttribs);
+HANDLE      birdOpenFileExW(HANDLE hRoot, const wchar_t *pwszPath, ACCESS_MASK fDesiredAccess, ULONG fFileAttribs,
+                            ULONG fShareAccess, ULONG fCreateDisposition, ULONG fCreateOptions, ULONG fObjAttribs);
+HANDLE      birdOpenParentDir(HANDLE hRoot, const char *pszPath, ACCESS_MASK fDesiredAccess, ULONG fFileAttribs,
+                              ULONG fShareAccess, ULONG fCreateDisposition, ULONG fCreateOptions, ULONG fObjAttribs,
                               MY_UNICODE_STRING *pNameUniStr);
-MY_NTSTATUS birdOpenFileUniStr(MY_UNICODE_STRING *pNtPath, ACCESS_MASK fDesiredAccess, ULONG fFileAttribs,
+HANDLE      birdOpenParentDirW(HANDLE hRoot, const wchar_t *pwszPath, ACCESS_MASK fDesiredAccess, ULONG fFileAttribs,
+                               ULONG fShareAccess, ULONG fCreateDisposition, ULONG fCreateOptions, ULONG fObjAttribs,
+                               MY_UNICODE_STRING *pNameUniStr);
+MY_NTSTATUS birdOpenFileUniStr(HANDLE hRoot, MY_UNICODE_STRING *pNtPath, ACCESS_MASK fDesiredAccess, ULONG fFileAttribs,
                                ULONG fShareAccess, ULONG fCreateDisposition, ULONG fCreateOptions, ULONG fObjAttribs,
                                HANDLE *phFile);
+HANDLE      birdOpenCurrentDirectory(void);
 void        birdCloseFile(HANDLE hFile);
 int         birdDosToNtPath(const char *pszPath, MY_UNICODE_STRING *pNtPath);
+int         birdDosToRelativeNtPath(const char *pszPath, MY_UNICODE_STRING *pNtPath);
 void        birdFreeNtPath(MY_UNICODE_STRING *pNtPath);
 
 

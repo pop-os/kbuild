@@ -1,4 +1,4 @@
-/* $Id: kDepIDB.c 2856 2016-09-01 02:42:08Z bird $ */
+/* $Id: kDepIDB.c 2955 2016-09-21 19:05:53Z bird $ */
 /** @file
  * kDepIDB - Extract dependency information from a MS Visual C++ .idb file.
  */
@@ -864,7 +864,7 @@ int kmk_builtin_kDepIDB(int argc, char *argv[], char **envp)
      */
     if (!i)
     {
-        depOptimize(fFixCase, fQuiet);
+        depOptimize(fFixCase, fQuiet, NULL /*pszIgnoredExt*/);
         fprintf(pOutput, "%s:", pszTarget);
         depPrint(pOutput);
         if (fStubs)

@@ -1,4 +1,4 @@
-/* $Id: kDep.c 2886 2016-09-06 14:31:46Z bird $ */
+/* $Id: kDep.c 2955 2016-09-21 19:05:53Z bird $ */
 /** @file
  * kDep - Common Dependency Managemnt Code.
  */
@@ -57,6 +57,10 @@
 #endif
 
 #include "kDep.h"
+
+#ifdef KWORKER
+extern int kwFsPathExists(const char *pszPath);
+#endif
 
 
 /*******************************************************************************
@@ -182,13 +186,14 @@ static void fixcase(char *pszFilename)
 /**
  * 'Optimizes' and corrects the dependencies.
  */
-void depOptimize(int fFixCase, int fQuiet)
+void depOptimize(int fFixCase, int fQuiet, const char *pszIgnoredExt)
 {
     /*
      * Walk the list correct the names and re-insert them.
      */
-    PDEP pDepOrg = g_pDeps;
-    PDEP pDep = g_pDeps;
+    size_t  cchIgnoredExt = pszIgnoredExt ? strlen(pszIgnoredExt) : 0;
+    PDEP    pDepOrg = g_pDeps;
+    PDEP    pDep = g_pDeps;
     g_pDeps = NULL;
     for (; pDep; pDep = pDep->pNext)
     {
@@ -198,7 +203,7 @@ void depOptimize(int fFixCase, int fQuiet)
         char        szFilename[PATH_MAX + 1];
 #endif
         char       *pszFilename;
-#ifndef KMK
+#if !defined(KWORKER) && !defined(KMK)
         struct stat s;
 #endif
 
@@ -209,6 +214,14 @@ void depOptimize(int fFixCase, int fQuiet)
             &&  pDep->szFilename[pDep->cchFilename - 1] == '>')
             continue;
         pszFilename = pDep->szFilename;
+
+        /*
+         * Skip pszIgnoredExt if given.
+         */
+        if (   pszIgnoredExt
+            && pDep->cchFilename > cchIgnoredExt
+            && memcmp(&pDep->szFilename[pDep->cchFilename - cchIgnoredExt], pszIgnoredExt, cchIgnoredExt) == 0)
+            continue;
 
 #if K_OS != K_OS_OS2 && K_OS != K_OS_WINDOWS
         /*
@@ -238,7 +251,9 @@ void depOptimize(int fFixCase, int fQuiet)
         /*
          * Check that the file exists before we start depending on it.
          */
-#ifdef KMK
+#ifdef KWORKER
+        if (!kwFsPathExists(pszFilename))
+#elif defined(KMK)
         if (!file_exists_p(pszFilename))
 #elif K_OS == K_OS_WINDOWS
         if (birdStatModTimeOnly(pszFilename, &s.st_mtim, 1 /*fFollowLink*/) != 0)

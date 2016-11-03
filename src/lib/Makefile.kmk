@@ -1,10 +1,10 @@
-# $Id: Makefile.kmk 2906 2016-09-09 22:15:57Z bird $
+# $Id: Makefile.kmk 2994 2016-11-01 22:41:41Z bird $
 ## @file
 # Sub-makefile for various libraries and stuff.
 #
 
 #
-# Copyright (c) 2006-2013 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
+# Copyright (c) 2006-2016 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
 #
 # This file is part of kBuild.
 #
@@ -52,6 +52,7 @@ kUtil_SOURCES.win = \
        nt/ntdir.c \
        nt/ntstat.c \
        nt/ntunlink.c \
+       nt/fts-nt.c \
        nt/kFsCache.c \
        kStuff/kHlp/CRT/kHlpCRTString.cpp \
        kStuff/kHlp/CRT/kHlpCRTAlloc.cpp
@@ -78,6 +79,12 @@ tstNtStat_TEMPLATE = BIN
 tstNtStat_SOURCES = nt/tstNtStat.c
 tstNtStat_LIBS = $(LIB_KUTIL)
 tstNtStat_NOINST = 1
+
+PROGRAMS.win += tstNtFts
+tstNtFts_TEMPLATE = BIN
+tstNtFts_SOURCES = nt/tstNtFts.c nt/fts-nt.c
+tstNtFts_LIBS = $(LIB_KUTIL)
+tstNtFts_NOINST = 1
 
 include $(FILE_KBUILD_SUB_FOOTER)
 

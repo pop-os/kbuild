@@ -1,4 +1,4 @@
-# $Id: Makefile.kmk 2894 2016-09-08 13:27:56Z bird $
+# $Id: Makefile.kmk 2968 2016-09-26 18:14:50Z bird $
 ## @file
 # Sub-makefile for kWorker.
 #
@@ -30,6 +30,7 @@ include $(PATH_KBUILD)/subheader.kmk
 
 PROGRAMS += kWorker
 kWorker_TEMPLATE = BIN-STATIC-THREADED
+kWorker_DEFS := KWORKER
 kWorker_DEFS.debug = K_STRICT
 kWorker_DEFS.release = NASSERT
 kWorker_SOURCES = \
@@ -47,7 +48,9 @@ kWorker_LIBS.win = \
 	$(PATH_SDK_WINDDK71_LIB_WNET)/ntdll.lib \
 	$(PATH_SDK_WINDDK71_LIB_WNET)/psapi.lib
 kWorker_LDFLAGS.win = \
-	/BASE:0x10000 /DYNAMICBASE:NO /FIXED /SECTION:DefLdBuf,EWR
+	/BASE:0x10000 /DYNAMICBASE:NO /FIXED
+#kWorker_LDFLAGS.win.x86 = \
+#	/SAFESEH:NO - doesn't help anyone.
 
 
 #
@@ -57,6 +60,7 @@ LIBRARIES += kWorkerLib
 kWorkerLib_TEMPLATE = LIB-STATIC-THREADED
 kWorkerLib_DEFPATH = ../lib # Need fix from r2837.
 kWorkerLib_DEFPATH := $(PATH_SUB_CURRENT)/../lib
+kWorkerLib_DEFS := KWORKER
 kWorkerLib_SOURCES = \
 	crc32.c \
 	md5.c \
@@ -72,7 +76,10 @@ kWorkerLib_SOURCES.win = \
        nt/ntstat.c \
        nt/ntunlink.c \
        nt/kFsCache.c \
-       quote_argv.c
+       quote_argv.c \
+	maybe_con_write.c \
+	maybe_con_fwrite.c \
+	msc_buffered_printf.c
 kbuild_version.c_DEFS = KBUILD_SVN_REV=$(KBUILD_SVN_REV)
 
 #
