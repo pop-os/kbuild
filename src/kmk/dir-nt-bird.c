@@ -1,4 +1,4 @@
-/* $Id: dir-nt-bird.c 2886 2016-09-06 14:31:46Z bird $ */
+/* $Id: dir-nt-bird.c 2948 2016-09-20 15:36:07Z bird $ */
 /** @file
  * Reimplementation of dir.c for NT using kFsCache.
  *
@@ -120,8 +120,8 @@ int dir_file_exists_p(const char *pszDir, const char *pszName)
                     fRc = 1;
                 else
                 {
-                    PKFSOBJ pNameObj = kFsCacheLookupRelativeToDirA(g_pFsCache, (PKFSDIR)pDirObj,
-                                                                    pszName, strlen(pszName), &enmError, NULL);
+                    PKFSOBJ pNameObj = kFsCacheLookupRelativeToDirA(g_pFsCache, (PKFSDIR)pDirObj, pszName, strlen(pszName),
+                                                                    0/*fFlags*/, &enmError, NULL);
                     if (pNameObj)
                     {
                         fRc = pNameObj->bObjType == KFSOBJ_TYPE_MISSING;
@@ -412,13 +412,50 @@ void dir_setup_glob(glob_t *pGlob)
 }
 
 
-void print_dir_data_base(void)
+/**
+ * Print statitstics.
+ */
+void print_dir_stats(void)
 {
-    /** @todo. */
+    FILE *pOut = stdout;
+    KU32 cMisses;
+
+    fputs("\n"
+          "# NT dir cache stats:\n", pOut);
+    fprintf(pOut, "#  %u objects, taking up %u (%#x) bytes, avg %u bytes\n",
+            g_pFsCache->cObjects, g_pFsCache->cbObjects, g_pFsCache->cbObjects, g_pFsCache->cbObjects / g_pFsCache->cObjects);
+    fprintf(pOut, "#  %u A path hashes, taking up %u (%#x) bytes, avg %u bytes, %u collision\n",
+            g_pFsCache->cAnsiPaths, g_pFsCache->cbAnsiPaths, g_pFsCache->cbAnsiPaths,
+            g_pFsCache->cbAnsiPaths / K_MAX(g_pFsCache->cAnsiPaths, 1), g_pFsCache->cAnsiPathCollisions);
+#ifdef KFSCACHE_CFG_UTF16
+    fprintf(pOut, "#  %u W path hashes, taking up %u (%#x) bytes, avg %u bytes, %u collisions\n",
+            g_pFsCache->cUtf16Paths, g_pFsCache->cbUtf16Paths, g_pFsCache->cbUtf16Paths,
+            g_pFsCache->cbUtf16Paths / K_MAX(g_pFsCache->cUtf16Paths, 1), g_pFsCache->cUtf16PathCollisions);
+#endif
+    fprintf(pOut, "#  %u child hash tables, total of %u entries, %u children inserted, %u collisions\n",
+            g_pFsCache->cChildHashTabs, g_pFsCache->cChildHashEntriesTotal,
+            g_pFsCache->cChildHashed, g_pFsCache->cChildHashCollisions);
+
+    cMisses = g_pFsCache->cLookups - g_pFsCache->cPathHashHits - g_pFsCache->cWalkHits;
+    fprintf(pOut, "#  %u lookups: %u (%" KU64_PRI " %%) path hash hits, %u (%" KU64_PRI "%%) walks hits, %u (%" KU64_PRI "%%) misses\n",
+            g_pFsCache->cLookups,
+            g_pFsCache->cPathHashHits, g_pFsCache->cPathHashHits * (KU64)100 / K_MAX(g_pFsCache->cLookups, 1),
+            g_pFsCache->cWalkHits, g_pFsCache->cWalkHits * (KU64)100 / K_MAX(g_pFsCache->cLookups, 1),
+            cMisses, cMisses * (KU64)100 / K_MAX(g_pFsCache->cLookups, 1));
+    fprintf(pOut, "#  %u child searches, %u (%" KU64_PRI "%%) hash hits\n",
+            g_pFsCache->cChildSearches,
+            g_pFsCache->cChildHashHits, g_pFsCache->cChildHashHits * (KU64)100 / K_MAX(g_pFsCache->cChildSearches, 1));
 }
 
 
+void print_dir_data_base(void)
+{
+    /** @todo. */
 
+}
+
+
+/* duplicated in kWorker.c */
 void nt_fullpath_cached(const char *pszPath, char *pszFull, size_t cbFull)
 {
     KFSLOOKUPERROR  enmError;
@@ -440,7 +477,7 @@ void nt_fullpath_cached(const char *pszPath, char *pszFull, size_t cbFull)
                 {
                     kHlpAssert(off > 1);
                     kHlpAssert(pAncestor != NULL);
-                    kHlpAssert(pAncestor->ObjcchName > 0);
+                    kHlpAssert(pAncestor->Obj.cchName > 0);
                     pszFull[--off] = '/';
                     off -= pAncestor->Obj.cchName;
                     kHlpAssert(pAncestor->Obj.cchParent == off);
@@ -583,5 +620,68 @@ int dir_cache_volatile_dir(const char *pszDir)
     else
         error(reading_file, "failed to mark '%s' as volatile (not found)", pszDir);
     return -1;
+}
+
+/**
+ * Invalidates a deleted directory so the cache can close handles to it.
+ *
+ * Used by kmk_builtin_rm and kmk_builtin_rmdir.
+ *
+ * @returns 0 on success, -1 on failure.
+ * @param   pszDir      The directory to invalidate as deleted.
+ */
+int dir_cache_deleted_directory(const char *pszDir)
+{
+    if (kFsCacheInvalidateDeletedDirectoryA(g_pFsCache, pszDir))
+        return 0;
+    return -1;
+}
+
+
+int kmk_builtin_dircache(int argc, char **argv, char **envp)
+{
+    if (argc >= 2)
+    {
+        const char *pszCmd = argv[1];
+        if (strcmp(pszCmd, "invalidate") == 0)
+        {
+            if (argc == 2)
+            {
+                dir_cache_invalid_all();
+                return 0;
+            }
+            fprintf(stderr, "kmk_builtin_dircache: the 'invalidate' command takes no arguments!\n");
+        }
+        else if (strcmp(pszCmd, "invalidate-missing") == 0)
+        {
+            if (argc == 2)
+            {
+                dir_cache_invalid_missing ();
+                return 0;
+            }
+            fprintf(stderr, "kmk_builtin_dircache: the 'invalidate-missing' command takes no arguments!\n");
+        }
+        else if (strcmp(pszCmd, "volatile") == 0)
+        {
+            int i;
+            for (i = 2; i < argc; i++)
+                dir_cache_volatile_dir(argv[i]);
+            return 0;
+        }
+        else if (strcmp(pszCmd, "deleted") == 0)
+        {
+            int i;
+            for (i = 2; i < argc; i++)
+                dir_cache_deleted_directory(argv[i]);
+            return 0;
+        }
+        else
+            fprintf(stderr, "kmk_builtin_dircache: Invalid command '%s'!\n", pszCmd);
+    }
+    else
+        fprintf(stderr, "kmk_builtin_dircache: No command given!\n");
+
+    K_NOREF(envp);
+    return 2;
 }
 

@@ -1,4 +1,4 @@
-/* $Id: kFsCache.h 2868 2016-09-04 01:28:12Z bird $ */
+/* $Id: kFsCache.h 2967 2016-09-26 18:14:13Z bird $ */
 /** @file
  * kFsCache.c - NT directory content cache.
  */
@@ -47,7 +47,7 @@
 #define KFSCACHE_CFG_SHORT_NAMES            1
 /** @def KFSCACHE_CFG_PATH_HASH_TAB_SIZE
  * Size of the path hash table. */
-#define KFSCACHE_CFG_PATH_HASH_TAB_SIZE     16381
+#define KFSCACHE_CFG_PATH_HASH_TAB_SIZE     99991
 /** The max length paths we consider. */
 #define KFSCACHE_CFG_MAX_PATH               1024
 /** The max ANSI name length. */
@@ -111,20 +111,6 @@ typedef struct KFSDIR *PKFSDIR;
 typedef struct KFSOBJHASH *PKFSOBJHASH;
 
 
-/**
- * Directory hash table entry.
- *
- * There can be two of these per directory entry when the short name differs
- * from the long name.
- */
-typedef struct KFSOBJHASH
-{
-    /** Pointer to the next entry with the same hash. */
-    PKFSOBJHASH         pNext;
-    /** Pointer to the object. */
-    PKFSOBJ             pObj;
-} KFSOBJHASH;
-
 
 /** Pointer to a user data item. */
 typedef struct KFSUSERDATA *PKFSUSERDATA;
@@ -140,6 +126,21 @@ typedef struct KFSUSERDATA
     /** The destructor. */
     void (*pfnDestructor)(PKFSCACHE pCache, PKFSOBJ pObj, PKFSUSERDATA pData);
 } KFSUSERDATA;
+
+
+/**
+ * Storage for name strings for the unlikely event that they should grow in
+ * length after the KFSOBJ was created.
+ */
+typedef struct KFSOBJNAMEALLOC
+{
+    /** Size of the allocation. */
+    KU32        cb;
+    /** The space for names. */
+    char        abSpace[1];
+} KFSOBJNAMEALLOC;
+/** Name growth allocation. */
+typedef KFSOBJNAMEALLOC *PKFSOBJNAMEALLOC;
 
 
 /**
@@ -162,6 +163,17 @@ typedef struct KFSOBJ
     /** Flags, KFSOBJ_F_XXX. */
     KU32                fFlags;
 
+    /** Hash value of the name inserted into the parent hash table.
+     * This is 0 if not inserted.  Names are only hashed and inserted as they are
+     * first found thru linear searching of its siblings, and which name it is
+     * dependens on the lookup function (W or A) and whether the normal name or
+     * short name seems to have matched.
+     *
+     * @note It was ruled out as too much work to hash and track all four names,
+     *       so instead this minimalist approach was choosen in stead. */
+    KU32                uNameHash;
+    /** Pointer to the next child with the same name hash value. */
+    PKFSOBJ             pNextNameHash;
     /** Pointer to the parent (directory).
      * This is only NULL for a root. */
     PKFSDIR             pParent;
@@ -204,6 +216,9 @@ typedef struct KFSOBJ
 # endif
 #endif
 
+    /** Allocation for handling name length increases. */
+    PKFSOBJNAMEALLOC    pNameAlloc;
+
     /** Pointer to the first user data item */
     PKFSUSERDATA        pUserDataHead;
 
@@ -230,13 +245,16 @@ typedef struct KFSDIR
     /** The allocated size of papChildren. */
     KU32                cChildrenAllocated;
 
-    /** Pointer to the hash table.
-     * @todo this isn't quite there yet, structure wise. sigh.  */
-    PKFSOBJHASH         paHashTab;
-    /** The size of the hash table.
-     * @remarks The hash table is optional and only used when there are a lot of
-     *          entries in the directory. */
-    KU32                cHashTab;
+    /** Pointer to the child hash table. */
+    PKFSOBJ            *papHashTab;
+    /** The mask shift of the hash table.
+     * Hash table size is a power of two, this is the size minus one.
+     *
+     * @remarks The hash table is optional and populated by lookup hits.  The
+     *          assumption being that a lookup is repeated and will choose a good
+     *          name to hash on.  We've got up to 4 different hashes, so this
+     *          was the easy way out. */
+    KU32                fHashTabMask;
 
     /** Handle to the directory (we generally keep it open). */
 #ifndef DECLARE_HANDLE
@@ -400,6 +418,23 @@ typedef struct KFSCACHE
     KSIZE               cPathHashHits;
     /** Number of hits walking the file system hierarchy. */
     KSIZE               cWalkHits;
+    /** Number of child searches. */
+    KSIZE               cChildSearches;
+    /** Number of cChildLookups resolved thru hash table hits. */
+    KSIZE               cChildHashHits;
+    /** The number of child hash tables. */
+    KSIZE               cChildHashTabs;
+    /** The sum of all child hash table sizes. */
+    KSIZE               cChildHashEntriesTotal;
+    /** Number of children inserted into the hash tables. */
+    KSIZE               cChildHashed;
+    /** Number of collisions in the child hash tables. */
+    KSIZE               cChildHashCollisions;
+    /** Number times a object name changed. */
+    KSIZE               cNameChanges;
+    /** Number times a object name grew and needed KFSOBJNAMEALLOC.
+     *  (Subset of cNameChanges) */
+    KSIZE               cNameGrowths;
 
     /** The root directory. */
     KFSDIR              RootDir;
@@ -456,17 +491,29 @@ PKFSOBJ     kFsCacheCreateObjectW(PKFSCACHE pCache, PKFSDIR pParent, wchar_t con
                                   KU8 bObjType, KFSLOOKUPERROR *penmError);
 PKFSOBJ     kFsCacheLookupA(PKFSCACHE pCache, const char *pszPath, KFSLOOKUPERROR *penmError);
 PKFSOBJ     kFsCacheLookupW(PKFSCACHE pCache, const wchar_t *pwszPath, KFSLOOKUPERROR *penmError);
-PKFSOBJ     kFsCacheLookupRelativeToDirA(PKFSCACHE pCache, PKFSDIR pParent, const char *pszPath, KU32 cchPath,
+PKFSOBJ     kFsCacheLookupRelativeToDirA(PKFSCACHE pCache, PKFSDIR pParent, const char *pszPath, KU32 cchPath, KU32 fFlags,
                                          KFSLOOKUPERROR *penmError, PKFSOBJ *ppLastAncestor);
-PKFSOBJ     kFsCacheLookupRelativeToDirW(PKFSCACHE pCache, PKFSDIR pParent, const wchar_t *pwszPath, KU32 cwcPath,
+PKFSOBJ     kFsCacheLookupRelativeToDirW(PKFSCACHE pCache, PKFSDIR pParent, const wchar_t *pwszPath, KU32 cwcPath, KU32 fFlags,
                                          KFSLOOKUPERROR *penmError, PKFSOBJ *ppLastAncestor);
 PKFSOBJ     kFsCacheLookupWithLengthA(PKFSCACHE pCache, const char *pchPath, KSIZE cchPath, KFSLOOKUPERROR *penmError);
 PKFSOBJ     kFsCacheLookupWithLengthW(PKFSCACHE pCache, const wchar_t *pwcPath, KSIZE cwcPath, KFSLOOKUPERROR *penmError);
 PKFSOBJ     kFsCacheLookupNoMissingA(PKFSCACHE pCache, const char *pszPath, KFSLOOKUPERROR *penmError);
 PKFSOBJ     kFsCacheLookupNoMissingW(PKFSCACHE pCache, const wchar_t *pwszPath, KFSLOOKUPERROR *penmError);
 
+/** @name KFSCACHE_LOOKUP_F_XXX - lookup flags
+ * @{ */
+/** No inserting new cache entries.
+ * This effectively prevent directories from being repopulated too.  */
+#define KFSCACHE_LOOKUP_F_NO_INSERT     KU32_C(1)
+/** No refreshing cache entries. */
+#define KFSCACHE_LOOKUP_F_NO_REFRESH    KU32_C(2)
+/** @} */
 
 KU32        kFsCacheObjRelease(PKFSCACHE pCache, PKFSOBJ pObj);
+KU32        kFsCacheObjReleaseTagged(PKFSCACHE pCache, PKFSOBJ pObj, const char *pszWhere);
+#ifndef NDEBUG /* enable to debug object release. */
+# define kFsCacheObjRelease(a_pCache, a_pObj) kFsCacheObjReleaseTagged(a_pCache, a_pObj, __FUNCTION__)
+#endif
 KU32        kFsCacheObjRetain(PKFSOBJ pObj);
 PKFSUSERDATA kFsCacheObjAddUserData(PKFSCACHE pCache, PKFSOBJ pObj, KUPTR uKey, KSIZE cbUserData);
 PKFSUSERDATA kFsCacheObjGetUserData(PKFSCACHE pCache, PKFSOBJ pObj, KUPTR uKey);
@@ -484,5 +531,6 @@ void        kFsCacheInvalidateAll(PKFSCACHE pCache);
 void        kFsCacheInvalidateCustomMissing(PKFSCACHE pCache);
 void        kFsCacheInvalidateCustomBoth(PKFSCACHE pCache);
 KBOOL       kFsCacheSetupCustomRevisionForTree(PKFSCACHE pCache, PKFSOBJ pRoot);
+KBOOL       kFsCacheInvalidateDeletedDirectoryA(PKFSCACHE pCache, const char *pszDir);
 
 #endif

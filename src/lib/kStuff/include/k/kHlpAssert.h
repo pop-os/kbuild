@@ -1,4 +1,4 @@
-/* $Id: kHlpAssert.h 70 2015-08-13 09:03:02Z bird $ */
+/* $Id: kHlpAssert.h 93 2016-09-15 11:53:59Z bird $ */
 /** @file
  * kHlpAssert - Assertion Macros.
  */
@@ -221,12 +221,18 @@ extern "C" {
 #define kHlpAssertRC(rc)                        kHlpAssertMsg((rc) == 0, ("%s = %d\n", #rc, (rc)))
 #define kHlpAssertRCReturn(rc, rcRet)           kHlpAssertMsgReturn((rc) == 0, ("%s = %d -> %d\n", #rc, (rc), (rcRet)), (rcRet))
 #define kHlpAssertRCReturnVoid(rc)              kHlpAssertMsgReturnVoid((rc) == 0, ("%s = %d -> %d\n", #rc, (rc), (rcRet)))
-#define kHlpAssertFailed()                      kHlpAssert(0)
-#define kHlpAssertFailedReturn(rcRet)           kHlpAssertReturn(0, (rcRet))
-#define kHlpAssertFailedReturnVoid()            kHlpAssertReturnVoid(0)
-#define kHlpAssertMsgFailed(msg)                kHlpAssertMsg(0, msg)
-#define kHlpAssertMsgFailedReturn(msg, rcRet)   kHlpAssertMsgReturn(0, msg, (rcRet))
-#define kHlpAssertMsgFailedReturnVoid(msg)      kHlpAssertMsgReturnVoid(0, msg))
+#define kHlpAssertFailed()                              kHlpAssert(0)
+#define kHlpAssertFailedStmt(stmt)                      kHlpAssertStmt(0, stmt)
+#define kHlpAssertFailedReturn(rcRet)                   kHlpAssertReturn(0, (rcRet))
+#define kHlpAssertFailedStmtReturn(stmt, rcRet)         kHlpAssertStmtReturn(0, stmt, (rcRet))
+#define kHlpAssertFailedReturnVoid()                    kHlpAssertReturnVoid(0)
+#define kHlpAssertFailedStmtReturnVoid(stmt)            kHlpAssertStmtReturnVoid(0, stmt)
+#define kHlpAssertMsgFailed(msg)                        kHlpAssertMsg(0, msg)
+#define kHlpAssertMsgFailedStmt(msg, stmt)              kHlpAssertMsgStmt(0, msg, stmt)
+#define kHlpAssertMsgFailedReturn(msg, rcRet)           kHlpAssertMsgReturn(0, msg, (rcRet))
+#define kHlpAssertMsgFailedStmtReturn(msg, stmt, rcRet) kHlpAssertMsgStmtReturn(0, msg, stmt, (rcRet))
+#define kHlpAssertMsgFailedReturnVoid(msg)              kHlpAssertMsgReturnVoid(0, msg)
+#define kHlpAssertMsgFailedStmtReturnVoid(msg, stmt)    kHlpAssertMsgStmtReturnVoid(0, msg, stmt)
 
 /**
  * Helper function that displays the first part of the assertion message.

@@ -1,4 +1,4 @@
-# $Id: Makefile.kmk 2907 2016-09-09 22:33:26Z bird $
+# $Id: Makefile.kmk 2994 2016-11-01 22:41:41Z bird $
 ## @file
 # Sub-makefile for kmk / GNU Make.
 #
@@ -88,6 +88,7 @@ kmkmissing_SOURCES = \
 	kmkbuiltin/setmode.c \
 	kmkbuiltin/strmode.c \
 	kmkbuiltin/kbuild_protection.c \
+	kmkbuiltin/common-env-and-cwd-opt.c \
 	getopt.c \
 	getopt1.c \
 	electric.c
@@ -279,6 +280,7 @@ kmk_SOURCES += \
 	kmkbuiltin/mv.c \
 	kmkbuiltin/ln.c \
 	kmkbuiltin/printf.c \
+	kmkbuiltin/redirect.c \
 	kmkbuiltin/rm.c \
 	kmkbuiltin/rmdir.c \
 	$(if-expr $(KBUILD_TARGET) == win,kmkbuiltin/kSubmit.c) \
@@ -394,7 +396,6 @@ kmk_rm_SOURCES = \
 	kmkbuiltin/rm.c
 
 kmk_redirect_TEMPLATE = BIN-KMK
-kmk_redirect_DEFS = kmk_builtin_redirect=main
 kmk_redirect_SOURCES = \
 	kmkbuiltin/redirect.c
 kmk_redirect_SOURCES.win = \
@@ -530,6 +531,16 @@ PROGRAMS.win += tstFileInfo
 tstFileInfo_TEMPLATE = BIN
 tstFileInfo_SOURCES = w32/tstFileInfo.c
 
+#
+# tstFileInfo
+#
+PROGRAMS.win += tstFtsFake
+tstFtsFake_TEMPLATE = BIN-KMK
+tstFtsFake_NOINST = 1
+tstFtsFake_DEFS = USE_OLD_FTS
+tstFtsFake_SOURCES = ../lib/nt/tstNtFts.c
+
+
 
 include $(FILE_KBUILD_SUB_FOOTER)
 
@@ -545,8 +556,13 @@ $(kmk_0_OUTDIR)/config.h: $(kmk_config.h.$(KBUILD_TARGET))
 #
 # Some missing headers.
 #
+if1of ($(KBUILD_TARGET), win nt)
+$(kmk_0_OUTDIR)/fts.h: $(MAKEFILE) | $(call DIRDEP,$(kmk_0_OUTDIR))
+	$(APPEND) -t "$@" "#include <nt/fts-nt.h>"
+else
 $(kmk_0_OUTDIR)/fts.h: $(kmk_DEFPATH)/kmkbuiltin/ftsfake.h | $(call DIRDEP,$(kmk_0_OUTDIR))
 	$(CP) $^ $@
+endif
 
 $(kmk_0_OUTDIR)/unistd.h: | $(call DIRDEP,$(kmk_0_OUTDIR))
 	$(ECHO_EXT) > $@
