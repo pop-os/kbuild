@@ -1,4 +1,4 @@
-/* $Id: kkeys.e 2558 2012-02-13 12:36:03Z bird $ */
+/* $Id: kkeys.e 3015 2016-11-29 10:14:56Z bird $ */
 /** @file
  * Bird's key additions to Visual Slickedit.
  */
@@ -299,6 +299,7 @@ _command kkeys_push_ref()
       if (sProjTagFile != '')
       {
 
+# if __VERSION__ < 21.0 /** @todo fix me? */
          /* HACK ALERT: Make sure gtag_filelist_last_ext has the right value. */
          _update_tag_filelist_ext(sLangId);
 
@@ -309,14 +310,17 @@ _command kkeys_push_ref()
          /* HACK ALERT: Replace the tag file list for this language. */
          gtag_filelist_ext._makeempty();
          gtag_filelist_ext[0] = sProjTagFile;
-         saved_gtag_filelist_cache_updated = true;
+         gtag_filelist_cache_updated = true;
+# endif
 
          /* Do the reference searching. */
          push_ref('-e ' :+ sLangId);
 
+# if __VERSION__ < 21.0
          /* restore*/
          gtag_filelist_cache_updated = saved_gtag_filelist_cache_updated;
          gtag_filelist_ext           = saved_gtag_filelist_ext;
+# endif
       }
       else
          push_ref();

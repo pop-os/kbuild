@@ -1,4 +1,4 @@
-/* $Id: kdev.e 2826 2016-08-14 13:58:02Z bird $  -*- tab-width: 4 c-indent-level: 4 -*- */
+/* $Id: kdev.e 3018 2017-01-07 00:06:39Z bird $  -*- tab-width: 4 c-indent-level: 4 -*- */
 /** @file
  * Visual SlickEdit Documentation Macros.
  */
@@ -190,45 +190,71 @@ static boolean k_commentconfig(_str &sLeft, _str &sRight, int &iColumn, _str sEx
     if (sLexer)
     {
         /* multiline */
-#if __VERSION__ >= 14.0
+#if __VERSION__ >= 21.0
+        COMMENT_TYPE aComments[];
+        GetComments(aComments, "M", sLexer);
+        for (i = 0; i < aComments._length(); i++)
+            if (!aComments[i].isDocumentation)
+            {
+                sLeft   = aComments[i].delim1;
+                sRight  = aComments[i].delim2;
+                iColumn = aComments[i].startcol;
+                if (sLeft != '' && sRight != '')
+                    return true;
+            }
+#else
+# if __VERSION__ >= 14.0
         _str aComments[] = null;
         GetComments(aComments, "mlcomment", sLexer);
         for (i = 0; i < aComments._length(); i++)
-            if (!pos("documentation", aComments[i]) > 0)
+            if (pos("documentation", aComments[i]) <= 0)
             {
                 sLine = aComments[i];
                 break;
             }
         if (sLine != '')
-#else
+# else
         rc = _ini_get_value(slick_path_search("user.vlx"), sLexer, 'mlcomment', sLine);
         if (rc)
             rc = _ini_get_value(slick_path_search("vslick.vlx"), sLexer, 'mlcomment', sLine);
         if (!rc)
-#endif
+# endif
         {
             sLeft  = strip(word(sLine, 1));
             sRight = strip(word(sLine, 2));
             if (sLeft != '' && sRight != '')
                 return true;
         }
+#endif
 
         /* failed, try single line. */
-#if __VERSION__ >= 14.0
+#if __VERSION__ >= 21.0
+        GetComments(aComments, "L", sLexer);
+        for (i = 0; i < aComments._length(); i++)
+            if (!aComments[i].isDocumentation)
+            {
+                sLeft   = aComments[i].delim1;
+                sRight  = '';
+                iColumn = aComments[i].startcol;
+                if (sLeft != '')
+                    return true;
+            }
+#else
+# if __VERSION__ >= 14.0
         GetComments(aComments, "linecomment", sLexer)
         for (i = 0; i < aComments._length(); i++)
-            if (!pos("documentation", aComments[i]) > 0)
+            if (pos("documentation", aComments[i]) <= 0)
             {
                 sLine = aComments[i];
                 break;
             }
         if (sLine != '')
-#else
+# else
         rc = _ini_get_value(slick_path_search("user.vlx"), sLexer, 'linecomment', sLine);
         if (rc)
             rc = _ini_get_value(slick_path_search("vslick.vlx"), sLexer, 'linecomment', sLine);
         if (!rc)
-#endif
+# endif
         {
             sLeft = strip(word(sLine, 1));
             sRight = '';
@@ -239,6 +265,7 @@ static boolean k_commentconfig(_str &sLeft, _str &sRight, int &iColumn, _str sEx
             if (sLeft != '')
                 return true;
         }
+#endif
     }
 
     /*
@@ -2447,6 +2474,11 @@ static int k_style_emacs_var(_str sVar, _str sVal)
         return -1;
     //say 'k_style_emacs_var: 'sVar'='sVal;
 
+#if __VERSION__ >= 21.0
+    /** @todo figure out p_index. */
+    return 0;
+#else
+
     /*
      * Unpack the mode style parameters.
      */
@@ -2804,6 +2836,7 @@ static int k_style_emacs_var(_str sVar, _str sVal)
     }
 
     return 0;
+#endif
 }
 
 
@@ -3570,6 +3603,10 @@ _command void kdev_load_settings()
         LanguageSettings.setSyntaxIndent(sLangId, 4);
 
         /* C/C++ setup, wrap at column 80 not 64. */
+# if __VERSION__ >= 21.0
+        if (_LangGetPropertyInt32(sLangId, VSLANGPROPNAME_CW_FIXED_RIGHT_COLUMN) < 80)
+            _LangSetPropertyInt32(sLangId, VSLANGPROPNAME_CW_FIXED_RIGHT_COLUMN, 80);
+# else
         sTmp = LanguageSettings.getCommentWrapOptions(sLangId);
         if (length(sTmp) > 10)
         {
@@ -3581,6 +3618,7 @@ _command void kdev_load_settings()
             //replace_def_data("def-comment-wrap-c",'0 1 0 1 1 80 0 0 80 0 80 0 80 0 0 0 '); - disabled
             //replace_def_data("def-comment-wrap-c",'1 1 0 1 1 80 0 0 80 0 80 0 80 0 0 1 '); - enable block comment wrap.
         }
+# endif
 
         /* set the encoding to UTF-8 without any friggin useless signatures. */
         idxExt = name_match('def-lang-for-ext-', 1, MISC_TYPE);
