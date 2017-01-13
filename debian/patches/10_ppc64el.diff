@@ -41,7 +41,7 @@ Index: kbuild/kBuild/header.kmk
  KBUILD_ARCHES_32 := x86 sparc32 s390 ppc32 mips32 hppa32 arm sh
  
  
-@@ -481,7 +481,7 @@ endif
+@@ -506,7 +506,7 @@ endif
  KBUILD_DEVTOOLS_TRG ?= $(KBUILD_DEVTOOLS)/$(KBUILD_TARGET).$(KBUILD_TARGET_ARCH)
  KBUILD_DEVTOOLS_HST ?= $(KBUILD_DEVTOOLS)/$(KBUILD_HOST).$(KBUILD_HOST_ARCH)
  

@@ -3,7 +3,7 @@ Author: Felix Geyer <debfx-pkg@fobos.de>
 
 --- a/src/kmk/Makefile.kmk
 +++ b/src/kmk/Makefile.kmk
-@@ -252,6 +252,9 @@ kmk_SOURCES = \
+@@ -253,6 +253,9 @@ kmk_SOURCES = \
  kmk_SOURCES.win = \
  	w32/subproc/sub_proc.c
  

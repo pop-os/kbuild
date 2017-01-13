@@ -154,7 +154,7 @@ Bug-Debian: http://bugs.debian.org/540665
  KBUILD_ARCHES    := x86 amd64 sparc32 sparc64 s390 s390x ppc32 ppc64 mips32 mips64 ia64 hppa32 hppa64 arm alpha noarch
  KBUILD_ARCHES_64 := amd64 sparc64 s390x ppc64 mips64 ia64 hppa64 alpha
  KBUILD_ARCHES_32 := x86 sparc32 s390 ppc32 mips32 hppa32 arm
-@@ -566,7 +566,7 @@ else ifeq ($(KBUILD_HOST),os2)
+@@ -591,7 +591,7 @@ else ifeq ($(KBUILD_HOST),os2)
  EXEC_X86_WIN32      := innopec.exe
  HOSTSUFF_EXE        := .exe
  
@@ -163,7 +163,7 @@ Bug-Debian: http://bugs.debian.org/540665
  # Unix (like) systems with wine.
  EXEC_X86_WIN32      := wine
  HOSTSUFF_EXE        :=
-@@ -610,7 +610,7 @@ SUFF_OBJ    := .o
+@@ -635,7 +635,7 @@ SUFF_OBJ    := .o
  SUFF_LIB    := .a
  SUFF_DLL    := .so
  SUFF_EXE    :=
@@ -247,7 +247,7 @@ Bug-Debian: http://bugs.debian.org/540665
  				return errx(EX_USAGE, "%s: invalid flag", flags);
 --- a/src/kmk/kmkbuiltin/rm.c
 +++ b/src/kmk/kmkbuiltin/rm.c
-@@ -657,7 +657,8 @@ check(char *path, char *name, struct sta
+@@ -675,7 +675,8 @@ check(char *path, char *name, struct sta
                      )
  			return (1);
  		bsd_strmode(sp->st_mode, modep);
@@ -259,7 +259,7 @@ Bug-Debian: http://bugs.debian.org/540665
  		(void)fprintf(stderr, "override %s%s%s/%s %s%sfor %s? ",
 --- a/src/kmk/Makefile.kmk
 +++ b/src/kmk/Makefile.kmk
-@@ -110,6 +110,9 @@ kmkmissing_SOURCES.freebsd = \
+@@ -111,6 +111,9 @@ kmkmissing_SOURCES.freebsd = \
  	kmkbuiltin/haikufakes.c \
  	glob/fnmatch.c
  
@@ -269,7 +269,7 @@ Bug-Debian: http://bugs.debian.org/540665
  kmkmissing_SOURCES.linux += \
  	kmkbuiltin/strlcpy.c
  
-@@ -249,6 +252,7 @@ kmk_SOURCES = \
+@@ -250,6 +253,7 @@ kmk_SOURCES = \
  kmk_SOURCES.win = \
  	w32/subproc/sub_proc.c
  
