@@ -1,4 +1,4 @@
-/* $Id: ntdir.c 2985 2016-11-01 18:26:35Z bird $ */
+/* $Id: ntdir.c 3007 2016-11-06 16:46:43Z bird $ */
 /** @file
  * MSC + NT opendir, readdir, telldir, seekdir, and closedir.
  */
@@ -114,7 +114,7 @@ BirdDir_T *birdDirOpenExW(void *hRoot, const wchar_t *pwszPath, const wchar_t *p
  */
 BirdDir_T *birdDirOpenFromHandle(void *pvHandle, const void *pvReserved, unsigned fFlags)
 {
-    if (!pvReserved)
+    if (!pvReserved && !(fFlags & BIRDDIR_F_STATIC_ALLOC))
     {
         /*
          * Allocate and initialize the directory enum handle.
@@ -137,8 +137,56 @@ BirdDir_T *birdDirOpenFromHandle(void *pvHandle, const void *pvReserved, unsigne
         }
     }
     else
+    {
+        assert(!(fFlags & BIRDDIR_F_STATIC_ALLOC));
         assert(pvReserved == NULL);
-    birdSetErrnoToNoMem();
+    }
+    birdSetErrnoToInvalidArg();
+    return NULL;
+}
+
+
+/**
+ * Special API that takes a preallocated BirdDir_T and can be called again
+ * without involving birdDirClose.
+ *
+ *
+ */
+BirdDir_T *birdDirOpenFromHandleWithReuse(BirdDir_T *pDir, void *pvHandle, const void *pvReserved, unsigned fFlags)
+{
+    if (!pvReserved)
+    {
+        /*
+         * Allocate and initialize the directory enum handle.
+         */
+        if (pDir)
+        {
+            if (pDir->uMagic == BIRD_DIR_MAGIC)
+            {
+                if (   (pDir->fFlags & BIRDDIR_F_CLOSE_HANDLE)
+                    && pDir->pvHandle != INVALID_HANDLE_VALUE)
+                    birdCloseFile((HANDLE)pDir->pvHandle);
+            }
+            else
+            {
+                pDir->cbBuf     = 0;
+                pDir->pabBuf    = NULL;
+                pDir->uMagic    = BIRD_DIR_MAGIC;
+            }
+            pDir->pvHandle      = pvHandle;
+            pDir->fFlags        = fFlags;
+            pDir->uDev          = 0;
+            pDir->offPos        = 0;
+            pDir->fHaveData     = 0;
+            pDir->fFirst        = 1;
+            pDir->iInfoClass    = fFlags & BIRDDIR_F_EXTRA_INFO ? MyFileIdFullDirectoryInformation : MyFileNamesInformation;
+            pDir->offBuf        = 0;
+            return pDir;
+        }
+    }
+    else
+        assert(pvReserved == NULL);
+    birdSetErrnoToInvalidArg();
     return NULL;
 }
 
@@ -173,13 +221,19 @@ static int birdDirReadMore(BirdDir_T *pDir)
         else
             pDir->uDev = 0;
 
-        /*
-         * Allocate a buffer.
-         */
-        pDir->cbBuf = 0x20000;
-        pDir->pabBuf = birdMemAlloc(pDir->cbBuf);
         if (!pDir->pabBuf)
-            return birdSetErrnoToNoMem();
+        {
+            /*
+             * Allocate a buffer.
+             *
+             * Better not exceed 64KB or CIFS may throw a fit.  Also, on win10/64
+             * here there is a noticable speedup when going one byte below 64KB.
+             */
+            pDir->cbBuf = 0xffe0;
+            pDir->pabBuf = birdMemAlloc(pDir->cbBuf);
+            if (!pDir->pabBuf)
+                return birdSetErrnoToNoMem();
+        }
 
         pDir->fFirst = 0;
     }
@@ -238,9 +292,55 @@ static int birdDirCopyNameToEntry(WCHAR const *pwcName, ULONG cbName, BirdDirEnt
 }
 
 
+/**
+ * Deals with mount points.
+ *
+ * @param   pDir        The directory handle.
+ * @param   pInfo       The NT entry information.
+ * @param   pEntryStat  The stats for the mount point directory that needs
+ *                      updating (a d_stat member).
+ */
+static void birdDirUpdateMountPointInfo(BirdDir_T *pDir, MY_FILE_ID_FULL_DIR_INFORMATION *pInfo,
+                                        BirdStat_T *pEntryStat)
+{
+    /*
+     * Try open the root directory of the mount.
+     * (Can't use birdStatAtW here because the name isn't terminated.)
+     */
+    HANDLE              hRoot = INVALID_HANDLE_VALUE;
+    MY_NTSTATUS         rcNt;
+    MY_UNICODE_STRING   Name;
+    Name.Buffer = pInfo->FileName;
+    Name.Length = Name.MaximumLength = (USHORT)pInfo->FileNameLength;
+
+    rcNt = birdOpenFileUniStr((HANDLE)pDir->pvHandle, &Name,
+                              FILE_READ_ATTRIBUTES,
+                              FILE_ATTRIBUTE_NORMAL,
+                              FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                              FILE_OPEN,
+                              FILE_OPEN_FOR_BACKUP_INTENT,
+                              OBJ_CASE_INSENSITIVE,
+                              &hRoot);
+    if (MY_NT_SUCCESS(rcNt))
+    {
+        int         iSavedErrno = errno;
+        BirdStat_T  RootStat;
+        if (birdStatHandle(hRoot, &RootStat, NULL) == 0)
+        {
+            RootStat.st_ismountpoint = 2;
+            *pEntryStat = RootStat;
+        }
+        birdCloseFile(hRoot);
+        errno = iSavedErrno;
+    }
+    /* else: don't mind failures, we've got some info. */
+}
+
 
 /**
  * Implements readdir_r().
+ *
+ * @remarks birdDirReadReentrantW is a copy of this.  Keep them in sync!
  */
 int birdDirReadReentrant(BirdDir_T *pDir, BirdDirEntry_T *pEntry, BirdDirEntry_T **ppResult)
 {
@@ -315,7 +415,7 @@ int birdDirReadReentrant(BirdDir_T *pDir, BirdDirEntry_T *pEntry, BirdDirEntry_T
                 pEntry->d_namlen        = 0;
                 if (birdDirCopyNameToEntry(pInfo->FileName, pInfo->FileNameLength, pEntry) != 0)
                     fSkipEntry = 1;
-                birdStatFillFromFileIdFullDirInfo(&pEntry->d_stat, pInfo, pEntry->d_name);
+                birdStatFillFromFileIdFullDirInfo(&pEntry->d_stat, pInfo);
                 pEntry->d_stat.st_dev   = pDir->uDev;
                 switch (pEntry->d_stat.st_mode & S_IFMT)
                 {
@@ -331,6 +431,11 @@ int birdDirReadReentrant(BirdDir_T *pDir, BirdDirEntry_T *pEntry, BirdDirEntry_T
                         pEntry->d_type = DT_UNKNOWN;
                         break;
                 }
+
+                if (pEntry->d_stat.st_ismountpoint != 1)
+                { /* likely. */ }
+                else
+                    birdDirUpdateMountPointInfo(pDir, pInfo, &pEntry->d_stat);
 
                 cbMinCur = MIN_SIZEOF_MY_FILE_ID_FULL_DIR_INFORMATION + pInfo->FileNameLength;
                 offNext  = pInfo->NextEntryOffset;
@@ -370,7 +475,165 @@ int birdDirReadReentrant(BirdDir_T *pDir, BirdDirEntry_T *pEntry, BirdDirEntry_T
 BirdDirEntry_T *birdDirRead(BirdDir_T *pDir)
 {
     BirdDirEntry_T *pRet = NULL;
-    birdDirReadReentrant(pDir, &pDir->DirEntry, &pRet);
+    birdDirReadReentrant(pDir, &pDir->u.DirEntry, &pRet);
+    return pRet;
+}
+
+
+static int birdDirCopyNameToEntryW(WCHAR const *pwcName, ULONG cbName, BirdDirEntryW_T *pEntry)
+{
+    ULONG cwcName = cbName / sizeof(wchar_t);
+    if (cwcName < sizeof(pEntry->d_name))
+    {
+        memcpy(pEntry->d_name, pwcName, cbName);
+        pEntry->d_name[cwcName] = '\0';
+        pEntry->d_namlen = (unsigned __int16)cwcName;
+        pEntry->d_reclen = (unsigned __int16)((size_t)&pEntry->d_name[cwcName + 1] - (size_t)pEntry);
+        return 0;
+    }
+    return -1;
+}
+
+
+/**
+ * Implements readdir_r(), UTF-16 version.
+ *
+ * @remarks This is a copy of birdDirReadReentrant where only the name handling
+ *          and entry type differs.  Remember to keep them in sync!
+ */
+int birdDirReadReentrantW(BirdDir_T *pDir, BirdDirEntryW_T *pEntry, BirdDirEntryW_T **ppResult)
+{
+    int fSkipEntry;
+
+    *ppResult = NULL;
+
+    if (!pDir || pDir->uMagic != BIRD_DIR_MAGIC)
+        return birdSetErrnoToBadFileNo();
+
+    do
+    {
+        ULONG offNext;
+        ULONG cbMinCur;
+
+        /*
+         * Read more?
+         */
+        if (!pDir->fHaveData)
+        {
+            if (birdDirReadMore(pDir) != 0)
+                return -1;
+            if (!pDir->fHaveData)
+                return 0;
+        }
+
+        /*
+         * Convert the NT data to the unixy output structure.
+         */
+        fSkipEntry = 0;
+        switch (pDir->iInfoClass)
+        {
+            case MyFileNamesInformation:
+            {
+                MY_FILE_NAMES_INFORMATION *pInfo = (MY_FILE_NAMES_INFORMATION *)&pDir->pabBuf[pDir->offBuf];
+                if (   pDir->offBuf          >= pDir->cbBuf - MIN_SIZEOF_MY_FILE_NAMES_INFORMATION
+                    || pInfo->FileNameLength >= pDir->cbBuf
+                    || pDir->offBuf + pInfo->FileNameLength + MIN_SIZEOF_MY_FILE_NAMES_INFORMATION > pDir->cbBuf)
+                {
+                    fSkipEntry = 1;
+                    pDir->fHaveData = 0;
+                    continue;
+                }
+
+                memset(&pEntry->d_stat, 0, sizeof(pEntry->d_stat));
+                pEntry->d_stat.st_mode  = S_IFMT;
+                pEntry->d_type          = DT_UNKNOWN;
+                pEntry->d_reclen        = 0;
+                pEntry->d_namlen        = 0;
+                if (birdDirCopyNameToEntryW(pInfo->FileName, pInfo->FileNameLength, pEntry) != 0)
+                    fSkipEntry = 1;
+
+                cbMinCur = MIN_SIZEOF_MY_FILE_NAMES_INFORMATION + pInfo->FileNameLength;
+                offNext  = pInfo->NextEntryOffset;
+                break;
+            }
+
+            case MyFileIdFullDirectoryInformation:
+            {
+                MY_FILE_ID_FULL_DIR_INFORMATION *pInfo = (MY_FILE_ID_FULL_DIR_INFORMATION *)&pDir->pabBuf[pDir->offBuf];
+                if (   pDir->offBuf          >= pDir->cbBuf - MIN_SIZEOF_MY_FILE_ID_FULL_DIR_INFORMATION
+                    || pInfo->FileNameLength >= pDir->cbBuf
+                    || pDir->offBuf + pInfo->FileNameLength + MIN_SIZEOF_MY_FILE_ID_FULL_DIR_INFORMATION > pDir->cbBuf)
+                {
+                    fSkipEntry = 1;
+                    pDir->fHaveData = 0;
+                    continue;
+                }
+
+                pEntry->d_type          = DT_UNKNOWN;
+                pEntry->d_reclen        = 0;
+                pEntry->d_namlen        = 0;
+                if (birdDirCopyNameToEntryW(pInfo->FileName, pInfo->FileNameLength, pEntry) != 0)
+                    fSkipEntry = 1;
+                birdStatFillFromFileIdFullDirInfo(&pEntry->d_stat, pInfo);
+                pEntry->d_stat.st_dev   = pDir->uDev;
+                switch (pEntry->d_stat.st_mode & S_IFMT)
+                {
+                    case S_IFREG:       pEntry->d_type = DT_REG; break;
+                    case S_IFDIR:       pEntry->d_type = DT_DIR; break;
+                    case S_IFLNK:       pEntry->d_type = DT_LNK; break;
+                    case S_IFIFO:       pEntry->d_type = DT_FIFO; break;
+                    case S_IFCHR:       pEntry->d_type = DT_CHR; break;
+                    default:
+#ifndef NDEBUG
+                        __debugbreak();
+#endif
+                        pEntry->d_type = DT_UNKNOWN;
+                        break;
+                }
+
+                if (pEntry->d_stat.st_ismountpoint != 1)
+                { /* likely. */ }
+                else
+                    birdDirUpdateMountPointInfo(pDir, pInfo, &pEntry->d_stat);
+
+                cbMinCur = MIN_SIZEOF_MY_FILE_ID_FULL_DIR_INFORMATION + pInfo->FileNameLength;
+                offNext  = pInfo->NextEntryOffset;
+                break;
+            }
+
+            default:
+                return birdSetErrnoToBadFileNo();
+        }
+
+        /*
+         * Advance.
+         */
+        if (   offNext >= cbMinCur
+            && offNext < pDir->cbBuf)
+            pDir->offBuf += offNext;
+        else
+        {
+            pDir->fHaveData = 0;
+            pDir->offBuf    = pDir->cbBuf;
+        }
+        pDir->offPos++;
+    } while (fSkipEntry);
+
+
+    /*
+     * Successful return.
+     */
+    *ppResult = pEntry;
+    return 0;
+}
+
+/**
+ * Implements readdir().
+ */
+BirdDirEntryW_T *birdDirReadW(BirdDir_T *pDir)
+{
+    BirdDirEntryW_T *pRet = NULL;
+    birdDirReadReentrantW(pDir, &pDir->u.DirEntryW, &pRet);
     return pRet;
 }
 
@@ -392,7 +655,7 @@ void birdDirSeek(BirdDir_T *pDir, long offDir);
 /**
  * Implements closedir().
  */
-int             birdDirClose(BirdDir_T *pDir)
+int birdDirClose(BirdDir_T *pDir)
 {
     if (!pDir || pDir->uMagic != BIRD_DIR_MAGIC)
         return birdSetErrnoToBadFileNo();
@@ -403,7 +666,8 @@ int             birdDirClose(BirdDir_T *pDir)
     pDir->pvHandle = (void *)INVALID_HANDLE_VALUE;
     birdMemFree(pDir->pabBuf);
     pDir->pabBuf = NULL;
-    birdMemFree(pDir);
+    if (!(pDir->fFlags & BIRDDIR_F_STATIC_ALLOC))
+        birdMemFree(pDir);
 
     return 0;
 }

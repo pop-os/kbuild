@@ -1,4 +1,4 @@
-/* $Id: kFsCache.c 2985 2016-11-01 18:26:35Z bird $ */
+/* $Id: kFsCache.c 3007 2016-11-06 16:46:43Z bird $ */
 /** @file
  * ntdircache.c - NT directory content cache.
  */
@@ -1328,7 +1328,8 @@ static KBOOL kFsCachePopuplateOrRefreshDir(PKFSCACHE pCache, PKFSDIR pDir, KFSLO
         /* Include the structures for better alignment. */
         MY_FILE_ID_BOTH_DIR_INFORMATION     WithId;
         MY_FILE_ID_FULL_DIR_INFORMATION     NoId;
-        /* Buffer padding. We're using a 56KB buffer here to avoid size troubles with CIFS and such. */
+        /** Buffer padding. We're using a 56KB buffer here to avoid size troubles
+         * with CIFS and such that starts at 64KB. */
         KU8                                 abBuf[56*1024];
     } uBuf;
 
@@ -1567,14 +1568,14 @@ static KBOOL kFsCachePopuplateOrRefreshDir(PKFSCACHE pCache, PKFSDIR pDir, KFSLO
 
 #ifdef KFSCACHE_CFG_SHORT_NAMES
                 if (enmInfoClass == enmInfoClassWithId)
-                    birdStatFillFromFileIdBothDirInfo(&pCur->Stats, uPtr.pWithId, pCur->pszName);
+                    birdStatFillFromFileIdBothDirInfo(&pCur->Stats, uPtr.pWithId);
                 else
-                    birdStatFillFromFileBothDirInfo(&pCur->Stats, uPtr.pNoId, pCur->pszName);
+                    birdStatFillFromFileBothDirInfo(&pCur->Stats, uPtr.pNoId);
 #else
                 if (enmInfoClass == enmInfoClassWithId)
-                    birdStatFillFromFileIdFullDirInfo(&pCur->Stats, uPtr.pWithId, pCur->pszName);
+                    birdStatFillFromFileIdFullDirInfo(&pCur->Stats, uPtr.pWithId);
                 else
-                    birdStatFillFromFileFullDirInfo(&pCur->Stats, uPtr.pNoId, pCur->pszName);
+                    birdStatFillFromFileFullDirInfo(&pCur->Stats, uPtr.pNoId);
 #endif
                 pCur->Stats.st_dev = pDir->uDevNo;
                 pCur->fHaveStats   = K_TRUE;
@@ -1600,14 +1601,14 @@ static KBOOL kFsCachePopuplateOrRefreshDir(PKFSCACHE pCache, PKFSDIR pDir, KFSLO
                 pDir->iLastWrite = uPtr.pNoId->LastWriteTime.QuadPart;
 #ifdef KFSCACHE_CFG_SHORT_NAMES
                 if (enmInfoClass == enmInfoClassWithId)
-                    birdStatFillFromFileIdBothDirInfo(&pDir->Obj.Stats, uPtr.pWithId, pDir->Obj.pszName);
+                    birdStatFillFromFileIdBothDirInfo(&pDir->Obj.Stats, uPtr.pWithId);
                 else
-                    birdStatFillFromFileBothDirInfo(&pDir->Obj.Stats, uPtr.pNoId, pDir->Obj.pszName);
+                    birdStatFillFromFileBothDirInfo(&pDir->Obj.Stats, uPtr.pNoId);
 #else
                 if (enmInfoClass == enmInfoClassWithId)
-                    birdStatFillFromFileIdFullDirInfo(&pDir->Obj.Stats, uPtr.pWithId, pDir->Obj.pszName);
+                    birdStatFillFromFileIdFullDirInfo(&pDir->Obj.Stats, uPtr.pWithId);
                 else
-                    birdStatFillFromFileFullDirInfo(&pDir->Obj.Stats, uPtr.pNoId, pDir->Obj.pszName);
+                    birdStatFillFromFileFullDirInfo(&pDir->Obj.Stats, uPtr.pNoId);
 #endif
             }
 

@@ -1,4 +1,4 @@
-/* $Id: ntstuff.h 2985 2016-11-01 18:26:35Z bird $ */
+/* $Id: ntstuff.h 3021 2017-01-07 16:52:16Z bird $ */
 /** @file
  * Definitions, types, prototypes and globals for NT.
  */
@@ -518,10 +518,10 @@ typedef struct MY_PARTIAL_TEB
 /** Internal macro for reading uintptr_t sized TEB members. */
 #if K_ARCH == K_ARCH_AMD64
 # define MY_NT_READ_TEB_WORKER(a_offTebMember) ( __readgsqword(a_offTebMember) )
-#elif K_ARCH == K_ARCH_X86
+#elif K_ARCH == K_ARCH_X86_32
 # define MY_NT_READ_TEB_WORKER(a_offTebMember) ( __readfsdword(a_offTebMember) )
 #else
-# else "Port me!"
+# error "Port me!"
 #endif
 /** Get the PEB pointer.
  * @remark Needs stddef.h. */
@@ -555,6 +555,7 @@ extern MY_NTSTATUS (WINAPI * g_pfnNtQueryFullAttributesFile)(MY_OBJECT_ATTRIBUTE
 extern MY_NTSTATUS (WINAPI * g_pfnNtSetInformationFile)(HANDLE, MY_IO_STATUS_BLOCK *, PVOID, LONG, MY_FILE_INFORMATION_CLASS);
 extern BOOLEAN     (WINAPI * g_pfnRtlDosPathNameToNtPathName_U)(PCWSTR, MY_UNICODE_STRING *, PCWSTR *, MY_RTL_RELATIVE_NAME_U *);
 extern MY_NTSTATUS (WINAPI * g_pfnRtlAnsiStringToUnicodeString)(MY_UNICODE_STRING *, MY_ANSI_STRING const *, BOOLEAN);
+extern MY_NTSTATUS (WINAPI * g_pfnRtlUnicodeStringToAnsiString)(MY_ANSI_STRING *, MY_UNICODE_STRING *, BOOLEAN);
 extern BOOLEAN     (WINAPI * g_pfnRtlEqualUnicodeString)(MY_UNICODE_STRING const *pUniStr1, MY_UNICODE_STRING const *pUniStr2,
                                                          BOOLEAN fCaseInsensitive);
 extern BOOLEAN     (WINAPI * g_pfnRtlEqualString)(MY_ANSI_STRING const *pAnsiStr1, MY_ANSI_STRING const *pAnsiStr2,
