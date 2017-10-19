@@ -1,3 +1,9 @@
+kbuild (1:0.1.9998svn3098+dfsg-1~exp2) experimental; urgency=medium
+
+  * Try to define kFreeBSD as normal freebsd
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Thu, 19 Oct 2017 23:46:27 +0200
+
 kbuild (1:0.1.9998svn3098+dfsg-1~exp1) experimental; urgency=medium
 
   * New upstream release, update copyright.
