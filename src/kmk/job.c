@@ -464,9 +464,30 @@ child_error (const char *target_name,
 #else
   if (exit_sig == 0)
 # if defined(KMK) && defined(KBUILD_OS_WINDOWS)
-    error (NILF, ignored ? _("[%s] Error %d (%#x) (ignored)") :
-           _("*** [%s] Error %d (%#x)"),
-           target_name, exit_code, exit_code);
+    {
+      const char *name = NULL;
+      switch ((unsigned)exit_code)
+        {
+        case 0xc0000005U: name = "STATUS_ACCESS_VIOLATION"; break;
+        case 0xc000013aU: name = "STATUS_CONTROL_C_EXIT"; break;
+        case 0xc0000374U: name = "STATUS_HEAP_CORRUPTION"; break;
+        case 0xc0000409U: name = "STATUS_STACK_BUFFER_OVERRUN"; break;
+        case 0xc0000417U: name = "STATUS_INVALID_CRUNTIME_PARAMETER"; break;
+        case 0x80000003U: name = "STATUS_BREAKPOINT"; break;
+        case 0x40000015U: name = "STATUS_FATAL_APP_EXIT"; break;
+        case 0x40010004U: name = "DBG_TERMINATE_PROCESS"; break;
+        case 0x40010005U: name = "DBG_CONTROL_C"; break;
+        case 0x40010008U: name = "DBG_CONTROL_BREAK"; break;
+        }
+      if (name)
+        error(NILF, ignored ? _("[%s] Error %d (%s) (ignored)") :
+               _("*** [%s] Error %d (%s)"),
+               target_name, exit_code, name);
+      else
+        error(NILF, ignored ? _("[%s] Error %d (%#x) (ignored)") :
+               _("*** [%s] Error %d (%#x)"),
+               target_name, exit_code, exit_code);
+    }
 # else
     error (NILF, ignored ? _("[%s] Error %d (ignored)") :
 	   _("*** [%s] Error %d"),
@@ -840,9 +861,13 @@ reap_children (int block, int err)
 #ifdef KMK
             {
               child_error (c->file->name, exit_code, exit_sig, coredump, 0);
-              if ((  c->file->cmds->lines_flags[c->command_line - 1]
-                   & (COMMANDS_SILENT | COMMANDS_RECURSE))
-                  == COMMANDS_SILENT)
+              if (   (  c->file->cmds->lines_flags[c->command_line - 1]
+                      & (COMMANDS_SILENT | COMMANDS_RECURSE))
+                     == COMMANDS_SILENT
+# ifdef KBUILD_OS_WINDOWS /* show commands for NT statuses */
+                  || (exit_code & 0xc0000000)
+# endif
+                  || exit_sig != 0)
                 message (0, "The failing command:\n%s", c->file->cmds->command_lines[c->command_line - 1]);
             }
 #else  /* !KMK */
@@ -2680,7 +2705,9 @@ construct_command_argv_internal (char *line, char **restp, char *shell,
   int i;
   char *p;
   char *ap;
+#ifndef NDEBUG
   char *end;
+#endif
   int instring, word_has_equals, seen_nonequals, last_argument_was_empty;
   char **new_argv = 0;
   char *argstr = 0;
@@ -2768,6 +2795,11 @@ construct_command_argv_internal (char *line, char **restp, char *shell,
        * shell after this function returns.  */
       default_shell = xstrdup (shell);
     }
+#  ifdef KMK
+  if (is_kmk_shell)
+  { /* done above already */ }
+  else
+#   endif
   if (unixy_shell)
     {
       sh_chars = sh_chars_sh;
@@ -2809,7 +2841,9 @@ construct_command_argv_internal (char *line, char **restp, char *shell,
 
   /* All the args can fit in a buffer as big as LINE is.   */
   ap = new_argv[0] = argstr = xmalloc (i);
+#ifndef NDEBUG
   end = ap + i;
+#endif
 
   /* I is how many complete arguments have been found.  */
   i = 0;
@@ -3119,7 +3153,9 @@ construct_command_argv_internal (char *line, char **restp, char *shell,
     unsigned int shell_len = strlen (shell);
     unsigned int line_len = strlen (line);
     unsigned int sflags_len = strlen (shellflags);
+# ifdef WINDOWS32
     char *command_ptr = NULL; /* used for batch_mode_shell mode */
+# endif
     char *new_line;
 
 # ifdef __EMX__ /* is this necessary? */
@@ -3200,7 +3236,9 @@ construct_command_argv_internal (char *line, char **restp, char *shell,
     memcpy (ap, shellflags, sflags_len);
     ap += sflags_len;
     *(ap++) = ' ';
+#ifdef WINDOWS32
     command_ptr = ap;
+#endif
     for (p = line; *p != '\0'; ++p)
       {
 	if (restp != NULL && *p == '\n')

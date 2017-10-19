@@ -461,6 +461,8 @@ static const char *const usage[] =
                                 3 = normal / nice 0;\n\
                                 4 = high / nice -10;\n\
                                 5 = realtime / nice -19;\n"),
+    N_("\
+  --nice                      Alias for --priority=1\n"),
 #endif /* KMK */
 #ifdef CONFIG_PRETTY_COMMAND_PRINTING
     N_("\
@@ -534,6 +536,7 @@ static const struct command_switch switches[] =
       (char *) &process_priority, (char *) &process_priority, "priority" },
     { CHAR_MAX+15, positive_int, (char *) &process_affinity, 1, 1, 0,
       (char *) &process_affinity, (char *) &process_affinity, "affinity" },
+    { CHAR_MAX+17, flag, (char *) &process_priority, 1, 1, 0, 0, 0, "nice" },
 #endif
     { 'q', flag, &question_flag, 1, 1, 1, 0, 0, "question" },
     { 'r', flag, &no_builtin_rules_flag, 1, 1, 0, 0, 0, "no-builtin-rules" },
@@ -855,24 +858,29 @@ static void
 set_make_priority_and_affinity (void)
 {
 # ifdef WINDOWS32
-  DWORD dwPriority;
+  DWORD dwClass, dwPriority;
+
   if (process_affinity)
     if (!SetProcessAffinityMask (GetCurrentProcess (), process_affinity))
-      fprintf (stderr, "warning: SetPriorityClass (,%#x) failed with last error %d\n",
+      fprintf (stderr, "warning: SetProcessAffinityMask (,%#x) failed with last error %d\n",
                process_affinity, GetLastError ());
 
   switch (process_priority)
     {
       case 0:     return;
-      case 1:     dwPriority = IDLE_PRIORITY_CLASS; break;
-      case 2:     dwPriority = BELOW_NORMAL_PRIORITY_CLASS; break;
-      case 3:     dwPriority = NORMAL_PRIORITY_CLASS; break;
-      case 4:     dwPriority = HIGH_PRIORITY_CLASS; break;
-      case 5:     dwPriority = REALTIME_PRIORITY_CLASS; break;
+      case 1:     dwClass = IDLE_PRIORITY_CLASS;         dwPriority = THREAD_PRIORITY_IDLE; break;
+      case 2:     dwClass = BELOW_NORMAL_PRIORITY_CLASS; dwPriority = THREAD_PRIORITY_BELOW_NORMAL; break;
+      case 3:     dwClass = NORMAL_PRIORITY_CLASS;       dwPriority = THREAD_PRIORITY_NORMAL; break;
+      case 4:     dwClass = HIGH_PRIORITY_CLASS;         dwPriority = 0xffffffff; break;
+      case 5:     dwClass = REALTIME_PRIORITY_CLASS;     dwPriority = 0xffffffff; break;
       default:    fatal (NILF, _("invalid priority %d\n"), process_priority);
     }
-  if (!SetPriorityClass (GetCurrentProcess (), dwPriority))
+  if (!SetPriorityClass (GetCurrentProcess (), dwClass))
     fprintf (stderr, "warning: SetPriorityClass (,%#x) failed with last error %d\n",
+             dwClass, GetLastError ());
+  if (dwPriority != 0xffffffff
+      && !SetThreadPriority (GetCurrentThread (), dwPriority))
+    fprintf (stderr, "warning: SetThreadPriority (,%#x) failed with last error %d\n",
              dwPriority, GetLastError ());
 
 #elif defined(__HAIKU__)

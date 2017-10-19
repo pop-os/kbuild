@@ -1,4 +1,4 @@
-/* $Id: kbuild.c 2861 2016-09-01 22:42:55Z bird $ */
+/* $Id: kbuild.c 3068 2017-10-01 13:10:47Z bird $ */
 /** @file
  * kBuild specific make functionality.
  */
@@ -47,6 +47,7 @@
 #endif
 
 #include "kbuild.h"
+#include "k/kDefs.h"
 
 #include <assert.h>
 
@@ -65,14 +66,14 @@
         else \
             switch (len) \
             { \
-                case 8: dst[7] = src[7]; \
-                case 7: dst[6] = src[6]; \
-                case 6: dst[5] = src[5]; \
-                case 5: dst[4] = src[4]; \
-                case 4: dst[3] = src[3]; \
-                case 3: dst[2] = src[2]; \
-                case 2: dst[1] = src[1]; \
-                case 1: dst[0] = src[0]; \
+                case 8: dst[7] = src[7]; /* fall thru */ \
+                case 7: dst[6] = src[6]; /* fall thru */ \
+                case 6: dst[5] = src[5]; /* fall thru */ \
+                case 5: dst[4] = src[4]; /* fall thru */ \
+                case 4: dst[3] = src[3]; /* fall thru */ \
+                case 3: dst[2] = src[2]; /* fall thru */ \
+                case 2: dst[1] = src[1]; /* fall thru */ \
+                case 1: dst[0] = src[0]; /* fall thru */ \
                 case 0: break; \
             } \
     } while (0)
@@ -612,8 +613,14 @@ kbuild_lookup_variable_n(const char *pszName, size_t cchName)
         MY_ASSERT_MSG(strlen(pVar->value) == pVar->value_length,
                       ("%u != %u %.*s\n", pVar->value_length, (unsigned int)strlen(pVar->value), (int)cchName, pVar->name));
 
-        /* Make sure the variable is simple, convert it if necessary. */
-        if (pVar->recursive)
+        /* Make sure the variable is simple, convert it if necessary.
+           Note! Must NOT do this for the dynamic INCS of sdks/ReorderCompilerIncs.kmk */
+        if (!pVar->recursive)
+        { /* likely */ }
+        else if (   cchName < sizeof("SDK_ReorderCompilerIncs_INCS.") - 1U
+                 || pszName[0] != 'S'
+                 || pszName[4] != 'R'
+                 || memcmp(pszName, "SDK_ReorderCompilerIncs_INCS.", sizeof("SDK_ReorderCompilerIncs_INCS.") - 1U) == 0)
             kbuild_simplify_variable(pVar);
     }
     return pVar;
@@ -1994,7 +2001,10 @@ func_kbuild_source_one(char *o, char **argv, const char *pszFuncName)
     struct variable *pTool      = kbuild_get_source_tool(pTarget, pSource, pType, pBldTrg, pBldTrgArch, "tool");
     struct variable *pOutBase   = kbuild_get_object_base(pTarget, pSource, "outbase");
     struct variable *pObjSuff   = kbuild_get_object_suffix(pTarget, pSource, pTool, pType, pBldTrg, pBldTrgArch, "objsuff");
-    struct variable *pDefs, *pIncs, *pFlags, *pDeps, *pOrderDeps, *pDirDep, *pDep, *pVar, *pOutput, *pOutputMaybe;
+    struct variable *pDeps, *pOrderDeps, *pDirDep, *pDep, *pVar, *pOutput, *pOutputMaybe;
+#if 0 /* not used */
+    struct variable *pDefs, *pIncs, *pFlags;
+#endif
     struct variable *pObj       = kbuild_set_object_name_and_dep_and_dirdep_and_PATH_target_source(pTarget, pSource, pOutBase, pObjSuff, "obj", &pDep, &pDirDep);
     int fInstallOldVars = 0;
     char *pszDstVar, *pszDst, *pszSrcVar, *pszSrc, *pszVal, *psz;
@@ -2047,11 +2057,11 @@ func_kbuild_source_one(char *o, char **argv, const char *pszFuncName)
         pDefPath = NULL;
 
 
-    pDefs      = kbuild_collect_source_prop(pTarget, pSource, pTool, &Sdks, pType, pBldType, pBldTrg, pBldTrgArch, pBldTrgCpu, NULL,
+    /*pDefs  =*/ kbuild_collect_source_prop(pTarget, pSource, pTool, &Sdks, pType, pBldType, pBldTrg, pBldTrgArch, pBldTrgCpu, NULL,
                                             ST("DEFS"),  ST("defs"), 1/* left-to-right */);
-    pIncs      = kbuild_collect_source_prop(pTarget, pSource, pTool, &Sdks, pType, pBldType, pBldTrg, pBldTrgArch, pBldTrgCpu, pDefPath,
+    /*pIncs  =*/ kbuild_collect_source_prop(pTarget, pSource, pTool, &Sdks, pType, pBldType, pBldTrg, pBldTrgArch, pBldTrgCpu, pDefPath,
                                             ST("INCS"),  ST("incs"), -1/* right-to-left */);
-    pFlags     = kbuild_collect_source_prop(pTarget, pSource, pTool, &Sdks, pType, pBldType, pBldTrg, pBldTrgArch, pBldTrgCpu, NULL,
+    /*pFlags =*/ kbuild_collect_source_prop(pTarget, pSource, pTool, &Sdks, pType, pBldType, pBldTrg, pBldTrgArch, pBldTrgCpu, NULL,
                                             ST("FLAGS"), ST("flags"), 1/* left-to-right */);
     pDeps      = kbuild_collect_source_prop(pTarget, pSource, pTool, &Sdks, pType, pBldType, pBldTrg, pBldTrgArch, pBldTrgCpu, pDefPath,
                                             ST("DEPS"),  ST("deps"), 1/* left-to-right */);
