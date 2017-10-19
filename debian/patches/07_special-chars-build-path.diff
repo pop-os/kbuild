@@ -14,7 +14,7 @@ Bug: http://svn.netlabs.org/kbuild/ticket/94
  TOOL_GCC32_LD  ?= gcc$(HOSTSUFF_EXE) -m32
  TOOL_GCC32_LD_SYSMOD ?= ld$(HOSTSUFF_EXE)
  ifndef TOOL_GCC32_LDFLAGS.$(KBUILD_TARGET)
-@@ -226,20 +227,21 @@ endef
+@@ -225,20 +226,21 @@ endef
  # @param    $(deps)		Other dependencies.
  # @param    $(othersrc) Unhandled sources.
  # @param    $(outbase)  Output basename (full). Use this for list files and such.
@@ -101,7 +101,7 @@ Bug: http://svn.netlabs.org/kbuild/ticket/94
  TOOL_GCC64_LD  ?= gcc$(HOSTSUFF_EXE) -m64
  TOOL_GCC64_LD_SYSMOD ?= ld$(HOSTSUFF_EXE)
  ifndef TOOL_GCC64_LDFLAGS.$(KBUILD_TARGET)
-@@ -225,17 +226,21 @@ endef
+@@ -224,17 +225,21 @@ endef
  # @param    $(deps)		Other dependencies.
  # @param    $(othersrc) Unhandled sources.
  # @param    $(outbase)  Output basename (full). Use this for list files and such.
@@ -141,7 +141,7 @@ Bug: http://svn.netlabs.org/kbuild/ticket/94
  TOOL_GXX32_LD  ?= g++$(HOSTSUFF_EXE) -m32
  TOOL_GXX32_LD_SYSMOD ?= ld$(HOSTSUFF_EXE)
  ifndef TOOL_GXX32_LDFLAGS.$(KBUILD_TARGET)
-@@ -225,20 +226,21 @@ endef
+@@ -224,20 +225,21 @@ endef
  # @param    $(deps)		Other dependencies.
  # @param    $(othersrc) Unhandled sources.
  # @param    $(outbase)  Output basename (full). Use this for list files and such.
@@ -228,7 +228,7 @@ Bug: http://svn.netlabs.org/kbuild/ticket/94
  TOOL_GXX64_LD  ?= g++$(HOSTSUFF_EXE) -m64
  TOOL_GXX64_LD_SYSMOD ?= ld$(HOSTSUFF_EXE)
  ifndef TOOL_GXX64_LDFLAGS.$(KBUILD_TARGET)
-@@ -225,17 +226,21 @@ endef
+@@ -224,17 +225,21 @@ endef
  # @param    $(deps)		Other dependencies.
  # @param    $(othersrc) Unhandled sources.
  # @param    $(outbase)  Output basename (full). Use this for list files and such.
