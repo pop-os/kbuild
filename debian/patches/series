@@ -1,10 +1,3 @@
-#01_gnukfreebsd.diff
-#02_sh4.diff
-#04_armv7l.diff
-#05_hppa-disable-threads.diff
-#06_binutils-gold.diff
+01_gnukfreebsd.diff
 07_special-chars-build-path.diff
 09_read.c_record_files_SV_33034_Changes_fatal_to_error.patch
-#10_ppc64el.diff
-#11_find-glob.patch
-#12_arm64.diff
