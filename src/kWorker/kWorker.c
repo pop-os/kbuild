@@ -1,4 +1,4 @@
-/* $Id: kWorker.c 2987 2016-11-01 18:27:39Z bird $ */
+/* $Id: kWorker.c 3089 2017-10-04 13:10:41Z bird $ */
 /** @file
  * kWorker - experimental process reuse worker for Windows.
  *
@@ -292,6 +292,20 @@ typedef struct KWMODULE
                 /** How much to zero. */
                 KSIZE           cbToZero;
             } aQuickZeroChunks[3];
+
+            /** TLS index if one was allocated, otherwise KU32_MAX. */
+            KU32                idxTls;
+            /** Offset (RVA) of the TLS initialization data. */
+            KU32                offTlsInitData;
+            /** Number of bytes of TLS initialization data. */
+            KU32                cbTlsInitData;
+            /** Number of allocated bytes for TLS. */
+            KU32                cbTlsAlloc;
+            /** Number of TLS callbacks. */
+            KU32                cTlsCallbacks;
+            /** Offset (RVA) of the TLS callback table. */
+            KU32                offTlsCallbacks;
+
             /** Number of imported modules. */
             KSIZE               cImpMods;
             /** Import array (variable size). */
@@ -892,6 +906,9 @@ static KWGETMODULEHANDLECACHE g_aGetModuleHandleCache[] =
     { MOD_CACHE_STRINGS("mscoree.dll"),     NULL },
 };
 
+/** Module pending TLS allocation. See kwLdrModuleCreateNonNativeSetupTls. */
+static PKWMODULE    g_pModPendingTlsAlloc = NULL;
+
 
 /** The file system cache. */
 static PKFSCACHE    g_pFsCache;
@@ -1017,11 +1034,13 @@ static KSIZE    g_cbWriteFileToInMemTemp;
 *   Internal Functions                                                                                                           *
 *********************************************************************************************************************************/
 static FNKLDRMODGETIMPORT kwLdrModuleGetImportCallback;
-static int kwLdrModuleResolveAndLookup(const char *pszName, PKWMODULE pExe, PKWMODULE pImporter, PKWMODULE *ppMod);
+static int kwLdrModuleResolveAndLookup(const char *pszName, PKWMODULE pExe, PKWMODULE pImporter,
+                                       const char *pszSearchPath, PKWMODULE *ppMod);
 static KBOOL kwSandboxHandleTableEnter(PKWSANDBOX pSandbox, PKWHANDLE pHandle, HANDLE hHandle);
 #ifdef WITH_CONSOLE_OUTPUT_BUFFERING
 static void kwSandboxConsoleWriteA(PKWSANDBOX pSandbox, PKWOUTPUTSTREAMBUF pLineBuf, const char *pchBuffer, KU32 cchToWrite);
 #endif
+static PPEB kwSandboxGetProcessEnvironmentBlock(void);
 
 
 
@@ -2001,6 +2020,178 @@ static void kwLdrModuleCreateNonNativeSetupQuickZeroAndCopy(PKWMODULE pMod)
 
 
 /**
+ * Called from TLS allocation DLL during DLL_PROCESS_ATTACH.
+ *
+ * @param   hDll            The DLL handle.
+ * @param   idxTls          The allocated TLS index.
+ * @param   ppfnTlsCallback Pointer to the TLS callback table entry.
+ */
+__declspec(dllexport) void kwLdrTlsAllocationHook(void *hDll, ULONG idxTls, PIMAGE_TLS_CALLBACK *ppfnTlsCallback)
+{
+    /*
+     * Do the module initialization thing first.
+     */
+    PKWMODULE pMod = g_pModPendingTlsAlloc;
+    if (pMod)
+    {
+        PPEB        pPeb = kwSandboxGetProcessEnvironmentBlock();
+        LIST_ENTRY *pHead;
+        LIST_ENTRY *pCur;
+
+        pMod->u.Manual.idxTls = idxTls;
+        KWLDR_LOG(("kwLdrTlsAllocationHook: idxTls=%d (%#x) for %s\n", idxTls, idxTls, pMod->pszPath));
+
+        /*
+         * Try sabotage the DLL name so we can load this module again.
+         */
+        pHead = &pPeb->Ldr->InMemoryOrderModuleList;
+        for (pCur = pHead->Blink; pCur != pHead; pCur = pCur->Blink)
+        {
+            LDR_DATA_TABLE_ENTRY *pMte;
+            pMte = (LDR_DATA_TABLE_ENTRY *)((KUPTR)pCur - K_OFFSETOF(LDR_DATA_TABLE_ENTRY, InMemoryOrderLinks));
+            if (((KUPTR)pMte->DllBase & ~(KUPTR)31) == ((KUPTR)hDll & ~(KUPTR)31))
+            {
+                PUNICODE_STRING pStr = &pMte->FullDllName;
+                KSIZE off = pStr->Length / sizeof(pStr->Buffer[0]);
+                pStr->Buffer[--off]++;
+                pStr->Buffer[--off]++;
+                pStr->Buffer[--off]++;
+                KWLDR_LOG(("kwLdrTlsAllocationHook: patched the MTE (%p) for %p\n", pMte, hDll));
+                break;
+            }
+        }
+    }
+}
+
+
+/**
+ * Allocates and initializes TLS variables.
+ *
+ * @returns 0 on success, non-zero failure.
+ * @param   pMod                The module.
+ */
+static int kwLdrModuleCreateNonNativeSetupTls(PKWMODULE pMod)
+{
+    KU8                        *pbImg = (KU8 *)pMod->u.Manual.pbCopy;
+    IMAGE_NT_HEADERS const     *pNtHdrs;
+    IMAGE_DATA_DIRECTORY const *pTlsDir;
+
+    if (((PIMAGE_DOS_HEADER)pbImg)->e_magic == IMAGE_DOS_SIGNATURE)
+        pNtHdrs = (PIMAGE_NT_HEADERS)&pbImg[((PIMAGE_DOS_HEADER)pbImg)->e_lfanew];
+    else
+        pNtHdrs = (PIMAGE_NT_HEADERS)pbImg;
+    kHlpAssert(pNtHdrs->Signature == IMAGE_NT_SIGNATURE);
+
+    pTlsDir = &pNtHdrs->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS];
+    if (pTlsDir->Size >= sizeof(IMAGE_TLS_DIRECTORY))
+    {
+        PIMAGE_TLS_DIRECTORY const  paEntries = (PIMAGE_TLS_DIRECTORY)&pbImg[pTlsDir->VirtualAddress];
+        KU32 const                  cEntries  = pTlsDir->Size / sizeof(IMAGE_TLS_DIRECTORY);
+        KU32                        iEntry;
+        KUPTR                       offIndex;
+        KUPTR                       offCallbacks;
+        KUPTR const                *puCallbacks;
+        KSIZE                       cbData;
+        const wchar_t              *pwszTlsDll;
+        HMODULE                     hmodTlsDll;
+
+        /*
+         * Check and log.
+         */
+        for (iEntry = 0; iEntry < cEntries; iEntry++)
+        {
+            KUPTR        offIndex     = (KUPTR)paEntries[iEntry].AddressOfIndex     - (KUPTR)pMod->u.Manual.pbLoad;
+            KUPTR        offCallbacks = (KUPTR)paEntries[iEntry].AddressOfCallBacks - (KUPTR)pMod->u.Manual.pbLoad;
+            KUPTR const *puCallbacks  = (KUPTR const *)&pbImg[offCallbacks];
+            KWLDR_LOG(("TLS DIR #%u: %#x-%#x idx=@%#x (%#x) callbacks=@%#x (%#x) cbZero=%#x flags=%#x\n",
+                       iEntry, paEntries[iEntry].StartAddressOfRawData, paEntries[iEntry].EndAddressOfRawData,
+                       paEntries[iEntry].AddressOfIndex, offIndex, paEntries[iEntry].AddressOfCallBacks, offCallbacks,
+                       paEntries[iEntry].SizeOfZeroFill, paEntries[iEntry].Characteristics));
+
+            if (offIndex >= pMod->cbImage)
+            {
+                kwErrPrintf("TLS entry #%u in %s has an invalid index address: %p, RVA %p, image size %#x\n",
+                            iEntry, pMod->pszPath, paEntries[iEntry].AddressOfIndex, offIndex, pMod->cbImage);
+                return -1;
+            }
+            if (offCallbacks >= pMod->cbImage)
+            {
+                kwErrPrintf("TLS entry #%u in %s has an invalid callbacks address: %p, RVA %p, image size %#x\n",
+                            iEntry, pMod->pszPath, paEntries[iEntry].AddressOfCallBacks, offCallbacks, pMod->cbImage);
+                return -1;
+            }
+            while (*puCallbacks != 0)
+            {
+                KWLDR_LOG(("TLS DIR #%u:   callback %p, RVA %#x\n",
+                            iEntry, *puCallbacks, *puCallbacks - (KUPTR)pMod->u.Manual.pbLoad));
+                puCallbacks++;
+            }
+            if (paEntries[iEntry].Characteristics > IMAGE_SCN_ALIGN_16BYTES)
+            {
+                kwErrPrintf("TLS entry #%u in %s has an unsupported alignment restriction: %#x\n",
+                            iEntry, pMod->pszPath, paEntries[iEntry].Characteristics);
+                return -1;
+            }
+        }
+
+        if (cEntries > 1)
+        {
+            kwErrPrintf("More than one TLS directory entry in %s: %u\n", pMod->pszPath, cEntries);
+            return -1;
+        }
+
+        /*
+         * Make the allocation by loading a new instance of one of the TLS dlls.
+         * The DLL will make a call to
+         */
+        offIndex     = (KUPTR)paEntries[0].AddressOfIndex     - (KUPTR)pMod->u.Manual.pbLoad;
+        offCallbacks = (KUPTR)paEntries[0].AddressOfCallBacks - (KUPTR)pMod->u.Manual.pbLoad;
+        puCallbacks  = (KUPTR const *)&pbImg[offCallbacks];
+        cbData = paEntries[0].SizeOfZeroFill + (paEntries[0].EndAddressOfRawData - paEntries[0].StartAddressOfRawData);
+        if (cbData <= 1024)
+            pwszTlsDll = L"kWorkerTls1K.dll";
+        else if (cbData <= 65536)
+            pwszTlsDll = L"kWorkerTls64K.dll";
+        else if (cbData <= 524288)
+            pwszTlsDll = L"kWorkerTls512K.dll";
+        else
+        {
+            kwErrPrintf("TLS data size in %s is too big: %u (%#p), max 512KB\n", pMod->pszPath, (unsigned)cbData, cbData);
+            return -1;
+        }
+
+        pMod->u.Manual.idxTls         = KU32_MAX;
+        pMod->u.Manual.offTlsInitData = (KU32)((KUPTR)paEntries[0].StartAddressOfRawData - (KUPTR)pMod->u.Manual.pbLoad);
+        pMod->u.Manual.cbTlsInitData  = (KU32)(paEntries[0].EndAddressOfRawData - paEntries[0].StartAddressOfRawData);
+        pMod->u.Manual.cbTlsAlloc     = (KU32)cbData;
+        pMod->u.Manual.cTlsCallbacks  = 0;
+        while (puCallbacks[pMod->u.Manual.cTlsCallbacks] != 0)
+            pMod->u.Manual.cTlsCallbacks++;
+        pMod->u.Manual.offTlsCallbacks = pMod->u.Manual.cTlsCallbacks ? (KU32)offCallbacks : KU32_MAX;
+
+        g_pModPendingTlsAlloc = pMod;
+        hmodTlsDll = LoadLibraryExW(pwszTlsDll, NULL /*hFile*/, 0);
+        g_pModPendingTlsAlloc = NULL;
+        if (hmodTlsDll == NULL)
+        {
+            kwErrPrintf("TLS allocation failed for '%s': LoadLibraryExW(%ls) -> %u\n", pMod->pszPath, pwszTlsDll, GetLastError());
+            return -1;
+        }
+        if (pMod->u.Manual.idxTls == KU32_MAX)
+        {
+            kwErrPrintf("TLS allocation failed for '%s': idxTls = KU32_MAX\n", pMod->pszPath, GetLastError());
+            return -1;
+        }
+
+        *(KU32 *)&pMod->u.Manual.pbCopy[offIndex] = pMod->u.Manual.idxTls;
+        KWLDR_LOG(("kwLdrModuleCreateNonNativeSetupTls: idxTls=%d hmodTlsDll=%p (%ls) cbData=%#x\n",
+                   pMod->u.Manual.idxTls, hmodTlsDll, pwszTlsDll, cbData));
+    }
+    return 0;
+}
+
+
+/**
  * Creates a module using the our own loader.
  *
  * @returns Module w/ 1 reference on success, NULL on failure.
@@ -2011,8 +2202,10 @@ static void kwLdrModuleCreateNonNativeSetupQuickZeroAndCopy(PKWMODULE pMod)
  *                              into the global module table.
  * @param   pExeMod             The executable module of the process (for
  *                              resolving imports).  NULL if fExe is set.
+ * @param   pszSearchPath       The PATH to search for imports.  Can be NULL.
  */
-static PKWMODULE kwLdrModuleCreateNonNative(const char *pszPath, KU32 uHashPath, KBOOL fExe, PKWMODULE pExeMod)
+static PKWMODULE kwLdrModuleCreateNonNative(const char *pszPath, KU32 uHashPath, KBOOL fExe,
+                                            PKWMODULE pExeMod, const char *pszSearchPath)
 {
     /*
      * Open the module and check the type.
@@ -2068,10 +2261,16 @@ static PKWMODULE kwLdrModuleCreateNonNative(const char *pszPath, KU32 uHashPath,
 #if defined(KBUILD_OS_WINDOWS) && defined(KBUILD_ARCH_AMD64)
                     pMod->u.Manual.fRegisteredFunctionTable = K_FALSE;
 #endif
-                    pMod->u.Manual.fUseLdBuf = K_FALSE;
-                    pMod->u.Manual.fCanDoQuick = K_FALSE;
+                    pMod->u.Manual.fUseLdBuf        = K_FALSE;
+                    pMod->u.Manual.fCanDoQuick      = K_FALSE;
                     pMod->u.Manual.cQuickZeroChunks = 0;
                     pMod->u.Manual.cQuickCopyChunks = 0;
+                    pMod->u.Manual.idxTls           = KU32_MAX;
+                    pMod->u.Manual.offTlsInitData   = KU32_MAX;
+                    pMod->u.Manual.cbTlsInitData    = 0;
+                    pMod->u.Manual.cbTlsAlloc       = 0;
+                    pMod->u.Manual.cTlsCallbacks    = 0;
+                    pMod->u.Manual.offTlsCallbacks  = 0;
                     pMod->pszPath       = (char *)kHlpMemCopy(&pMod->u.Manual.apImpMods[cImports + 1], pszPath, cbPath);
                     pMod->pwszPath      = (wchar_t *)(pMod->pszPath + cbPath + (cbPath & 1));
                     kwStrToUtf16(pMod->pszPath, (wchar_t *)pMod->pwszPath, cbPath * 2);
@@ -2105,6 +2304,7 @@ static PKWMODULE kwLdrModuleCreateNonNative(const char *pszPath, KU32 uHashPath,
                                 kwLdrModuleLink(pMod);
                             KW_LOG(("New module: %p LB %#010x %s (kLdr)\n",
                                     pMod->u.Manual.pbLoad, pMod->cbImage, pMod->pszPath));
+                            KW_LOG(("TODO: .reload /f %s=%p\n", pMod->pszPath, pMod->u.Manual.pbLoad));
                             kwDebuggerPrintf("TODO: .reload /f %s=%p\n", pMod->pszPath, pMod->u.Manual.pbLoad);
 
                             for (iImp = 0; iImp < cImports; iImp++)
@@ -2113,7 +2313,8 @@ static PKWMODULE kwLdrModuleCreateNonNative(const char *pszPath, KU32 uHashPath,
                                 rc = kLdrModGetImport(pMod->pLdrMod, NULL /*pvBits*/, iImp, szName, sizeof(szName));
                                 if (rc == 0)
                                 {
-                                    rc = kwLdrModuleResolveAndLookup(szName, pExeMod, pMod, &pMod->u.Manual.apImpMods[iImp]);
+                                    rc = kwLdrModuleResolveAndLookup(szName, pExeMod, pMod, pszSearchPath,
+                                                                     &pMod->u.Manual.apImpMods[iImp]);
                                     if (rc == 0)
                                         continue;
                                 }
@@ -2156,15 +2357,21 @@ static PKWMODULE kwLdrModuleCreateNonNative(const char *pszPath, KU32 uHashPath,
 
                                     kwLdrModuleCreateNonNativeSetupQuickZeroAndCopy(pMod);
 
-                                    /*
-                                     * Final finish.
-                                     */
-                                    pMod->u.Manual.pvBits = pMod->u.Manual.pbCopy;
-                                    pMod->u.Manual.enmState = KWMODSTATE_NEEDS_BITS;
-                                    g_cModules++;
-                                    g_cNonNativeModules++;
-                                    return pMod;
+                                    rc = kwLdrModuleCreateNonNativeSetupTls(pMod);
+                                    if (rc == 0)
+                                    {
+                                        /*
+                                         * Final finish.
+                                         */
+                                        pMod->u.Manual.pvBits = pMod->u.Manual.pbCopy;
+                                        pMod->u.Manual.enmState = KWMODSTATE_NEEDS_BITS;
+                                        g_cModules++;
+                                        g_cNonNativeModules++;
+                                        return pMod;
+                                    }
                                 }
+                                else
+                                    kwErrPrintf("kLdrModGetBits failed for %s: %#x (%d)\n", pszPath, rc, rc);
                             }
 
                             kwLdrModuleRelease(pMod);
@@ -2231,6 +2438,7 @@ static int kwLdrModuleGetImportCallback(PKLDRMOD pMod, KU32 iImport, KU32 iSymbo
     }
 
     //printf("iImport=%u (%s) %*.*s rc=%d\n", iImport, &pImpMod->pszPath[pImpMod->offFilename], cchSymbol, cchSymbol, pchSymbol, rc);
+    KW_LOG(("iImport=%u (%s) %*.*s rc=%d\n", iImport, &pImpMod->pszPath[pImpMod->offFilename], cchSymbol, cchSymbol, pchSymbol, rc));
     return rc;
 
 }
@@ -2401,8 +2609,9 @@ static KBOOL kwLdrModuleIsRegularFile(const char *pszPath)
  *                              the heuristics for determining if we can use the
  *                              native loader or need to sandbox the DLL.
  * @param   pExe                The executable (optional).
+ * @param   pszSearchPath       The PATH to search (optional).
  */
-static PKWMODULE kwLdrModuleTryLoadDll(const char *pszPath, KWLOCATION enmLocation, PKWMODULE pExeMod)
+static PKWMODULE kwLdrModuleTryLoadDll(const char *pszPath, KWLOCATION enmLocation, PKWMODULE pExeMod, const char *pszSearchPath)
 {
     /*
      * Does the file exists and is it a regular file?
@@ -2439,7 +2648,7 @@ static PKWMODULE kwLdrModuleTryLoadDll(const char *pszPath, KWLOCATION enmLocati
                 pMod = kwLdrModuleCreateNative(szNormPath, uHashPath,
                                                kwLdrModuleShouldDoNativeReplacements(pszName, enmLocation));
             else
-                pMod = kwLdrModuleCreateNonNative(szNormPath, uHashPath, K_FALSE /*fExe*/, pExeMod);
+                pMod = kwLdrModuleCreateNonNative(szNormPath, uHashPath, K_FALSE /*fExe*/, pExeMod, pszSearchPath);
             if (pMod)
                 return pMod;
             return (PKWMODULE)~(KUPTR)0;
@@ -2461,9 +2670,11 @@ static PKWMODULE kwLdrModuleTryLoadDll(const char *pszPath, KWLOCATION enmLocati
  * @param   pszName             The name of the import module.
  * @param   pExe                The executable (optional).
  * @param   pImporter           The module doing the importing (optional).
+ * @param   pszSearchPath       The PATH to search (optional).
  * @param   ppMod               Where to return the module pointer w/ reference.
  */
-static int kwLdrModuleResolveAndLookup(const char *pszName, PKWMODULE pExe, PKWMODULE pImporter, PKWMODULE *ppMod)
+static int kwLdrModuleResolveAndLookup(const char *pszName, PKWMODULE pExe, PKWMODULE pImporter,
+                                       const char *pszSearchPath, PKWMODULE *ppMod)
 {
     KSIZE const cchName = kHlpStrLen(pszName);
     char        szPath[1024];
@@ -2482,7 +2693,7 @@ static int kwLdrModuleResolveAndLookup(const char *pszName, PKWMODULE pExe, PKWM
         psz = (char *)kHlpMemPCopy(kHlpMemPCopy(szPath, pImporter->pszPath, pImporter->offFilename), pszName, cchName + 1);
         if (fNeedSuffix)
             kHlpMemCopy(psz - 1, ".dll", sizeof(".dll"));
-        pMod = kwLdrModuleTryLoadDll(szPath, KWLOCATION_IMPORTER_DIR, pExe);
+        pMod = kwLdrModuleTryLoadDll(szPath, KWLOCATION_IMPORTER_DIR, pExe, pszSearchPath);
     }
 
     /* Application directory first. */
@@ -2493,7 +2704,7 @@ static int kwLdrModuleResolveAndLookup(const char *pszName, PKWMODULE pExe, PKWM
         psz = (char *)kHlpMemPCopy(kHlpMemPCopy(szPath, pExe->pszPath, pExe->offFilename), pszName, cchName + 1);
         if (fNeedSuffix)
             kHlpMemCopy(psz - 1, ".dll", sizeof(".dll"));
-        pMod = kwLdrModuleTryLoadDll(szPath, KWLOCATION_EXE_DIR, pExe);
+        pMod = kwLdrModuleTryLoadDll(szPath, KWLOCATION_EXE_DIR, pExe, pszSearchPath);
     }
 
     /* The windows directory. */
@@ -2507,7 +2718,44 @@ static int kwLdrModuleResolveAndLookup(const char *pszName, PKWMODULE pExe, PKWM
         psz = (char *)kHlpMemPCopy(&szPath[cchDir], pszName, cchName + 1);
         if (fNeedSuffix)
             kHlpMemCopy(psz - 1, ".dll", sizeof(".dll"));
-        pMod = kwLdrModuleTryLoadDll(szPath, KWLOCATION_SYSTEM32, pExe);
+        pMod = kwLdrModuleTryLoadDll(szPath, KWLOCATION_SYSTEM32, pExe, pszSearchPath);
+    }
+
+    /* The path. */
+    if (   pMod == NULL
+        && pszSearchPath)
+    {
+        const char *pszCur = pszSearchPath;
+        while (*pszCur != '\0')
+        {
+            /* Find the end of the component */
+            KSIZE cch = 0;
+            while (pszCur[cch] != ';' && pszCur[cch] != '\0')
+                cch++;
+
+            if (   cch > 0 /* wrong, but whatever */
+                && cch + 1 + cchName + cchSuffix < sizeof(szPath))
+            {
+                char *pszDst = kHlpMemPCopy(szPath, pszCur, cch);
+                if (   szPath[cch - 1] != ':'
+                    && szPath[cch - 1] != '/'
+                    && szPath[cch - 1] != '\\')
+                    *pszDst++ = '\\';
+                pszDst = kHlpMemPCopy(pszDst, pszName, cchName);
+                if (fNeedSuffix)
+                    pszDst = kHlpMemPCopy(pszDst, ".dll", 4);
+                *pszDst = '\0';
+
+                pMod = kwLdrModuleTryLoadDll(szPath, KWLOCATION_SYSTEM32, pExe, pszSearchPath);
+                if (pMod)
+                    break;
+            }
+
+            /* Advance */
+            pszCur += cch;
+            while (*pszCur == ';')
+                pszCur++;
+        }
     }
 
     /* Return. */
@@ -2518,6 +2766,50 @@ static int kwLdrModuleResolveAndLookup(const char *pszName, PKWMODULE pExe, PKWM
     }
     *ppMod = NULL;
     return KERR_GENERAL_FAILURE;
+}
+
+
+/**
+ * Does the TLS memory initialization for a module on the current thread.
+ *
+ * @returns 0 on success, error on failure.
+ * @param   pMod                The module.
+ */
+static int kwLdrCallTlsAllocateAndInit(PKWMODULE pMod)
+{
+    if (pMod->u.Manual.idxTls != KU32_MAX)
+    {
+        PTEB pTeb = NtCurrentTeb();
+        void **ppvTls = *(void ***)( (KUPTR)pTeb + (sizeof(void *) == 4 ? 0x2c : 0x58) );
+        KU8   *pbData = (KU8 *)ppvTls[pMod->u.Manual.idxTls];
+        KWLDR_LOG(("%s: TLS: Initializing %#x (%#x), idxTls=%d\n",
+                   pMod->pszPath, pbData, pMod->u.Manual.cbTlsAlloc, pMod->u.Manual.cbTlsInitData, pMod->u.Manual.idxTls));
+        if (pMod->u.Manual.cbTlsInitData < pMod->u.Manual.cbTlsAlloc)
+            kHlpMemSet(&pbData[pMod->u.Manual.cbTlsInitData], 0, pMod->u.Manual.cbTlsAlloc);
+        if (pMod->u.Manual.cbTlsInitData)
+            kHlpMemCopy(pbData, &pMod->u.Manual.pbCopy[pMod->u.Manual.offTlsInitData], pMod->u.Manual.cbTlsInitData);
+    }
+    return 0;
+}
+
+
+/**
+ * Does the TLS callbacks for a module.
+ *
+ * @param   pMod                The module.
+ * @param   dwReason            The callback reason.
+ */
+static void kwLdrCallTlsCallbacks(PKWMODULE pMod, DWORD dwReason)
+{
+    if (pMod->u.Manual.cTlsCallbacks)
+    {
+        PIMAGE_TLS_CALLBACK *pCallback = (PIMAGE_TLS_CALLBACK *)&pMod->u.Manual.pbLoad[pMod->u.Manual.offTlsCallbacks];
+        do
+        {
+            KWLDR_LOG(("%s: Calling TLS callback %p(%p,%#x,0)\n", pMod->pszPath, *pCallback, pMod->hOurMod, dwReason));
+            (*pCallback)(pMod->hOurMod, dwReason, 0);
+        } while (*++pCallback);
+    }
 }
 
 
@@ -2535,6 +2827,9 @@ static int kwLdrModuleInitTree(PKWMODULE pMod)
     int rc = 0;
     if (!pMod->fNative)
     {
+        KWLDR_LOG(("kwLdrModuleInitTree: enmState=%#x idxTls=%u %s\n",
+                   pMod->u.Manual.enmState, pMod->u.Manual.idxTls, pMod->pszPath));
+
         /*
          * Need to copy bits?
          */
@@ -2606,6 +2901,7 @@ static int kwLdrModuleInitTree(PKWMODULE pMod)
         }
 #endif
 
+
         if (pMod->u.Manual.enmState == KWMODSTATE_NEEDS_INIT)
         {
             /*
@@ -2622,6 +2918,14 @@ static int kwLdrModuleInitTree(PKWMODULE pMod)
                     return rc;
             }
 
+            /* Do TLS allocations for module init? */
+            rc = kwLdrCallTlsAllocateAndInit(pMod);
+            if (rc != 0)
+                return rc;
+            if (pMod->u.Manual.cTlsCallbacks > 0)
+                kwLdrCallTlsCallbacks(pMod, DLL_PROCESS_ATTACH);
+
+            /* Finally call the entry point. */
             rc = kLdrModCallInit(pMod->pLdrMod, pMod->u.Manual.pbLoad, (KUPTR)pMod->hOurMod);
             if (rc == 0)
                 pMod->u.Manual.enmState = KWMODSTATE_READY;
@@ -2828,8 +3132,9 @@ static int kwToolAddModuleAndImports(PKWTOOL pTool, PKWMODULE pMod)
  *
  *                              A reference is donated by the caller and must be
  *                              released.
+ * @param   pszSearchPath       The PATH environment variable value, or NULL.
  */
-static PKWTOOL kwToolEntryCreate(PKFSOBJ pToolFsObj)
+static PKWTOOL kwToolEntryCreate(PKFSOBJ pToolFsObj, const char *pszSearchPath)
 {
     KSIZE   cwcPath = pToolFsObj->cwcParent + pToolFsObj->cwcName + 1;
     KSIZE   cbPath  = pToolFsObj->cchParent + pToolFsObj->cchName + 1;
@@ -2847,7 +3152,8 @@ static PKWTOOL kwToolEntryCreate(PKFSOBJ pToolFsObj)
         kHlpAssert(fRc);
 
         pTool->enmType = KWTOOLTYPE_SANDBOXED;
-        pTool->u.Sandboxed.pExe = kwLdrModuleCreateNonNative(pTool->pszPath, kwStrHash(pTool->pszPath), K_TRUE /*fExe*/, NULL);
+        pTool->u.Sandboxed.pExe = kwLdrModuleCreateNonNative(pTool->pszPath, kwStrHash(pTool->pszPath), K_TRUE /*fExe*/,
+                                                             NULL /*pEexeMod*/, pszSearchPath);
         if (pTool->u.Sandboxed.pExe)
         {
             int rc = kwLdrModuleQueryMainEntrypoint(pTool->u.Sandboxed.pExe, &pTool->u.Sandboxed.uMainAddr);
@@ -2884,20 +3190,32 @@ static PKWTOOL kwToolEntryCreate(PKFSOBJ pToolFsObj)
 /**
  * Looks up the given tool, creating a new tool table entry if necessary.
  *
- * @returns Pointer to the tool entry.  NULL on failure.
+ * @returns Pointer to the tool entry.  NULL on failure (fully bitched).
  * @param   pszExe              The executable for the tool (not normalized).
+ * @param   cEnvVars            Number of environment varibles.
+ * @param   papszEnvVars        Environment variables.  For getting the PATH.
  */
-static PKWTOOL kwToolLookup(const char *pszExe)
+static PKWTOOL kwToolLookup(const char *pszExe, KU32 cEnvVars, const char **papszEnvVars)
 {
     /*
      * We associate the tools instances with the file system objects.
+     *
+     * We'd like to do the lookup without invaliding the volatile parts of the
+     * cache, thus the double lookup here.  The cache gets invalidate later on.
      */
     KFSLOOKUPERROR  enmError;
     PKFSOBJ         pToolFsObj = kFsCacheLookupA(g_pFsCache, pszExe, &enmError);
+    if (   !pToolFsObj
+        || pToolFsObj->bObjType != KFSOBJ_TYPE_FILE)
+    {
+        kFsCacheInvalidateCustomBoth(g_pFsCache);
+        pToolFsObj = kFsCacheLookupA(g_pFsCache, pszExe, &enmError);
+    }
     if (pToolFsObj)
     {
         if (pToolFsObj->bObjType == KFSOBJ_TYPE_FILE)
         {
+            const char *pszSearchPath;
             PKWTOOL pTool = (PKWTOOL)kFsCacheObjGetUserData(g_pFsCache, pToolFsObj, KW_DATA_KEY_TOOL);
             if (pTool)
             {
@@ -2908,10 +3226,30 @@ static PKWTOOL kwToolLookup(const char *pszExe)
             /*
              * Need to create a new tool.
              */
-            return kwToolEntryCreate(pToolFsObj);
+            pszSearchPath = NULL;
+            while (cEnvVars-- > 0)
+                if (_strnicmp(papszEnvVars[cEnvVars], "PATH=", 5) == 0)
+                {
+                    pszSearchPath = &papszEnvVars[cEnvVars][5];
+                    break;
+                }
+
+            pTool = kwToolEntryCreate(pToolFsObj, pszSearchPath);
+            if (pTool)
+                return pTool;
+
+            kwErrPrintf("kwToolLookup(%s) -> NULL: kwToolEntryCreate failed\n", pszExe);
         }
-        kFsCacheObjRelease(g_pFsCache, pToolFsObj);
+        else
+        {
+            kFsCacheObjRelease(g_pFsCache, pToolFsObj);
+            kwErrPrintf("kwToolLookup(%s) -> NULL: not file (bObjType=%d fFlags=%#x uCacheGen=%u auGenerationsMissing=[%u,%u])\n",
+                        pszExe, pToolFsObj->bObjType, pToolFsObj->fFlags, pToolFsObj->uCacheGen,
+                        g_pFsCache->auGenerationsMissing[0], g_pFsCache->auGenerationsMissing[1]);
+        }
     }
+    else
+        kwErrPrintf("kwToolLookup(%s) -> NULL: enmError=%d\n", pszExe, enmError);
     return NULL;
 }
 
@@ -3467,6 +3805,42 @@ static HANDLE WINAPI kwSandbox_Kernel32_CreateThread(LPSECURITY_ATTRIBUTES pSecA
 /** _beginthread - create a new thread. */
 static uintptr_t __cdecl kwSandbox_msvcrt__beginthread(void (__cdecl *pfnThreadProc)(void *), unsigned cbStack, void *pvUser)
 {
+    kHlpAssert(GetCurrentThreadId() == g_Sandbox.idMainThread);
+    KWFS_TODO();
+    return 0;
+}
+
+
+/** _beginthreadex - create a new thread, msvcr120.dll hack for c2.dll. */
+static uintptr_t __cdecl kwSandbox_msvcr120__beginthreadex(void *pvSecAttr, unsigned cbStack,
+                                                           unsigned (__stdcall *pfnThreadProc)(void *), void *pvUser,
+                                                           unsigned fCreate, unsigned *pidThread)
+{
+    /*
+     * The VC++ 12 (VS 2013) compiler pass two is now threaded.  Let it do
+     * whatever it needs to.
+     */
+    KW_LOG(("kwSandbox_msvcr120__beginthreadex: pvSecAttr=%p (inh=%d) cbStack=%#x pfnThreadProc=%p pvUser=%p fCreate=%#x pidThread=%p\n",
+            pvSecAttr, pvSecAttr ? ((LPSECURITY_ATTRIBUTES)pvSecAttr)->bInheritHandle : 0, cbStack,
+            pfnThreadProc, pvUser, fCreate, pidThread));
+    if (g_Sandbox.pTool->u.Sandboxed.enmHint == KWTOOLHINT_VISUAL_CPP_CL)
+    {
+        uintptr_t rcRet;
+        static uintptr_t (__cdecl *s_pfnReal)(void *, unsigned , unsigned (__stdcall *)(void *), void *, unsigned , unsigned *);
+        if (!s_pfnReal)
+        {
+            *(FARPROC *)&s_pfnReal = GetProcAddress(GetModuleHandleA("msvcr120.dll"), "_beginthreadex");
+            if (!s_pfnReal)
+            {
+                kwErrPrintf("kwSandbox_msvcr120__beginthreadex: Failed to resolve _beginthreadex in msvcr120.dll!\n");
+                __debugbreak();
+            }
+        }
+        rcRet = s_pfnReal(pvSecAttr, cbStack, pfnThreadProc, pvUser, fCreate, pidThread);
+        KW_LOG(("kwSandbox_msvcr120__beginthreadex: returns %p *pidThread=%#x\n", rcRet, pidThread ? *pidThread : -1));
+        return rcRet;
+    }
+
     kHlpAssert(GetCurrentThreadId() == g_Sandbox.idMainThread);
     KWFS_TODO();
     return 0;
@@ -4331,6 +4705,7 @@ static HMODULE WINAPI kwSandbox_Kernel32_LoadLibraryExA_VirtualApiModule(PKWDYNL
 static HMODULE WINAPI kwSandbox_Kernel32_LoadLibraryExA(LPCSTR pszFilename, HANDLE hFile, DWORD fFlags)
 {
     KSIZE       cchFilename = kHlpStrLen(pszFilename);
+    const char *pszSearchPath;
     PKWDYNLOAD  pDynLoad;
     PKWMODULE   pMod;
     int         rc;
@@ -4339,7 +4714,8 @@ static HMODULE WINAPI kwSandbox_Kernel32_LoadLibraryExA(LPCSTR pszFilename, HAND
     /*
      * Deal with a couple of extremely unlikely special cases right away.
      */
-    if (   !(fFlags & LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE)
+    if (   (   !(fFlags & LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE)
+            || (fFlags & LOAD_LIBRARY_AS_IMAGE_RESOURCE))
         && (hFile == NULL || hFile == INVALID_HANDLE_VALUE) )
     { /* likely */ }
     else
@@ -4389,6 +4765,7 @@ static HMODULE WINAPI kwSandbox_Kernel32_LoadLibraryExA(LPCSTR pszFilename, HAND
      */
     if (fFlags & (  DONT_RESOLVE_DLL_REFERENCES
                   | LOAD_LIBRARY_AS_DATAFILE
+                  | LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE
                   | LOAD_LIBRARY_AS_IMAGE_RESOURCE) )
         return kwSandbox_Kernel32_LoadLibraryExA_Resource(pDynLoad, fFlags);
 
@@ -4403,15 +4780,16 @@ static HMODULE WINAPI kwSandbox_Kernel32_LoadLibraryExA(LPCSTR pszFilename, HAND
      * Normal library loading.
      * We start by being very lazy and reusing the code for resolving imports.
      */
+    pszSearchPath = kwSandboxDoGetEnvA(&g_Sandbox, "PATH", 4);
     if (!kHlpIsFilenameOnly(pszFilename))
-        pMod = kwLdrModuleTryLoadDll(pszFilename, KWLOCATION_UNKNOWN, g_Sandbox.pTool->u.Sandboxed.pExe);
+        pMod = kwLdrModuleTryLoadDll(pszFilename, KWLOCATION_UNKNOWN, g_Sandbox.pTool->u.Sandboxed.pExe, pszSearchPath);
     else
     {
-        rc = kwLdrModuleResolveAndLookup(pszFilename, g_Sandbox.pTool->u.Sandboxed.pExe, NULL /*pImporter*/, &pMod);
+        rc = kwLdrModuleResolveAndLookup(pszFilename, g_Sandbox.pTool->u.Sandboxed.pExe, NULL /*pImporter*/, pszSearchPath, &pMod);
         if (rc != 0)
             pMod = NULL;
     }
-    if (pMod)
+    if (pMod && pMod != (PKWMODULE)~(KUPTR)0)
     {
         /* Enter it into the tool module table and dynamic link request cache. */
         kwToolAddModuleAndImports(g_Sandbox.pTool, pMod);
@@ -4439,9 +4817,78 @@ static HMODULE WINAPI kwSandbox_Kernel32_LoadLibraryExA(LPCSTR pszFilename, HAND
     {
         KWFS_TODO();
         kHlpFree(pDynLoad);
-        SetLastError(ERROR_MOD_NOT_FOUND);
+        SetLastError(pMod ? ERROR_BAD_EXE_FORMAT : ERROR_MOD_NOT_FOUND);
     }
     return NULL;
+}
+
+
+/** Kernel32 - LoadLibraryExA() for native overloads */
+static HMODULE WINAPI kwSandbox_Kernel32_Native_LoadLibraryExA(LPCSTR pszFilename, HANDLE hFile, DWORD fFlags)
+{
+    char szPath[1024];
+    KWLDR_LOG(("kwSandbox_Kernel32_Native_LoadLibraryExA(%s, %p, %#x)\n", pszFilename, hFile, fFlags));
+
+    /*
+     * We may have to help resolved unqualified DLLs living in the executable directory.
+     */
+    if (kHlpIsFilenameOnly(pszFilename))
+    {
+        KSIZE cchFilename = kHlpStrLen(pszFilename);
+        KSIZE cchExePath  = g_Sandbox.pTool->u.Sandboxed.pExe->offFilename;
+        if (cchExePath + cchFilename + 1 <= sizeof(szPath))
+        {
+            kHlpMemCopy(szPath, g_Sandbox.pTool->u.Sandboxed.pExe->pszPath, cchExePath);
+            kHlpMemCopy(&szPath[cchExePath], pszFilename, cchFilename + 1);
+            if (kwFsPathExists(szPath))
+            {
+                KWLDR_LOG(("kwSandbox_Kernel32_Native_LoadLibraryExA: %s -> %s\n", pszFilename, szPath));
+                pszFilename = szPath;
+            }
+        }
+
+        if (pszFilename != szPath)
+        {
+            KSIZE cchSuffix = 0;
+            KBOOL fNeedSuffix = K_FALSE;
+            const char *pszCur = kwSandboxDoGetEnvA(&g_Sandbox, "PATH", 4);
+            while (*pszCur != '\0')
+            {
+                /* Find the end of the component */
+                KSIZE cch = 0;
+                while (pszCur[cch] != ';' && pszCur[cch] != '\0')
+                    cch++;
+
+                if (   cch > 0 /* wrong, but whatever */
+                    && cch + 1 + cchFilename + cchSuffix < sizeof(szPath))
+                {
+                    char *pszDst = kHlpMemPCopy(szPath, pszCur, cch);
+                    if (   szPath[cch - 1] != ':'
+                        && szPath[cch - 1] != '/'
+                        && szPath[cch - 1] != '\\')
+                        *pszDst++ = '\\';
+                    pszDst = kHlpMemPCopy(pszDst, pszFilename, cchFilename);
+                    if (fNeedSuffix)
+                        pszDst = kHlpMemPCopy(pszDst, ".dll", 4);
+                    *pszDst = '\0';
+
+                    if (kwFsPathExists(szPath))
+                    {
+                        KWLDR_LOG(("kwSandbox_Kernel32_Native_LoadLibraryExA: %s -> %s\n", pszFilename, szPath));
+                        pszFilename = szPath;
+                        break;
+                    }
+                }
+
+                /* Advance */
+                pszCur += cch;
+                while (*pszCur == ';')
+                    pszCur++;
+            }
+        }
+    }
+
+    return LoadLibraryExA(pszFilename, hFile, fFlags);
 }
 
 
@@ -4492,6 +4939,7 @@ static HMODULE WINAPI kwSandbox_Kernel32_GetModuleHandleA(LPCSTR pszModule)
 {
     KSIZE i;
     KSIZE cchModule;
+    PKWDYNLOAD pDynLoad;
     kHlpAssert(GetCurrentThreadId() == g_Sandbox.idMainThread);
 
     /*
@@ -4513,7 +4961,27 @@ static HMODULE WINAPI kwSandbox_Kernel32_GetModuleHandleA(LPCSTR pszModule)
             return g_aGetModuleHandleCache[i].hmod = GetModuleHandleA(pszModule);
         }
 
+    /*
+     * Modules we've dynamically loaded.
+     */
+    for (pDynLoad = g_Sandbox.pTool->u.Sandboxed.pDynLoadHead; pDynLoad; pDynLoad = pDynLoad->pNext)
+        if (   pDynLoad->pMod
+            && (   stricmp(pDynLoad->pMod->pszPath, pszModule) == 0
+                || stricmp(&pDynLoad->pMod->pszPath[pDynLoad->pMod->offFilename], pszModule) == 0) )
+        {
+            if (   pDynLoad->pMod->fNative
+                || pDynLoad->pMod->u.Manual.enmState == KWMODSTATE_READY)
+            {
+                KW_LOG(("kwSandbox_Kernel32_GetModuleHandleA(%s,,) -> %p [dynload]\n", pszModule, pDynLoad->hmod));
+                return pDynLoad->hmod;
+            }
+            SetLastError(ERROR_MOD_NOT_FOUND);
+            return NULL;
+        }
+
+    kwErrPrintf("pszModule=%s\n", pszModule);
     KWFS_TODO();
+    SetLastError(ERROR_MOD_NOT_FOUND);
     return NULL;
 }
 
@@ -4523,6 +4991,7 @@ static HMODULE WINAPI kwSandbox_Kernel32_GetModuleHandleW(LPCWSTR pwszModule)
 {
     KSIZE i;
     KSIZE cwcModule;
+    PKWDYNLOAD pDynLoad;
     kHlpAssert(GetCurrentThreadId() == g_Sandbox.idMainThread);
 
     /*
@@ -4544,7 +5013,27 @@ static HMODULE WINAPI kwSandbox_Kernel32_GetModuleHandleW(LPCWSTR pwszModule)
             return g_aGetModuleHandleCache[i].hmod = GetModuleHandleW(pwszModule);
         }
 
+    /*
+     * Modules we've dynamically loaded.
+     */
+    for (pDynLoad = g_Sandbox.pTool->u.Sandboxed.pDynLoadHead; pDynLoad; pDynLoad = pDynLoad->pNext)
+        if (   pDynLoad->pMod
+            && (   _wcsicmp(pDynLoad->pMod->pwszPath, pwszModule) == 0
+                || _wcsicmp(&pDynLoad->pMod->pwszPath[pDynLoad->pMod->offFilename], pwszModule) == 0) ) /** @todo wrong offset */
+        {
+            if (   pDynLoad->pMod->fNative
+                || pDynLoad->pMod->u.Manual.enmState == KWMODSTATE_READY)
+            {
+                KW_LOG(("kwSandbox_Kernel32_GetModuleHandleW(%ls,,) -> %p [dynload]\n", pwszModule, pDynLoad->hmod));
+                return pDynLoad->hmod;
+            }
+            SetLastError(ERROR_MOD_NOT_FOUND);
+            return NULL;
+        }
+
+    kwErrPrintf("pwszModule=%ls\n", pwszModule);
     KWFS_TODO();
+    SetLastError(ERROR_MOD_NOT_FOUND);
     return NULL;
 }
 
@@ -8759,6 +9248,17 @@ static void * __cdecl kwSandbox_msvcrt_memcpy(void *pvDst, void const *pvSrc, si
     return pvDst;
 }
 
+
+/** CRT - memset   */
+static void * __cdecl kwSandbox_msvcrt_memset(void *pvDst, int bFiller, size_t cb)
+{
+    KU8       *pbDst = (KU8 *)pvDst;
+    KSIZE      cbLeft = cb;
+    while (cbLeft-- > 0)
+        *pbDst++ = bFiller;
+    return pvDst;
+}
+
 #endif /* NDEBUG */
 
 
@@ -8881,6 +9381,7 @@ KWREPLACEMENTFUNCTION const g_aSandboxReplacements[] =
 
     { TUPLE("_beginthread"),                NULL,       (KUPTR)kwSandbox_msvcrt__beginthread },
     { TUPLE("_beginthreadex"),              NULL,       (KUPTR)kwSandbox_msvcrt__beginthreadex },
+    { TUPLE("_beginthreadex"),          "msvcr120.dll", (KUPTR)kwSandbox_msvcr120__beginthreadex }, /* higher priority last */
 
     { TUPLE("__argc"),                      NULL,       (KUPTR)&g_Sandbox.cArgs },
     { TUPLE("__argv"),                      NULL,       (KUPTR)&g_Sandbox.papszArgs },
@@ -8920,6 +9421,7 @@ KWREPLACEMENTFUNCTION const g_aSandboxReplacements[] =
 
 #ifndef NDEBUG
     { TUPLE("memcpy"),                      NULL,       (KUPTR)kwSandbox_msvcrt_memcpy },
+    { TUPLE("memset"),                      NULL,       (KUPTR)kwSandbox_msvcrt_memset },
 #endif
 };
 /** Number of entries in g_aReplacements. */
@@ -8969,6 +9471,7 @@ KWREPLACEMENTFUNCTION const g_aSandboxNativeReplacements[] =
     { TUPLE("DeleteFileW"),                 NULL,       (KUPTR)kwSandbox_Kernel32_DeleteFileW },
 #endif
     { TUPLE("SetConsoleCtrlHandler"),       NULL,       (KUPTR)kwSandbox_Kernel32_SetConsoleCtrlHandler },
+    { TUPLE("LoadLibraryExA"),              NULL,       (KUPTR)kwSandbox_Kernel32_Native_LoadLibraryExA },
 
     { TUPLE("WriteConsoleA"),               NULL,       (KUPTR)kwSandbox_Kernel32_WriteConsoleA },
     { TUPLE("WriteConsoleW"),               NULL,       (KUPTR)kwSandbox_Kernel32_WriteConsoleW },
@@ -9280,8 +9783,9 @@ static int kwSandboxInit(PKWSANDBOX pSandbox, PKWTOOL pTool,
         {
             const char *pszVar   = papszEnvVars[i];
             KSIZE       cchVar   = kHlpStrLen(pszVar);
+            const char *pszEqual;
             if (   cchVar > 0
-                && kHlpMemChr(pszVar, '=', cchVar) != NULL)
+                && (pszEqual = kHlpMemChr(pszVar, '=', cchVar)) != NULL)
             {
                 char       *pszCopy  = kHlpDup(pszVar, cchVar + 1);
                 wchar_t    *pwszCopy = kwStrToUtf16AllocN(pszVar, cchVar + 1);
@@ -9291,6 +9795,16 @@ static int kwSandboxInit(PKWSANDBOX pSandbox, PKWTOOL pTool,
                     pSandbox->environ[iDst]       = pszCopy;
                     pSandbox->papwszEnvVars[iDst] = pwszCopy;
                     pSandbox->wenviron[iDst]      = pwszCopy;
+
+                    /* When we see the path, we must tell the system or native exec and module loading won't work . */
+                    if (   (pszEqual - pszVar) == 4
+                        && (  pszCopy[0] == 'P' || pszCopy[0] == 'p')
+                        && (  pszCopy[1] == 'A' || pszCopy[1] == 'a')
+                        && (  pszCopy[2] == 'T' || pszCopy[2] == 't')
+                        && (  pszCopy[3] == 'H' || pszCopy[3] == 'h'))
+                        if (!SetEnvironmentVariableW(L"Path", &pwszCopy[5]))
+                            kwErrPrintf("kwSandboxInit: SetEnvironmentVariableW(Path,) failed: %u\n", GetLastError());
+
                     iDst++;
                 }
                 else
@@ -9310,7 +9824,6 @@ static int kwSandboxInit(PKWSANDBOX pSandbox, PKWTOOL pTool,
     }
     else
         return kwErrPrintfRc(KERR_NO_MEMORY, "Error setting up environment variables: kwSandboxGrowEnv failed\n");
-
 
     /*
      * Invalidate the volatile parts of cache (kBuild output directory,
@@ -9821,7 +10334,7 @@ static int kSubmitHandleJobUnpacked(const char *pszExecutable, const char *pszCw
     /*
      * Lookup the tool.
      */
-    pTool = kwToolLookup(pszExecutable);
+    pTool = kwToolLookup(pszExecutable, cEnvVars, papszEnvVars);
     if (pTool)
     {
         /*
@@ -10620,11 +11133,44 @@ int main(int argc, char **argv)
         }
         else if (strcmp(argv[i], "--test") == 0)
             return kwTestRun(argc - i - 1, &argv[i + 1]);
+        else if (strcmp(argv[i], "--priority") == 0)
+        {
+            i++;
+            if (i < argc)
+            {
+                char *pszEnd = NULL;
+                unsigned long uValue = strtoul(argv[i], &pszEnd, 16);
+                if (   *argv[i]
+                    && pszEnd != NULL
+                    && *pszEnd == '\0'
+                    && uValue >= 1
+                    && uValue <= 5)
+                {
+                    DWORD dwClass, dwPriority;
+                    switch (uValue)
+                    {
+                        case 1: dwClass = IDLE_PRIORITY_CLASS;         dwPriority = THREAD_PRIORITY_IDLE; break;
+                        case 2: dwClass = BELOW_NORMAL_PRIORITY_CLASS; dwPriority = THREAD_PRIORITY_BELOW_NORMAL; break;
+                        case 3: dwClass = NORMAL_PRIORITY_CLASS;       dwPriority = THREAD_PRIORITY_NORMAL; break;
+                        case 4: dwClass = HIGH_PRIORITY_CLASS;         dwPriority = 0xffffffff; break;
+                        case 5: dwClass = REALTIME_PRIORITY_CLASS;     dwPriority = 0xffffffff; break;
+                    }
+                    SetPriorityClass(GetCurrentProcess(), dwClass);
+                    if (dwPriority != 0xffffffff)
+                        SetThreadPriority(GetCurrentThread(), dwPriority);
+                }
+                else
+                    return kwErrPrintfRc(2, "Invalid --priority argument: %s\n", argv[i]);
+            }
+            else
+                return kwErrPrintfRc(2, "--priority takes an argument!\n");
+
+        }
         else if (   strcmp(argv[i], "--help") == 0
                  || strcmp(argv[i], "-h") == 0
                  || strcmp(argv[i], "-?") == 0)
         {
-            printf("usage: kWorker [--volatile dir] --pipe <pipe-handle>\n"
+            printf("usage: kWorker [--volatile dir] [--priority <1-5>] --pipe <pipe-handle>\n"
                    "usage: kWorker <--help|-h>\n"
                    "usage: kWorker <--version|-V>\n"
                    "usage: kWorker [--volatile dir] --test [<times> [--chdir <dir>] [--breakpoint] -- args\n"

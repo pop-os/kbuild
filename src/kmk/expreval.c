@@ -1,5 +1,5 @@
 #ifdef CONFIG_WITH_IF_CONDITIONALS
-/* $Id: expreval.c 2573 2012-05-13 19:39:47Z bird $ */
+/* $Id: expreval.c 3065 2017-09-30 12:52:35Z bird $ */
 /** @file
  * expreval - Expressions evaluator, C / BSD make / nmake style.
  */
@@ -390,7 +390,7 @@ static EXPRRET expr_string_to_num(PEXPR pThis, EXPRINT64 *piDst, const char *psz
                 i = -i;
             *piDst = i;
             if (!fQuiet)
-                expr_error(pThis, "Invalid a number \"%.80s\"", pszSrc);
+                expr_error(pThis, "Invalid number \"%.80s\"", pszSrc);
             return kExprRet_Error;
         }
 
@@ -1396,7 +1396,7 @@ static EXPRRET expr_op_equal(PEXPR pThis)
     }
 
     expr_pop_and_delete_var(pThis);
-    return kExprRet_Ok;
+    return rc;
 }
 
 

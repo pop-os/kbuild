@@ -1,4 +1,4 @@
-/* $Id: redirect.c 2916 2016-09-15 11:41:42Z bird $ */
+/* $Id: redirect.c 3085 2017-10-03 11:01:54Z bird $ */
 /** @file
  * kmk_redirect - Do simple program <-> file redirection (++).
  */
@@ -26,8 +26,8 @@
 /*******************************************************************************
 *   Header Files                                                               *
 *******************************************************************************/
-#ifdef __APPLE__
-# define _POSIX_C_SOURCE 1 /* 10.4 sdk and unsetenv */
+#if defined(__APPLE__)
+/*# define _POSIX_C_SOURCE 1  / *  10.4 sdk and unsetenv  * / - breaks O_CLOEXEC on 10.8 */
 #endif
 #include "make.h"
 #include <assert.h>
@@ -44,8 +44,18 @@
 # include <io.h>
 # include "quote_argv.h"
 #else
+# ifdef __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__
+#  if __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ >= 1050
+#   define USE_POSIX_SPAWN
+#  endif
+# elif !defined(KBUILD_OS_WINDOWS) && !defined(KBUILD_OS_OS2)
+#  define USE_POSIX_SPAWN
+# endif
 # include <unistd.h>
-# include <spawn.h>
+# ifdef USE_POSIX_SPAWN
+#  include <spawn.h>
+# endif
+# include <sys/wait.h>
 #endif
 
 #include <k/kDefs.h>
@@ -70,10 +80,6 @@
 # endif
 #endif
 
-#if !defined(KBUILD_OS_WINDOWS) && !defined(KBUILD_OS_OS2)
-# define USE_POSIX_SPAWN
-#endif
-
 
 /* String + strlen tuple. */
 #define TUPLE(a_sz)     a_sz, sizeof(a_sz) - 1
@@ -89,7 +95,7 @@ static void __cdecl ignore_invalid_parameter(const wchar_t *a, const wchar_t *b,
 
 #endif /* _MSC_VER */
 
-
+#if 0 /* unused */
 /**
  * Safely works around MS CRT's pedantic close() function.
  *
@@ -106,6 +112,7 @@ static void safeCloseFd(int fd)
     close(fd);
 #endif
 }
+#endif /* unused */
 
 
 static const char *name(const char *pszName)
@@ -175,7 +182,7 @@ typedef struct REDIRECTORDERS
         kRedirectOrder_Invalid = 0,
         kRedirectOrder_Close,
         kRedirectOrder_Open,
-        kRedirectOrder_Dup,
+        kRedirectOrder_Dup
     }           enmOrder;
     /** The target file handle. */
     int         fdTarget;
@@ -382,10 +389,11 @@ static int kRedirectOpenWithoutConflict(const char *pszFilename, int fOpen, mode
 #elif defined(O_CLOEXEC)
     int const   fNoInherit = O_CLOEXEC;
 #else
-# error "port me"
+    int const   fNoInherit = 0;
+# define USE_FD_CLOEXEC
 #endif
     int         aFdTries[32];
-    int         cTries;
+    unsigned    cTries;
     int         fdOpened;
 
 #ifdef KBUILD_OS_WINDOWS
@@ -404,7 +412,9 @@ static int kRedirectOpenWithoutConflict(const char *pszFilename, int fOpen, mode
         if (fdOpened != fdTarget)
             return fdOpened;
 #ifndef _MSC_VER /* Stupid, stupid MSVCRT!  No friggin way of making a handle inheritable (or not). */
-        if (fcntl(fdOpened, F_SETFD, FD_CLOEXEC) != -1)
+# ifndef USE_FD_CLOEXEC
+        if (fcntl(fdOpened, F_SETFD, 0) != -1)
+# endif
             return fdOpened;
 #endif
     }
@@ -426,8 +436,13 @@ static int kRedirectOpenWithoutConflict(const char *pszFilename, int fOpen, mode
                 )
             {
 #ifndef _MSC_VER
-                if (   fdOpened != fdTarget
+# ifdef USE_FD_CLOEXEC
+                if (   fdOpened == fdTarget
                     || fcntl(fdOpened, F_SETFD, FD_CLOEXEC) != -1)
+# else
+                if (   fdOpened != fdTarget
+                    || fcntl(fdOpened, F_SETFD, 0) != -1)
+# endif
 #endif
                 {
                     while (cTries-- > 0)
@@ -455,6 +470,35 @@ static int kRedirectOpenWithoutConflict(const char *pszFilename, int fOpen, mode
         close(aFdTries[cTries]);
     return -1;
 }
+
+
+/**
+ * Cleans up the file operation orders.
+ *
+ * This does not restore stuff, just closes handles we've opened for the child.
+ *
+ * @param   cOrders         Number of file operation orders.
+ * @param   paOrders        The file operation orders.
+ * @param   fFailed         Set if it's a failure.
+ */
+static void kRedirectCleanupFdOrders(unsigned cOrders, REDIRECTORDERS *paOrders, KBOOL fFailure)
+{
+    unsigned i = cOrders;
+    while (i-- > 0)
+    {
+        if (   paOrders[i].enmOrder == kRedirectOrder_Open
+            && paOrders[i].fdSource != -1)
+        {
+            close(paOrders[i].fdSource);
+            paOrders[i].fdSource = -1;
+            if (   fFailure
+                && paOrders[i].fRemoveOnFailure
+                && paOrders[i].pszFilename)
+                remove(paOrders[i].pszFilename);
+        }
+    }
+}
+
 
 #ifndef USE_POSIX_SPAWN
 
@@ -573,34 +617,6 @@ static int kRedirectSaveHandle(REDIRECTORDERS *pToSave, unsigned cOrders, REDIRE
 
 
 /**
- * Cleans up the file operation orders.
- *
- * This does not restore stuff, just closes handles we've opened for the guest.
- *
- * @param   cOrders         Number of file operation orders.
- * @param   paOrders        The file operation orders.
- * @param   fFailed         Set if it's a failure.
- */
-static void kRedirectCleanupFdOrders(unsigned cOrders, REDIRECTORDERS *paOrders, KBOOL fFailure)
-{
-    unsigned i = cOrders;
-    while (i-- > 0)
-    {
-        if (   paOrders[i].enmOrder == kRedirectOrder_Open
-            && paOrders[i].fdSource != -1)
-        {
-            close(paOrders[i].fdSource);
-            paOrders[i].fdSource = -1;
-            if (   fFailure
-                && paOrders[i].fRemoveOnFailure
-                && paOrders[i].pszFilename)
-                remove(paOrders[i].pszFilename);
-        }
-    }
-}
-
-
-/**
  * Restores the target file descriptors affected by the file operation orders.
  *
  * @param   cOrders         Number of file operation orders.
@@ -637,7 +653,7 @@ static void kRedirectRestoreFdOrders(unsigned cOrders, REDIRECTORDERS *paOrders,
             }
 #ifndef KBUILD_OS_WINDOWS
             else
-                fprintf(*ppWorkingStdErr, "%s: dup2(%d,%d) failed: %s",
+                fprintf(*ppWorkingStdErr, "%s: dup2(%d,%d) failed: %s\n",
                         g_progname, paOrders[i].fdSaved, paOrders[i].fdTarget, strerror(errno));
 #endif
         }
@@ -645,10 +661,10 @@ static void kRedirectRestoreFdOrders(unsigned cOrders, REDIRECTORDERS *paOrders,
 #ifndef KBUILD_OS_WINDOWS
         if (paOrders[i].fSaved != -1)
         {
-            if (fcntl(paOrders[i].fdTarget, F_SETFD, paOrders[i].fSaved & FD_CLOEXEC) == -1)
+            if (fcntl(paOrders[i].fdTarget, F_SETFD, paOrders[i].fSaved & FD_CLOEXEC) != -1)
                 paOrders[i].fSaved = -1;
             else
-                fprintf(*ppWorkingStdErr, "%s: fcntl(%d,F_SETFD,%s) failed: %s",
+                fprintf(*ppWorkingStdErr, "%s: fcntl(%d,F_SETFD,%s) failed: %s\n",
                         g_progname, paOrders[i].fdTarget, paOrders[i].fSaved & FD_CLOEXEC ? "FD_CLOEXEC" : "0", strerror(errno));
         }
 #endif
@@ -700,13 +716,13 @@ static int kRedirectExecFdOrders(unsigned cOrders, REDIRECTORDERS *paOrders, FIL
                                  || errno == EBADF)
                             rcExit = 0;
                         else
-                            fprintf(*ppWorkingStdErr, "%s: fcntl(%d,F_SETFD,FD_CLOEXEC) failed: %s",
+                            fprintf(*ppWorkingStdErr, "%s: fcntl(%d,F_SETFD,FD_CLOEXEC) failed: %s\n",
                                     g_progname, fdTarget, strerror(errno));
                     }
                     else if (errno == EBADF)
                         rcExit = 0;
                     else
-                        fprintf(*ppWorkingStdErr, "%s: fcntl(%d,F_GETFD,0) failed: %s", g_progname, fdTarget, strerror(errno));
+                        fprintf(*ppWorkingStdErr, "%s: fcntl(%d,F_GETFD,0) failed: %s\n", g_progname, fdTarget, strerror(errno));
                 }
 # endif
                 else
@@ -724,10 +740,10 @@ static int kRedirectExecFdOrders(unsigned cOrders, REDIRECTORDERS *paOrders, FIL
                     else
                     {
                         if (paOrders[i].enmOrder == kRedirectOrder_Open)
-                            fprintf(*ppWorkingStdErr, "%s: dup2(%d [%s],%d) failed: %s", g_progname, paOrders[i].fdSource,
+                            fprintf(*ppWorkingStdErr, "%s: dup2(%d [%s],%d) failed: %s\n", g_progname, paOrders[i].fdSource,
                                     paOrders[i].pszFilename, paOrders[i].fdTarget, strerror(errno));
                         else
-                            fprintf(*ppWorkingStdErr, "%s: dup2(%d,%d) failed: %s",
+                            fprintf(*ppWorkingStdErr, "%s: dup2(%d,%d) failed: %s\n",
                                     g_progname, paOrders[i].fdSource, paOrders[i].fdTarget, strerror(errno));
                         rcExit = 10;
                     }
@@ -762,7 +778,7 @@ static int kRedirectExecFdOrders(unsigned cOrders, REDIRECTORDERS *paOrders, FIL
  * @param   papszArgs           The child argument vector.
  * @param   fWatcomBrainDamage  Whether MSC need to do quoting according to
  *                              weird Watcom WCC rules.
- * @param   papszEnv            The child environment vector.
+ * @param   papszEnvVars        The child environment vector.
  * @param   pszCwd              The current working directory of the child.
  * @param   pszSavedCwd         The saved current working directory.  This is
  *                              NULL if the CWD doesn't need changing.
@@ -776,7 +792,7 @@ static int kRedirectExecFdOrders(unsigned cOrders, REDIRECTORDERS *paOrders, FIL
  * @param   pfIsChildExitCode   Where to indicate whether the return exit code
  *                              is from the child or from our setup efforts.
  */
-static int kRedirectDoSpawn(const char *pszExecutable, int cArgs, char **papszArgs, int fWatcomBrainDamage, char **papszEnv,
+static int kRedirectDoSpawn(const char *pszExecutable, int cArgs, char **papszArgs, int fWatcomBrainDamage, char **papszEnvVars,
                             const char *pszCwd, const char *pszSavedCwd, unsigned cOrders, REDIRECTORDERS *paOrders,
 #ifdef USE_POSIX_SPAWN
                             posix_spawn_file_actions_t *pFileActions,
@@ -787,7 +803,7 @@ static int kRedirectDoSpawn(const char *pszExecutable, int cArgs, char **papszAr
 #endif
                             KBOOL *pfIsChildExitCode)
 {
-    int     rcExit;
+    int     rcExit = 0;
     int     i;
 #ifdef _MSC_VER
     char  **papszArgsOriginal = papszArgs;
@@ -862,7 +878,7 @@ static int kRedirectDoSpawn(const char *pszExecutable, int cArgs, char **papszAr
                  */
 #if defined(KBUILD_OS_WINDOWS)
                 /* Windows is slightly complicated due to handles and sub_proc.c. */
-                HANDLE  hProcess = (HANDLE)_spawnvpe(_P_NOWAIT, pszExecutable, papszArgs, papszEnv);
+                HANDLE  hProcess = (HANDLE)_spawnvpe(_P_NOWAIT, pszExecutable, papszArgs, papszEnvVars);
                 kRedirectRestoreFdOrders(cOrders, paOrders, &pWorkingStdErr);
                 if ((intptr_t)hProcess != -1)
                 {
@@ -897,7 +913,7 @@ static int kRedirectDoSpawn(const char *pszExecutable, int cArgs, char **papszAr
                     rcExit = err(10, "_spawnvpe(%s) failed", pszExecutable);
 
 # elif defined(KBUILD_OS_OS2)
-                *pPidSpawned = _spawnve(_P_NOWAIT, pszExecutable, papszArgs, papszEnv);
+                *pPidSpawned = _spawnvpe(P_NOWAIT, pszExecutable, papszArgs, papszEnvVars);
                 kRedirectRestoreFdOrders(cOrders, paOrders, &pWorkingStdErr);
                 if (*pPidSpawned != -1)
                 {
@@ -929,7 +945,11 @@ static int kRedirectDoSpawn(const char *pszExecutable, int cArgs, char **papszAr
                  */
 # if defined(KBUILD_OS_WINDOWS) || defined(KBUILD_OS_OS2)
                 errno  = 0;
-                rcExit = (int)_spawnvpe(_P_WAIT, pszExecutable, papszArgs, papszEnv);
+#  if defined(KBUILD_OS_WINDOWS)
+                rcExit = (int)_spawnvpe(_P_WAIT, pszExecutable, papszArgs, papszEnvVars);
+#  else
+                rcExit = (int)_spawnvpe(P_WAIT, pszExecutable, papszArgs, papszEnvVars);
+#  endif
                 kRedirectRestoreFdOrders(cOrders, paOrders, &pWorkingStdErr);
                 if (rcExit != -1 || errno == 0)
                 {
@@ -1022,7 +1042,7 @@ int main(int argc, char **argv, char **envp)
 
     int             iArg;
     const char     *pszExecutable      = NULL;
-    char          **papszEnv           = NULL;
+    char          **papszEnvVars       = NULL;
     unsigned        cAllocatedEnvVars;
     unsigned        iEnvVar;
     unsigned        cEnvVars;
@@ -1056,11 +1076,11 @@ int main(int argc, char **argv, char **envp)
 
 #if defined(KMK)
     /* We get it from kmk and just count it:  */
-    papszEnv = pChild->environment;
-    if (!papszEnv)
-        pChild->environment = papszEnv = target_environment(pChild->file);
+    papszEnvVars = pChild->environment;
+    if (!papszEnvVars)
+        pChild->environment = papszEnvVars = target_environment(pChild->file);
     cEnvVars = 0;
-    while (papszEnv[cEnvVars] != NULL)
+    while (papszEnvVars[cEnvVars] != NULL)
         cEnvVars++;
     cAllocatedEnvVars = cEnvVars;
 #else
@@ -1070,20 +1090,20 @@ int main(int argc, char **argv, char **envp)
         cEnvVars++;
 
     cAllocatedEnvVars = cEnvVars + 4;
-    papszEnv = malloc((cAllocatedEnvVars + 1) * sizeof(papszEnv));
-    if (!papszEnv)
+    papszEnvVars = malloc((cAllocatedEnvVars + 1) * sizeof(papszEnvVars));
+    if (!papszEnvVars)
         return errx(9, "out of memory!");
 
     iEnvVar = cEnvVars;
-    papszEnv[iEnvVar] = NULL;
+    papszEnvVars[iEnvVar] = NULL;
     while (iEnvVar-- > 0)
     {
-        papszEnv[iEnvVar] = strdup(envp[iEnvVar]);
-        if (!papszEnv[iEnvVar])
+        papszEnvVars[iEnvVar] = strdup(envp[iEnvVar]);
+        if (!papszEnvVars[iEnvVar])
         {
             while (iEnvVar-- > 0)
-                free(papszEnv[iEnvVar]);
-            free(papszEnv);
+                free(papszEnvVars[iEnvVar]);
+            free(papszEnvVars);
             return errx(9, "out of memory!");
         }
     }
@@ -1114,11 +1134,16 @@ int main(int argc, char **argv, char **envp)
             pszArg++;
             if (chOpt == '-')
             {
-                /* '--' indicates where the bits to execute start. */
+                /* '--' indicates where the bits to execute start.  Check if we're
+                   relaunching ourselves here and just continue parsing if we are. */
                 if (*pszArg == '\0')
                 {
                     iArg++;
-                    break;
+                    if (    iArg >= argc
+                        || (   strcmp(argv[iArg], "kmk_builtin_redirect") != 0
+                            && strcmp(argv[iArg], argv[0]) != 0))
+                        break;
+                    continue;
                 }
 
                 if (   strcmp(pszArg, "wcc-brain-damage") == 0
@@ -1136,6 +1161,10 @@ int main(int argc, char **argv, char **envp)
                 else if (   strcmp(pszArg, "set") == 0
                          || strcmp(pszArg, "env") == 0)
                     chOpt = 'E';
+                else if (strcmp(pszArg, "append") == 0)
+                    chOpt = 'A';
+                else if (strcmp(pszArg, "prepend") == 0)
+                    chOpt = 'D';
                 else if (strcmp(pszArg, "unset") == 0)
                     chOpt = 'U';
                 else if (   strcmp(pszArg, "zap-env") == 0
@@ -1176,6 +1205,8 @@ int main(int argc, char **argv, char **envp)
              * Get option value first, if the option takes one.
              */
             if (   chOpt == 'E'
+                || chOpt == 'A'
+                || chOpt == 'D'
                 || chOpt == 'U'
                 || chOpt == 'C'
                 || chOpt == 'c'
@@ -1214,7 +1245,7 @@ int main(int argc, char **argv, char **envp)
                     if (apszSavedLibPaths[ulVar] == NULL)
                     {
                         /* The max length is supposed to be 1024 bytes. */
-                        apszSavedLibPaths[ulVar] = calloc(1024 * 2);
+                        apszSavedLibPaths[ulVar] = calloc(1024, 2);
                         if (apszSavedLibPaths[ulVar])
                         {
                             rc = DosQueryExtLIBPATH(apszSavedLibPaths[ulVar], ulVar);
@@ -1244,9 +1275,9 @@ int main(int argc, char **argv, char **envp)
                 {
                     if (pchEqual[1] != '\0')
                     {
-                        rcExit = kBuiltinOptEnvSet(&papszEnv, &cEnvVars, &cAllocatedEnvVars, cVerbosity, pszValue);
+                        rcExit = kBuiltinOptEnvSet(&papszEnvVars, &cEnvVars, &cAllocatedEnvVars, cVerbosity, pszValue);
 #ifdef KMK
-                        pChild->environment = papszEnv;
+                        pChild->environment = papszEnvVars;
 #endif
                     }
                     else
@@ -1255,7 +1286,7 @@ int main(int argc, char **argv, char **envp)
                         if (pszCopy)
                         {
                             pszCopy[pchEqual - pszValue] = '\0';
-                            rcExit = kBuiltinOptEnvUnset(papszEnv, &cEnvVars, cVerbosity, pszCopy);
+                            rcExit = kBuiltinOptEnvUnset(papszEnvVars, &cEnvVars, cVerbosity, pszCopy);
                             free(pszCopy);
                         }
                         else
@@ -1265,6 +1296,25 @@ int main(int argc, char **argv, char **envp)
                 }
                 /* Simple unset. */
                 chOpt = 'U';
+            }
+
+            /*
+             * Append or prepend value to and environment variable.
+             */
+            if (chOpt == 'A' || chOpt == 'D')
+            {
+#ifdef KBUILD_OS_OS2
+                if (   strcmp(pszValue, "BEGINLIBPATH") == 0
+                    || strcmp(pszValue, "ENDLIBPATH") == 0
+                    || strcmp(pszValue, "LIBPATHSTRICT") == 0)
+                    rcExit = errx(2, "error: '%s' cannot currently be appended or prepended to. Please use -E/--set for now.", pszValue);
+                else
+#endif
+                if (chOpt == 'A')
+                    rcExit = kBuiltinOptEnvAppend(&papszEnvVars, &cEnvVars, &cAllocatedEnvVars, cVerbosity, pszValue);
+                else
+                    rcExit = kBuiltinOptEnvPrepend(&papszEnvVars, &cEnvVars, &cAllocatedEnvVars, cVerbosity, pszValue);
+                continue;
             }
 
             /*
@@ -1279,7 +1329,7 @@ int main(int argc, char **argv, char **envp)
                     rcExit = errx(2, "error: '%s' cannot be unset, only set to an empty value using -E/--set.", pszValue);
                 else
 #endif
-                    rcExit = kBuiltinOptEnvUnset(papszEnv, &cEnvVars, cVerbosity, pszValue);
+                    rcExit = kBuiltinOptEnvUnset(papszEnvVars, &cEnvVars, cVerbosity, pszValue);
                 continue;
             }
 
@@ -1290,8 +1340,8 @@ int main(int argc, char **argv, char **envp)
                 || chOpt == 'i' /* GNU env compatibility. */ )
             {
                 for (iEnvVar = 0; iEnvVar < cEnvVars; iEnvVar++)
-                    free(papszEnv[iEnvVar]);
-                papszEnv[0] = NULL;
+                    free(papszEnvVars[iEnvVar]);
+                papszEnvVars[0] = NULL;
                 cEnvVars = 0;
                 continue;
             }
@@ -1576,7 +1626,7 @@ int main(int argc, char **argv, char **envp)
                     cOrders++;
 
 #ifdef USE_POSIX_SPAWN
-                    if (fdOpened != fdSource)
+                    if (fdOpened != fd)
                     {
                         rcExit = posix_spawn_file_actions_adddup2(&FileActions, fdOpened, fd);
                         if (rcExit != 0)
@@ -1606,7 +1656,7 @@ int main(int argc, char **argv, char **envp)
         /*
          * Do the spawning in a separate function (main is far to large as it is by now).
          */
-        rcExit = kRedirectDoSpawn(pszExecutable, argc - iArg, &argv[iArg], fWatcomBrainDamage, papszEnv, szCwd, pszSavedCwd,
+        rcExit = kRedirectDoSpawn(pszExecutable, argc - iArg, &argv[iArg], fWatcomBrainDamage, papszEnvVars, szCwd, pszSavedCwd,
 #ifdef USE_POSIX_SPAWN
                                   cOrders, aOrders, &FileActions, cVerbosity,
 #else
@@ -1638,8 +1688,8 @@ int main(int argc, char **argv, char **envp)
 #ifndef KMK
     iEnvVar = cEnvVars;
     while (iEnvVar-- > 0)
-        free(papszEnv[iEnvVar]);
-    free(papszEnv);
+        free(papszEnvVars[iEnvVar]);
+    free(papszEnvVars);
 #endif
 #ifdef KBUILD_OS_OS2
     for (ulLibPath = 0; ulLibPath < K_ELEMENTS(apszSavedLibPaths); ulLibPath++)
@@ -1649,7 +1699,7 @@ int main(int argc, char **argv, char **envp)
             if (rc != 0)
                 warnx("DosSetExtLIBPATH('%s',%u) failed with %u when restoring the original values!",
                       apszSavedLibPaths[ulLibPath], ulLibPath, rc);
-            free(apszSavedLibPaths[ulLibPath])
+            free(apszSavedLibPaths[ulLibPath]);
         }
 #endif
 

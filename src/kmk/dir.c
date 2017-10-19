@@ -710,7 +710,7 @@ static int
 dir_contents_file_exists_p (struct directory_contents *dir,
                             const char *filename)
 {
-  unsigned int hash;
+  /*unsigned int hash;*/
   struct dirfile *df;
   struct dirent *d;
 #ifdef WINDOWS32
@@ -744,7 +744,7 @@ dir_contents_file_exists_p (struct directory_contents *dir,
   filename = vmsify (filename,0);
 #endif
 
-  hash = 0;
+  /*hash = 0;*/
   if (filename != 0)
     {
       struct dirfile dirfile_key;
@@ -1340,11 +1340,7 @@ void print_dir_stats (void)
 
 /* Hooks for globbing.  */
 
-#if defined(KMK) && !defined(__OS2__)
-# include "glob/glob.h"
-#else
 #include <glob.h>
-#endif
 
 /* Structure describing state of iterating through a directory hash table.  */
 
@@ -1479,7 +1475,7 @@ dir_setup_glob (glob_t *gl)
 #ifdef __EMX__ /* The FreeBSD implementation actually uses gl_lstat!! */
   gl->gl_lstat = local_stat;
 #endif
-#if defined(KMK) && !defined(__OS2__)
+#ifdef GLOB_WITH_EXTENDED_KMK_MEMBERS
   gl->gl_exists = file_exists_p;
   gl->gl_isdir = dir_exists_p;
 #endif
