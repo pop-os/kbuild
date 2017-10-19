@@ -2,6 +2,8 @@ kbuild (1:0.1.9998svn3098+dfsg-1~exp1) experimental; urgency=medium
 
   * New upstream release, update copyright.
   * Drop mostly all patches, they should be upstream
+  * Bump std-version to 4.1.1, move to priority: optional
+  * Use compat level 10
 
  -- Gianfranco Costamagna <locutusofborg@debian.org>  Wed, 07 Sep 2016 09:55:18 +0200
 
