@@ -1,3 +1,9 @@
+kbuild (1:0.1.9998svn3103+dfsg-1) unstable; urgency=medium
+
+  * New upstream snapshot
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Fri, 20 Oct 2017 15:31:34 +0200
+
 kbuild (1:0.1.9998svn3100+dfsg-1) unstable; urgency=medium
 
   * New upstream microrelease, with mostly complete kFreeBSD port.
