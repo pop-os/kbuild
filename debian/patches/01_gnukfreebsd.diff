@@ -1,33 +1,9 @@
 Author: Julian Andres Klode <jak@debian.org>
-Description: Add support for GNU/kFreeBSD platforms to kbuild.
+Description: Tweak support for GNU/kFreeBSD platforms to kbuild.
  It still has a few problems, like the missing fflagstostr() and strtofflags() functions,
  which have all been worked around for now.
 Bug-Debian: http://bugs.debian.org/540665
 
---- a/src/kmk/incdep.c
-+++ b/src/kmk/incdep.c
-@@ -678,7 +678,7 @@ incdep_are_threads_enabled (void)
-   if (getenv ("KMK_THREADS_ENABLED"))
-     return 1;
- 
--#if defined (__gnu_linux__) || defined (__linux__)
-+#if defined (__gnu_linux__) || defined (__linux__) || defined(__GLIBC__)
-   /* Try detect fakeroot. */
-   if (getenv ("FAKEROOTKEY")
-    || getenv ("FAKEROOTUID")
---- a/kBuild/env.sh
-+++ b/kBuild/env.sh
-@@ -264,6 +264,10 @@ if test -z "$KBUILD_HOST"; then
-             KBUILD_HOST=freebsd
-             ;;
- 
-+        GNU/kFreeBSD)
-+            KBUILD_HOST=gnukfbsd
-+            ;;
-+
-         Haiku)
-             KBUILD_HOST=haiku
-             ;;
 --- a/src/kmk/kmkbuiltin/install.c
 +++ b/src/kmk/kmkbuiltin/install.c
 @@ -209,7 +209,8 @@ kmk_builtin_install(int argc, char *argv
