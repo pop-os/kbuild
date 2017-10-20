@@ -85,6 +85,7 @@ static char sccsid[] = "@(#)rm.c	8.5 (Berkeley) 4/18/94";
 #endif
 #include "kmkbuiltin.h"
 #include "kbuild_protection.h"
+#include "k/kDefs.h"	/* for K_OS */
 
 #if defined(__EMX__) || defined(KBUILD_OS_WINDOWS)
 # define IS_SLASH(ch)   ( (ch) == '/' || (ch) == '\\' )
@@ -679,7 +680,7 @@ check(char *path, char *name, struct stat *sp)
                     )
 			return (1);
 		bsd_strmode(sp->st_mode, modep);
-#ifdef SF_APPEND
+#if defined(SF_APPEND) && K_OS != K_OS_GNU_KFBSD
 		if ((flagsp = fflagstostr(sp->st_flags)) == NULL)
 			exit(err(1, "fflagstostr"));
 		(void)fprintf(stderr, "override %s%s%s/%s %s%sfor %s? ",
