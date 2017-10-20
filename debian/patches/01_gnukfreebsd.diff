@@ -4,301 +4,51 @@ Description: Add support for GNU/kFreeBSD platforms to kbuild.
  or the unresolved clock_gettime(), which have all been worked around for now.
 Bug-Debian: http://bugs.debian.org/540665
 
-#--- a/src/kmk/dir.c
-#+++ b/src/kmk/dir.c
-#@@ -43,7 +43,7 @@ char *vmsify (char *name, int type);
-# # endif /* HAVE_VMSDIR_H */
-# #endif
-# /* bird: FreeBSD + smbfs -> readdir() + EBADF */
-#-#ifdef __FreeBSD__
-#+#if defined(__FreeBSD__) || defined(__FreeBSD_kernel__)
-# # include <sys/mount.h>
-# #endif
-# /* bird: end */
-#@@ -835,7 +835,7 @@ dir_contents_file_exists_p (struct direc
-#          To exactly determin the cause here, I should probably do some smbfs
-#          tracing, but for now just ignoring the EBADF on seems to work.
-#          (The smb server is 64-bit vista, btw.) */
-#-#if defined (__FreeBSD__)
-#+#if defined (__FreeBSD__) || defined (__FreeBSD_kernel__)
-#           struct statfs stfs;
-#           int saved_errno = errno;
-#           errno = 0;
-#--- a/src/kmk/incdep.c
-#+++ b/src/kmk/incdep.c
-#@@ -678,7 +678,7 @@ incdep_are_threads_enabled (void)
-#   if (getenv ("KMK_THREADS_ENABLED"))
-#     return 1;
-# 
-#-#if defined (__gnu_linux__) || defined (__linux__)
-#+#if defined (__gnu_linux__) || defined (__linux__) || defined(__GLIBC__)
-#   /* Try detect fakeroot. */
-#   if (getenv ("FAKEROOTKEY")
-#    || getenv ("FAKEROOTUID")
-#--- a/src/kmk/kbuild.c
-#+++ b/src/kmk/kbuild.c
-#@@ -134,7 +134,7 @@ void init_kbuild(int argc, char **argv)
-#         }
-#     }
-# 
-#-#elif defined(__FreeBSD__)
-#+#elif defined(__FreeBSD__) || defined(__FreeBSD_kernel__)
-#     rc = readlink("/proc/curproc/file", szTmp, GET_PATH_MAX - 1);
-#     if (rc < 0 || rc == GET_PATH_MAX - 1)
-#     {
-#--- a/src/kmk/kmkbuiltin/cmp_util.c
-#+++ b/src/kmk/kmkbuiltin/cmp_util.c
-#@@ -38,7 +38,7 @@
-# #include "config.h"
-# #include <sys/types.h>
-# #include <sys/stat.h>
-#-#if defined(__FreeBSD__) || defined(__NetBSD__) /** @todo more mmap capable OSes. */
-#+#if defined(__FreeBSD__) || defined(__FreeBSD_kernel_) || defined(__NetBSD__) /** @todo more mmap capable OSes. */
-# # define CMP_USE_MMAP
-# # include <sys/param.h>
-# # include <sys/mman.h>
-#--- a/src/kmk/main.c
-#+++ b/src/kmk/main.c
-#@@ -51,7 +51,7 @@ this program.  If not, see <http://www.g
-# #endif
-# 
-# #ifdef KMK /* for get_online_cpu_count */
-#-# if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
-#+# if defined(__APPLE__) || defined(__FreeBSD_kernel__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
-# #  include <sys/sysctl.h>
-# # endif
-# # ifdef __OS2__
-#--- a/src/kmk/make.h
-#+++ b/src/kmk/make.h
-#@@ -215,7 +215,7 @@ extern unsigned long make_stats_ht_colli
-# #  include <malloc/malloc.h>
-# #  define SIZE_OF_HEAP_BLOCK(ptr)   malloc_size(ptr)
-# 
-#-# elif defined(__linux__) /* glibc */
-#+# elif defined(__linux__) || defined(__GLIBC__) /* glibc */
-# #  include <malloc.h>
-# #  define SIZE_OF_HEAP_BLOCK(ptr)   malloc_usable_size(ptr)
-# 
-#--- a/src/lib/kStuff/include/k/kDefs.h
-#+++ b/src/lib/kStuff/include/k/kDefs.h
-#@@ -60,8 +60,10 @@
-# #define K_OS_SOLARIS    9
-# /** Windows. */
-# #define K_OS_WINDOWS    10
-#+/** GNU/kFreeBSD (move to 3 probably) */
-#+#define K_OS_GNUKFREEBSD 11
-# /** The max K_OS_* value (exclusive). */
-#-#define K_OS_MAX        11
-#+#define K_OS_MAX        12
-# /** @} */
-# 
-# /** @def K_OS
-#@@ -82,6 +84,8 @@
-# #  define K_OS      K_OS_DRAGONFLY
-# # elif defined(__FreeBSD__) /*??*/
-# #  define K_OS      K_OS_FREEBSD
-#+# elif defined(__FreeBSD_kernel__) /*??*/
-#+#  define K_OS      K_OS_GNUKFREEBSD
-# # elif defined(__gnu_linux__)
-# #  define K_OS      K_OS_LINUX
-# # elif defined(__NetBSD__) /*??*/
-#--- a/Config.kmk
-#+++ b/Config.kmk
-#@@ -128,6 +128,7 @@ endif
-# #
-# DEFS.darwin  += KBUILD_OS_DARWIN
-# DEFS.freebsd += KBUILD_OS_FREEBSD
-#+DEFS.gnukfreebsd += KBUILD_OS_GNUKFREEBSD
-# DEFS.linux   += KBUILD_OS_LINUX
-# DEFS.netbsd  += KBUILD_OS_NETBSD
-# DEFS.openbsd += KBUILD_OS_OPENBSD
-#@@ -323,7 +324,7 @@ endif
-# 
-# ifndef TEMPLATE_BIN_TOOL
-#  # Use GCC3 when we're certain that the system is using GNU ld and ar.
-#- ifeq ($(filter-out linux freebsd openbsd netbsd,$(KBUILD_TARGET)),)
-#+ ifeq ($(filter-out linux gnukfreebsd freebsd openbsd netbsd,$(KBUILD_TARGET)),)
-#   TEMPLATE_BIN_TOOL              = GCC3
-#  else
-#   TEMPLATE_BIN_TOOL              = GCC3PLAIN
-#@@ -372,7 +373,7 @@ endif
-# TEMPLATE_BIN-THREADED = Threaded command line binary
-# TEMPLATE_BIN-THREADED_EXTENDS = BIN
-# TEMPLATE_BIN-THREADED_EXTENDS_BY = appending
-#-if1of ($(KBUILD_TARGET), dragonfly freebsd linux openbsd)
-#+if1of ($(KBUILD_TARGET), dragonfly freebsd linux openbsd gnukfreebsd)
-#  TEMPLATE_BIN-THREADED_LIBS = pthread
-# endif
-# 
-#--- a/kBuild/env.sh
-#+++ b/kBuild/env.sh
-#@@ -260,6 +260,10 @@ if test -z "$KBUILD_HOST"; then
-#             KBUILD_HOST=dragonfly
-#             ;;
-# 
-#+        GNU/kFreeBSD)
-#+            KBUILD_HOST=freebsd
-#+			;;
-#+
-#         freebsd|FreeBSD|FREEBSD)
-#             KBUILD_HOST=freebsd
-#             ;;
-#--- a/kBuild/header.kmk
-#+++ b/kBuild/header.kmk
-#@@ -188,7 +188,7 @@ KBUILD_BLD_TYPES := release profile debu
-# # this keyword namespace is shared between OSes, architectures, cpus and
-# # build types. (PORTME)
-# #
-#-KBUILD_OSES      := darwin dos dragonfly freebsd haiku l4 linux netbsd nt openbsd os2 solaris win os-agnostic
-#+KBUILD_OSES      := darwin dos dragonfly freebsd gnukfreebsd haiku l4 linux netbsd nt openbsd os2 solaris win os-agnostic
-# KBUILD_ARCHES    := x86 amd64 sparc32 sparc64 s390 s390x ppc32 ppc64 mips32 mips64 ia64 hppa32 hppa64 arm alpha noarch
-# KBUILD_ARCHES_64 := amd64 sparc64 s390x ppc64 mips64 ia64 hppa64 alpha
-# KBUILD_ARCHES_32 := x86 sparc32 s390 ppc32 mips32 hppa32 arm
-#@@ -591,7 +591,7 @@ else ifeq ($(KBUILD_HOST),os2)
-# EXEC_X86_WIN32      := innopec.exe
-# HOSTSUFF_EXE        := .exe
-# 
-#-else if1of ($(KBUILD_HOST), freebsd dragonfly linux openbsd netbsd)
-#+else if1of ($(KBUILD_HOST), gnukfreebsd freebsd dragonfly linux openbsd netbsd)
-# # Unix (like) systems with wine.
-# EXEC_X86_WIN32      := wine
-# HOSTSUFF_EXE        :=
-#@@ -635,7 +635,7 @@ SUFF_OBJ    := .o
-# SUFF_LIB    := .a
-# SUFF_DLL    := .so
-# SUFF_EXE    :=
-#- if1of ($(KBUILD_TARGET), dragonfly freebsd linux netbsd openbsd) ## @todo check netbsd and openbsd.
-#+ if1of ($(KBUILD_TARGET), dragonfly gnukfreebsd freebsd linux netbsd openbsd) ## @todo check netbsd and openbsd.
-# SUFF_SYS    := .ko
-#  else
-# SUFF_SYS    :=
-#--- a/kBuild/tools/GCC32.kmk
-#+++ b/kBuild/tools/GCC32.kmk
-#@@ -47,6 +47,7 @@ else
-# TOOL_GCC32_LDFLAGS.dll ?= $(TOOL_GCC32_LDFLAGS.$(KBUILD_TARGET))
-# endif
-# TOOL_GCC32_LDFLAGS.sysmod ?= -r -m elf_i386$(if-expr "$(KBUILD_TARGET)" == "freebsd",_fbsd,)
-#+TOOL_GCC32_LDFLAGS.sysmod ?= -r -m elf_i386$(if-expr "$(KBUILD_TARGET)" == "gnukfreebsd",_fbsd,)
-# TOOL_GCC32_LD_SONAME ?= -Wl,-soname=$(firstword $($(1)_SONAME.$(KBUILD_TARGET).$(KBUILD_TYPE)) $($(1)_SONAME.$(KBUILD_TARGET)) $($(1)_SONAME.$(KBUILD_TYPE)) $($(1)_SONAME) $(notdir $(2)))
-# ifeq ($(KBUILD_TARGET),os2)
-# TOOL_GCC32_LD_MAP ?= -Zmap=$(1)
-#--- a/kBuild/tools/GCC64.kmk
-#+++ b/kBuild/tools/GCC64.kmk
-#@@ -47,6 +47,7 @@ else
-# TOOL_GCC64_LDFLAGS.dll ?= $(TOOL_GCC64_LDFLAGS.$(KBUILD_TARGET))
-# endif
-# TOOL_GCC64_LDFLAGS.sysmod ?= -r -m elf_x86_64$(if-expr "$(KBUILD_TARGET)" == "freebsd",_fbsd,)
-#+TOOL_GCC64_LDFLAGS.sysmod ?= -r -m elf_x86_64$(if-expr "$(KBUILD_TARGET)" == "gnukfreebsd",_fbsd,)
-# TOOL_GCC64_LD_SONAME ?= -Wl,-soname=$(firstword $($(1)_SONAME.$(KBUILD_TARGET).$(KBUILD_TYPE)) $($(1)_SONAME.$(KBUILD_TARGET)) $($(1)_SONAME.$(KBUILD_TYPE)) $($(1)_SONAME) $(notdir $(2)))
-# ifeq ($(KBUILD_TARGET),os2)
-# TOOL_GCC64_LD_MAP ?= -Zmap=$(1)
-#--- a/kBuild/tools/GXX32.kmk
-#+++ b/kBuild/tools/GXX32.kmk
-#@@ -47,6 +47,7 @@ else
-# TOOL_GXX32_LDFLAGS.dll ?= $(TOOL_GXX32_LDFLAGS.$(KBUILD_TARGET))
-# endif
-# TOOL_GXX32_LDFLAGS.sysmod ?= -r -m elf_i386$(if-expr "$(KBUILD_TARGET)" == "freebsd",_fbsd,)
-#+TOOL_GXX32_LDFLAGS.sysmod ?= -r -m elf_i386$(if-expr "$(KBUILD_TARGET)" == "gnukfreebsd",_fbsd,)
-# TOOL_GXX32_LD_SONAME ?= -Wl,-soname=$(firstword $($(1)_SONAME.$(KBUILD_TARGET).$(KBUILD_TYPE)) $($(1)_SONAME.$(KBUILD_TARGET)) $($(1)_SONAME.$(KBUILD_TYPE)) $($(1)_SONAME) $(notdir $(2)))
-# ifeq ($(KBUILD_TARGET),os2)
-# TOOL_GXX32_LD_MAP ?= -Zmap=$(1)
-#--- a/kBuild/tools/GXX64.kmk
-#+++ b/kBuild/tools/GXX64.kmk
-#@@ -47,6 +47,7 @@ else
-# TOOL_GXX64_LDFLAGS.dll ?= $(TOOL_GXX64_LDFLAGS.$(KBUILD_TARGET))
-# endif
-# TOOL_GXX64_LDFLAGS.sysmod ?= -r -m elf_x86_64$(if-expr "$(KBUILD_TARGET)" == "freebsd",_fbsd,)
-#+TOOL_GXX64_LDFLAGS.sysmod ?= -r -m elf_x86_64$(if-expr "$(KBUILD_TARGET)" == "gnukfreebsd",_fbsd,)
-# TOOL_GXX64_LD_SONAME ?= -Wl,-soname=$(firstword $($(1)_SONAME.$(KBUILD_TARGET).$(KBUILD_TYPE)) $($(1)_SONAME.$(KBUILD_TARGET)) $($(1)_SONAME.$(KBUILD_TYPE)) $($(1)_SONAME) $(notdir $(2)))
-# ifeq ($(KBUILD_TARGET),os2)
-# TOOL_GXX64_LD_MAP ?= -Zmap=$(1)
-#--- a/src/kash/Makefile.kmk
-#+++ b/src/kash/Makefile.kmk
-#@@ -50,6 +50,8 @@ kash_DEFS.darwin = \
-# 	HAVE_SYS_SIGNAME HAVE_SYSCTL_H HAVE_SETPROGNAME
-# kash_DEFS.dragonfly = \
-# 	HAVE_SYS_SIGNAME HAVE_SYSCTL_H HAVE_SETPROGNAME
-#+kash_DEFS.gnukfreebsd = \
-#+	HAVE_SYSCTL_H
-# kash_DEFS.freebsd = \
-# 	HAVE_SYS_SIGNAME HAVE_SYSCTL_H HAVE_SETPROGNAME
-# kash_DEFS.openbsd = \
-#@@ -102,6 +104,9 @@ kash_SOURCES = \
-# kash_SOURCES.haiku = \
-# 	sys_signame.c \
-# 	strlcpy.c
-#+kash_SOURCES.gnukfreebsd = \
-#+	sys_signame.c \
-#+	strlcpy.c
-# kash_SOURCES.linux = \
-# 	sys_signame.c \
-# 	strlcpy.c
-#--- a/src/kmk/kmkbuiltin/install.c
-#+++ b/src/kmk/kmkbuiltin/install.c
-#@@ -209,7 +209,8 @@ kmk_builtin_install(int argc, char *argv
-# 			dodir = 1;
-# 			break;
-# 		case 'f':
-#-#ifdef UF_IMMUTABLE
-#+#if defined(UF_IMMUTABLE) && !defined(__GLIBC__)
-#+            /** @todo: we need strtofflags() exported in e.g. libbsd */
-# 			flags = optarg;
-# 			if (strtofflags(&flags, &fset, NULL))
-# 				return errx(EX_USAGE, "%s: invalid flag", flags);
-#--- a/src/kmk/kmkbuiltin/rm.c
-#+++ b/src/kmk/kmkbuiltin/rm.c
-#@@ -675,7 +675,8 @@ check(char *path, char *name, struct sta
-#                     )
-# 			return (1);
-# 		bsd_strmode(sp->st_mode, modep);
-#-#ifdef SF_APPEND
-#+#if defined(SF_APPEND) && !defined(__GLIBC__)
-#+        /** @todo: we need fflagstostr() exported in e.g. libbsd */
-# 		if ((flagsp = fflagstostr(sp->st_flags)) == NULL)
-# 			exit(err(1, "fflagstostr"));
-# 		(void)fprintf(stderr, "override %s%s%s/%s %s%sfor %s? ",
-#--- a/src/kmk/Makefile.kmk
-#+++ b/src/kmk/Makefile.kmk
-#@@ -111,6 +111,9 @@ kmkmissing_SOURCES.freebsd = \
-# 	kmkbuiltin/haikufakes.c \
-# 	glob/fnmatch.c
-# 
-#+kmkmissing_SOURCES.gnukfreebsd += \
-#+	kmkbuiltin/strlcpy.c
-#+
-# kmkmissing_SOURCES.linux += \
-# 	kmkbuiltin/strlcpy.c
-# 
-#@@ -250,6 +253,7 @@ kmk_SOURCES = \
-# kmk_SOURCES.win = \
-# 	w32/subproc/sub_proc.c
-# 
-#+kmk_DEFS.gnukfreebsd = CONFIG_WITHOUT_THREADS
-# kmk_DEFS.freebsd.x86 = CONFIG_WITHOUT_THREADS
-# 
-# #kmk_LIBS.solaris = malloc
-#--- a/src/kmk/file.c
-#+++ b/src/kmk/file.c
-#@@ -1053,7 +1053,8 @@ file_timestamp_now (int *resolution)
-#      only one-second resolution.  The code below should work, but it's
-#      not worth the hassle of debugging it on hosts where it fails.  */
-# #if FILE_TIMESTAMP_HI_RES
-#-# if HAVE_CLOCK_GETTIME && defined CLOCK_REALTIME
-#+# if HAVE_CLOCK_GETTIME && defined CLOCK_REALTIME && !defined (__FreeBSD_kernel__)
-#+  /** @todo: Undefined references to clock_gettime() on GNU/kFreeBSD */
-#   {
-#     struct timespec timespec;
-#     if (clock_gettime (CLOCK_REALTIME, &timespec) == 0)
-diff --git a/kBuild/env.sh b/kBuild/env.sh
-index 7be6315..49b09a5 100755
+--- a/src/kmk/incdep.c
++++ b/src/kmk/incdep.c
+@@ -678,7 +678,7 @@ incdep_are_threads_enabled (void)
+   if (getenv ("KMK_THREADS_ENABLED"))
+     return 1;
+ 
+-#if defined (__gnu_linux__) || defined (__linux__)
++#if defined (__gnu_linux__) || defined (__linux__) || defined(__GLIBC__)
+   /* Try detect fakeroot. */
+   if (getenv ("FAKEROOTKEY")
+    || getenv ("FAKEROOTUID")
 --- a/kBuild/env.sh
 +++ b/kBuild/env.sh
-@@ -260,7 +260,7 @@ if test -z "$KBUILD_HOST"; then
-             KBUILD_HOST=dragonfly
-             ;;
- 
--        freebsd|FreeBSD|FREEBSD)
-+        freebsd|FreeBSD|FREEBSD|kFreeBSD)
+@@ -264,6 +264,10 @@ if test -z "$KBUILD_HOST"; then
              KBUILD_HOST=freebsd
              ;;
  
++        GNU/kFreeBSD)
++            KBUILD_HOST=gnukfbsd
++            ;;
++
+         Haiku)
+             KBUILD_HOST=haiku
+             ;;
+--- a/src/kmk/kmkbuiltin/install.c
++++ b/src/kmk/kmkbuiltin/install.c
+@@ -209,7 +209,8 @@ kmk_builtin_install(int argc, char *argv
+ 			dodir = 1;
+ 			break;
+ 		case 'f':
+-#ifdef UF_IMMUTABLE
++#if defined(UF_IMMUTABLE) && !defined(__GLIBC__)
++			/** @todo: we need strtofflags() exported in e.g. libbsd */
+ 			flags = optarg;
+ 			if (strtofflags(&flags, &fset, NULL))
+ 				return errx(EX_USAGE, "%s: invalid flag", flags);
+--- a/src/kmk/kmkbuiltin/rm.c
++++ b/src/kmk/kmkbuiltin/rm.c
+@@ -675,7 +675,8 @@ check(char *path, char *name, struct sta
+                     )
+ 			return (1);
+ 		bsd_strmode(sp->st_mode, modep);
+-#ifdef SF_APPEND
++#if defined(SF_APPEND) && !defined(__GLIBC__)
++        /** @todo: we need fflagstostr() exported in e.g. libbsd */
+ 		if ((flagsp = fflagstostr(sp->st_flags)) == NULL)
+ 			exit(err(1, "fflagstostr"));
+ 		(void)fprintf(stderr, "override %s%s%s/%s %s%sfor %s? ",
