@@ -48,7 +48,7 @@ Bug-Debian: http://bugs.debian.org/540665
  		bsd_strmode(sp->st_mode, modep);
 -#ifdef SF_APPEND
 +#if defined(SF_APPEND) && !defined(__GLIBC__)
-+        /** @todo: we need fflagstostr() exported in e.g. libbsd */
++		/** @todo: we need fflagstostr() exported in e.g. libbsd */
  		if ((flagsp = fflagstostr(sp->st_flags)) == NULL)
  			exit(err(1, "fflagstostr"));
  		(void)fprintf(stderr, "override %s%s%s/%s %s%sfor %s? ",
