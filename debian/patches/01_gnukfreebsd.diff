@@ -1,7 +1,7 @@
 Author: Julian Andres Klode <jak@debian.org>
 Description: Add support for GNU/kFreeBSD platforms to kbuild.
- It still has a few problems, like the missing fflagstostr() and strtofflags() functions
- or the unresolved clock_gettime(), which have all been worked around for now.
+ It still has a few problems, like the missing fflagstostr() and strtofflags() functions,
+ which have all been worked around for now.
 Bug-Debian: http://bugs.debian.org/540665
 
 --- a/src/kmk/incdep.c
