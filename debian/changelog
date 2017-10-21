@@ -1,3 +1,9 @@
+kbuild (1:0.1.9998svn3110+dfsg-1) unstable; urgency=medium
+
+  * New upstream snapshot
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Sat, 21 Oct 2017 10:37:21 +0200
+
 kbuild (1:0.1.9998svn3103+dfsg-1) unstable; urgency=medium
 
   * New upstream snapshot, enabling tentative build
