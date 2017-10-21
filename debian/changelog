@@ -1,6 +1,7 @@
 kbuild (1:0.1.9998svn3110+dfsg-1) unstable; urgency=medium
 
-  * New upstream snapshot
+  * New upstream snapshot, fixing hurd, and enabling m68k
+    compilation support. (Closes: #699509)
 
  -- Gianfranco Costamagna <locutusofborg@debian.org>  Sat, 21 Oct 2017 10:37:21 +0200
 
