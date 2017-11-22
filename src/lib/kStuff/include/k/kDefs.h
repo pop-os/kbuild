@@ -1,4 +1,4 @@
-/* $Id: kDefs.h 104 2017-10-20 17:19:04Z bird $ */
+/* $Id: kDefs.h 105 2017-11-21 23:55:40Z bird $ */
 /** @file
  * kTypes - Defines and Macros.
  */
@@ -52,22 +52,24 @@
 #define K_OS_GNU_KFBSD  5
 /** GNU/kNetBSD or GNU/NetBSD or whatever the decide to call it. */
 #define K_OS_GNU_KNBSD  6
+/** Haiku. */
+#define K_OS_HAIKU      7
 /** Linux. */
-#define K_OS_LINUX      7
+#define K_OS_LINUX      8
 /** NetBSD. */
-#define K_OS_NETBSD     8
+#define K_OS_NETBSD     9
 /** NT (native). */
-#define K_OS_NT         9
+#define K_OS_NT         10
 /** OpenBSD*/
-#define K_OS_OPENBSD    10
+#define K_OS_OPENBSD    11
 /** OS/2 */
-#define K_OS_OS2        11
+#define K_OS_OS2        12
 /** Solaris */
-#define K_OS_SOLARIS    12
+#define K_OS_SOLARIS    13
 /** Windows. */
-#define K_OS_WINDOWS    13
+#define K_OS_WINDOWS    14
 /** The max K_OS_* value (exclusive). */
-#define K_OS_MAX        14
+#define K_OS_MAX        15
 /** @} */
 
 /** @def K_OS
@@ -106,6 +108,8 @@
 #  define K_OS      K_OS_SOLARIS
 # elif defined(_WIN32) || defined(_WIN64)
 #  define K_OS      K_OS_WINDOWS
+# elif defined(__haiku__) || defined(__HAIKU__)
+#  define K_OS      K_OS_HAIKU
 # else
 #  error "Port Me"
 # endif
