@@ -1,3 +1,10 @@
+kbuild (1:0.1.9998svn3127+dfsg-2) unstable; urgency=medium
+
+  * Add new patch from make-dfsg to fixup FTBFS with glibc 2.27
+    (thanks Aurelien Jarno! Closes: #891372)
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Mon, 05 Mar 2018 16:31:24 +0100
+
 kbuild (1:0.1.9998svn3127+dfsg-1) unstable; urgency=medium
 
   * New upstream version 0.1.9998svn3127+dfsg
