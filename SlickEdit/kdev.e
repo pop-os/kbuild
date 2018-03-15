@@ -1,4 +1,4 @@
-/* $Id: kdev.e 3069 2017-10-02 06:28:54Z bird $  -*- tab-width: 4 c-indent-level: 4 -*- */
+/* $Id: kdev.e 3137 2018-03-06 22:29:41Z bird $  -*- tab-width: 4 c-indent-level: 4 -*- */
 /** @file
  * Visual SlickEdit Documentation Macros.
  */
@@ -195,7 +195,11 @@ static boolean k_commentconfig(_str &sLeft, _str &sRight, int &iColumn, _str sEx
         COMMENT_TYPE aComments[];
         GetComments(aComments, "M", sLexer);
         for (i = 0; i < aComments._length(); i++)
+# if __VERSION__ >= 22.0
+            if (aComments[i].type != 'doc_comment')
+# else
             if (!aComments[i].isDocumentation)
+# endif
             {
                 sLeft   = aComments[i].delim1;
                 sRight  = aComments[i].delim2;
@@ -232,7 +236,11 @@ static boolean k_commentconfig(_str &sLeft, _str &sRight, int &iColumn, _str sEx
 #if __VERSION__ >= 21.0
         GetComments(aComments, "L", sLexer);
         for (i = 0; i < aComments._length(); i++)
+# if __VERSION__ >= 22.0
+            if (aComments[i].type != 'doc_comment')
+# else
             if (!aComments[i].isDocumentation)
+# endif
             {
                 sLeft   = aComments[i].delim1;
                 sRight  = '';
@@ -1626,6 +1634,7 @@ void k_noref()
     {
         _str sArgs = k_func_getparams();
         int  cArgs = k_func_countparams(sArgs);
+        int  fVaArgs = 1;
         int  i;
         int  offLine = 4;
         for (i = 0; i < cArgs; i++)
@@ -1633,24 +1642,44 @@ void k_noref()
             _str sName, sType, sDefault;
             if (!k_func_enumparams(sArgs, i, sType, sName, sDefault))
             {
-                sThis = 'NOREF(' sName ');';
-                if (length(sNoRefs) == 0)
+                if (!fVaArgs)
                 {
-                    sNoRefs = sThis;
-                    offLine += length(sThis);
+                    sThis = 'NOREF(' sName ');';
+                    if (length(sNoRefs) == 0)
+                    {
+                        sNoRefs = sThis;
+                        offLine += length(sThis);
+                    }
+                    else if (offLine + length(sThis) < 130)
+                    {
+                        sNoRefs = sNoRefs ' ' sThis;
+                        offLine += 1 + length(sThis);
+                    }
+                    else
+                    {
+                        sNoRefs = sNoRefs "\n    " sThis;
+                        offLine = 4 + length(sThis);
+                    }
                 }
-                else if (offLine + length(sThis) < 130)
+                else if (length(sNoRefs) == 0)
                 {
-                    sNoRefs = sNoRefs ' ' sThis;
-                    offLine += 1 + length(sThis);
+                    sNoRefs = 'RT_NOREF(' sName;
+                    offLine = length(sNoRefs);
+                }
+                else if (offLine + 2 + length(sName) < 130)
+                {
+                    sNoRefs = sNoRefs ', ' sName;
+                    offLine += 2 + length(sName);
                 }
                 else
                 {
-                    sNoRefs = sNoRefs "\n    " sThis;
-                    offLine = 4 + length(sThis);
+                    sNoRefs = sNoRefs ',\n    ' sName;
+                    offLine += 4 + length(sName);
                 }
             }
         }
+        if (length(sNoRefs) > 0 && fVaArgs != 0)
+            sNoRefs = sNoRefs ');';
     }
 
     _restore_pos2(org_pos);
@@ -3511,6 +3540,11 @@ using se.lang.api.LanguageSettings;
 int def_auto_unsurround_block;
 #endif
 
+#if __VERSION__ >= 21.0
+int def_gui_find_default;
+#endif
+
+
 /**
  * Loads the standard bird settings.
  */
@@ -3526,8 +3560,15 @@ _command void kdev_load_settings()
     _str sRest;
     _str sTmp;
 
+#if __VERSION__ >= 21.0
     /*
-     * Generl stuff.
+     * Load the color profile (was lexer).
+     */
+    cload(_strip_filename(__FILE__, 'N') '/user.vlx');
+#endif
+
+    /*
+     * General stuff.
      */
     _default_option('A', '0');          /* ALT menu */
     def_alt_menu = 0;
@@ -3699,8 +3740,13 @@ _command void kdev_load_settings()
     /*
      * Change the codehelp default.
      */
-    int fOldCodeHelp = def_codehelp_flags;
-    int fNewCodeHelp = fOldCodeHelp \
+# if __VERSION__ >= 22.0
+    VSCodeHelpFlags fOldCodeHelp, fNewCodeHelp;
+# else
+    int             fOldCodeHelp, fNewCodeHelp;
+# endif
+    fOldCodeHelp = def_codehelp_flags;
+    fNewCodeHelp = fOldCodeHelp \
                      | VSCODEHELPFLAG_AUTO_FUNCTION_HELP \
                      | VSCODEHELPFLAG_AUTO_LIST_MEMBERS \
                      | VSCODEHELPFLAG_SPACE_INSERTS_SPACE \
@@ -3738,8 +3784,14 @@ _command void kdev_load_settings()
     }
 #endif
 
+# if __VERSION__ >= 21.0
+    /* Old style search dialog, not mini. */
+    def_gui_find_default = 1;
+# endif
+
+    _fso_strip_spaces(STSO_STRIP_MODIFIED);
+
     /** @todo
-     *  - def_save_options
      *  - Auto restore clipboards
      *   */
 

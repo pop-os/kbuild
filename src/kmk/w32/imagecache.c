@@ -1,4 +1,4 @@
-/* $Id: imagecache.c 2640 2012-09-09 01:49:16Z bird $ */
+/* $Id: imagecache.c 3140 2018-03-14 21:28:10Z bird $ */
 /** @file
  * kBuild specific executable image cache for Windows.
  */
@@ -28,7 +28,7 @@
 /*******************************************************************************
 *   Header Files                                                               *
 *******************************************************************************/
-#include "make.h"
+#include "makeint.h"
 
 #include <Windows.h>
 
