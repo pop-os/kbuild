@@ -46,7 +46,7 @@ __RCSID("$NetBSD: printf.c,v 1.31 2005/03/22 23:55:46 dsl Exp $");
 #endif*/ /* not lint */
 
 #if !defined(kmk_builtin_printf) && !defined(BUILTIN) && !defined(SHELL)
-# include "../make.h"
+# include "../makeint.h"
 # include "../filedef.h"
 # include "../variable.h"
 #else
@@ -83,7 +83,7 @@ extern size_t maybe_con_fwrite(void const *, size_t, size_t, FILE *);
 #endif
 
 
-#ifdef __GNUC__
+#if 0 /*def __GNUC__ - bird: gcc complains about non-ISO-standard escape. */
 #define ESCAPE '\e'
 #else
 #define ESCAPE 033
@@ -216,9 +216,8 @@ char *kmk_builtin_func_printf(char *o, char **argv, const char *funcname)
 	o = g_o;
 	g_o = NULL;
 
-	(void)funcname;
 	if (rc != 0)
-		fatal (NILF, _("$(%s): failure rc=%d\n"), funcname, rc);
+		fatal(NILF, strlen(funcname) + INTSTR_LENGTH, _("$(%s): failure rc=%d\n"), funcname, rc);
 	return o;
 }
 #endif

@@ -1,4 +1,4 @@
-/* $Id: redirect.c 3110 2017-10-20 19:14:56Z bird $ */
+/* $Id: redirect.c 3145 2018-03-15 00:00:09Z bird $ */
 /** @file
  * kmk_redirect - Do simple program <-> file redirection (++).
  */
@@ -29,7 +29,7 @@
 #if defined(__APPLE__)
 /*# define _POSIX_C_SOURCE 1  / *  10.4 sdk and unsetenv  * / - breaks O_CLOEXEC on 10.8 */
 #endif
-#include "make.h"
+#include "makeint.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1566,6 +1566,7 @@ int main(int argc, char **argv, char **envp)
                             fd = 0;
                             break;
                         }
+                        /* fall thru */
                     case '1':
                     case '2':
                     case '3':
