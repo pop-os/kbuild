@@ -1,0 +1,15 @@
+Description: Missing po/Makefile.in.in
+Author: Gianfranco Costamagna <locutusofborg@debian.org>
+Last-Update: 2018-03-15
+
+--- kbuild-0.1.9998svn3149+dfsg.orig/src/kmk/configure.ac
++++ kbuild-0.1.9998svn3149+dfsg/src/kmk/configure.ac
+@@ -506,7 +506,7 @@ AS_IF([test "x$make_cv_load" = xno && te
+ ])
+ 
+ # Specify what files are to be created.
+-AC_CONFIG_FILES([Makefile glob/Makefile po/Makefile.in config/Makefile \
++AC_CONFIG_FILES([Makefile glob/Makefile config/Makefile \
+                  w32/Makefile tests/config-flags.pm])
+ 
+ # OK, do it!
