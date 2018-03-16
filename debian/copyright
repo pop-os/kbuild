@@ -3,7 +3,7 @@ Source: http://svn.netlabs.org/kbuild/
 Upstream-Contact: Knut St. Osmundsen <bird-kBuild-spam@anduin.net>
 
 Files: *
-Copyright: 2004-2017 Knut St. Osmundsen <bird-kBuild-spam@anduin.net>
+Copyright: 2004-2018 Knut St. Osmundsen <bird-kBuild-spam@anduin.net>
 License: GPL-3+
 
 Files: src/kash/*
@@ -43,7 +43,7 @@ Copyright:
  2010-2014 Felix Geyer <fgeyer@debian.org>
  2010-2013 Michael Meskes <meskes@debian.org>
  2013-2015 Ritesh Raj Sarraf <rrs@debian.org>
- 2014-2016 Gianfranco Costamagna <locutusofborg@debian.org>
+ 2014-2018 Gianfranco Costamagna <locutusofborg@debian.org>
 License: GPL-3+
 
 License: GPL-2+
