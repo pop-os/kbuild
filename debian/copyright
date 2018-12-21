@@ -26,7 +26,9 @@ Files: src/lib/kDep.*
 Copyright: 2004-2013 knut st. osmundsen <bird-kBuild-spamx@anduin.net>
 License: Expat
 
-Files: src/lib/kbuild_version.*
+Files: src/lib/console.h
+       src/lib/is_console.c
+       src/lib/kbuild_version.*
        src/lib/mytypes.h
        src/lib/nt/kFsCache.*
        src/lib/quote_argv.*
