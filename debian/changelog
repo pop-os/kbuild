@@ -1,3 +1,12 @@
+kbuild (1:0.1.9998svn3236+dfsg-1) unstable; urgency=medium
+
+  * Update maintainer email
+  * New upstream version 0.1.9998svn3236+dfsg
+  * Update copyright file
+  * bump std-version to 4.2.1, no changes required
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Fri, 21 Dec 2018 16:47:13 +0100
+
 kbuild (1:0.1.9998svn3149+dfsg-3) unstable; urgency=high
 
   * Move to new maintainer address, bump std-version to 4.1.4
