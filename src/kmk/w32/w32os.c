@@ -23,7 +23,11 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #include <process.h>
 #include <io.h>
 #include "pathstuff.h"
-#include "sub_proc.h"
+#ifndef CONFIG_NEW_WIN_CHILDREN
+# include "sub_proc.h"
+#else
+# include "winchildren.h"
+#endif
 #include "w32err.h"
 #include "os.h"
 #include "debug.h"
@@ -168,21 +172,37 @@ jobserver_pre_acquire ()
 unsigned int
 jobserver_acquire (int timeout)
 {
+#ifndef CONFIG_NEW_WIN_CHILDREN
     HANDLE handles[MAXIMUM_WAIT_OBJECTS + 1]; /* bird: + 1 to prevent trashing the stack. */
+#else
+    HANDLE handles[2];
+#endif
     DWORD dwHandleCount;
     DWORD dwEvent;
 
     /* Add jobserver semaphore to first slot. */
     handles[0] = jobserver_semaphore;
 
+#ifndef CONFIG_NEW_WIN_CHILDREN
     /* Build array of handles to wait for.  */
     dwHandleCount = 1 + process_set_handles (&handles[1]);
-
     dwEvent = WaitForMultipleObjects (
         dwHandleCount,  /* number of objects in array */
         handles,        /* array of objects */
         FALSE,          /* wait for any object */
         INFINITE);      /* wait until object is signalled */
+#else
+    /* Add the completed children event as the 2nd one. */
+    handles[1] = (HANDLE)MkWinChildGetCompleteEventHandle();
+    if (handles[1] == NULL)
+      return 0;
+    dwHandleCount = 2;
+    dwEvent = WaitForMultipleObjectsEx (dwHandleCount,
+                                        handles,
+                                        FALSE /*bWaitAll*/,
+                                        256, /* INFINITE - paranoia, only wait 256 ms before checking again. */
+                                        TRUE /*bAlertable*/);
+#endif
 
     if (dwEvent == WAIT_FAILED)
       {

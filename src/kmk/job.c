@@ -41,7 +41,9 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  */
 const char *default_shell = "sh.exe";
 int no_default_sh_exe = 1;
 int batch_mode_shell = 1;
+# ifndef CONFIG_NEW_WIN32_CTRL_EVENT
 HANDLE main_thread;
+# endif
 
 #elif defined (_AMIGA)
 
@@ -116,7 +118,11 @@ static void vmsWaitForChildren (int *);
 # include <windows.h>
 # include <io.h>
 # include <process.h>
-# include "sub_proc.h"
+# ifdef CONFIG_NEW_WIN_CHILDREN
+#  include "w32/winchildren.h"
+# else
+#  include "sub_proc.h"
+# endif
 # include "w32err.h"
 # include "pathstuff.h"
 # define WAIT_NOHANG 1
@@ -259,6 +265,7 @@ unsigned int jobserver_tokens = 0;
 
 
 #ifdef WINDOWS32
+# ifndef CONFIG_NEW_WIN_CHILDREN /* (only used by commands.c) */
 /*
  * The macro which references this function is defined in makeint.h.
  */
@@ -267,6 +274,7 @@ w32_kill (pid_t pid, int sig)
 {
   return ((process_kill ((HANDLE)pid, sig) == TRUE) ? 0 : -1);
 }
+# endif /* !CONFIG_NEW_WIN_CHILDREN */
 
 /* This function creates a temporary file name with an extension specified
  * by the unixy arg.
@@ -803,6 +811,7 @@ reap_children (int block, int err)
 #endif /* _AMIGA */
 #ifdef WINDOWS32
           {
+# ifndef CONFIG_NEW_WIN_CHILDREN
             HANDLE hPID;
             HANDLE hcTID, hcPID;
             DWORD dwWaitStatus = 0;
@@ -810,6 +819,7 @@ reap_children (int block, int err)
             exit_sig = 0;
             coredump = 0;
 
+#  ifndef CONFIG_NEW_WIN32_CTRL_EVENT
             /* Record the thread ID of the main process, so that we
                could suspend it in the signal handler.  */
             if (!main_thread)
@@ -827,6 +837,7 @@ reap_children (int block, int err)
                 else
                   DB (DB_VERBOSE, ("Main thread handle = %p\n", main_thread));
               }
+#  endif
 
             /* wait for anything to finish */
             hPID = process_wait_for_any (block, &dwWaitStatus);
@@ -863,6 +874,37 @@ reap_children (int block, int err)
               }
 
             pid = (pid_t) hPID;
+# else  /* CONFIG_NEW_WIN_CHILDREN */
+#  ifndef CONFIG_NEW_WIN32_CTRL_EVENT
+            /* Ctrl-C handler needs to suspend the main thread handle to
+               prevent mayhem when concurrently calling reap_children.  */
+            if (   !main_thread
+                && !DuplicateHandle (GetCurrentProcess (), GetCurrentThread (),
+                                     GetCurrentProcess (), &main_thread, 0,
+                                     FALSE, DUPLICATE_SAME_ACCESS))
+              fprintf (stderr, "Failed to duplicate main thread handle: %u\n",
+                       GetLastError ());
+#  endif
+
+            assert (!any_remote);
+            pid = 0;
+            coredump = exit_sig = exit_code = 0;
+            {
+              int rc = MkWinChildWait(block, &pid, &exit_code, &exit_sig, &coredump, &c);
+              if (rc != 0)
+                    ON (fatal, NILF, _("MkWinChildWait: %u"), rc);
+            }
+            if (pid == 0)
+              {
+                /* No more children, stop. */
+                reap_more = 0;
+                break;
+              }
+
+            /* If we have started jobs in this second, remove one.  */
+            if (job_counter)
+              --job_counter;
+# endif /* CONFIG_NEW_WIN_CHILDREN */
           }
 #endif /* WINDOWS32 */
         }
@@ -1076,6 +1118,14 @@ free_child (struct child *child)
   print_job_time (child);
 #endif
   output_close (&child->output);
+
+  /* bird: Make sure the output_context doesn't point to a freed structure when
+           we return from this function.  This is probably an issue elsewhere
+           in the code, however it doesn't cost us much fixing it here.  (The
+           access after free was caught in a die() scenario, both in error
+           situations and successful ones.)  */
+  if (output_context == &child->output)
+    OUTPUT_UNSET();
 
   if (!jobserver_tokens)
     ONS (fatal, NILF, "INTERNAL: Freeing child %p (%s) but no tokens left!\n",
@@ -1432,6 +1482,14 @@ start_job_command (struct child *child)
       goto next_command;
     }
 
+  /* We're sure we're going to invoke a command: set up the output.  */
+  output_start ();
+
+  /* Flush the output streams so they won't have things written twice.  */
+
+  fflush (stdout);
+  fflush (stderr);
+
 #ifdef CONFIG_WITH_KMK_BUILTIN
   /* If builtin command then pass it on to the builtin shell interpreter. */
 
@@ -1489,14 +1547,6 @@ start_job_command (struct child *child)
       argv = argv_spawn;
     }
 #endif /* CONFIG_WITH_KMK_BUILTIN */
-
-  /* We're sure we're going to invoke a command: set up the output.  */
-  output_start ();
-
-  /* Flush the output streams so they won't have things written twice.  */
-
-  fflush (stdout);
-  fflush (stderr);
 
   /* Decide whether to give this child the 'good' standard input
      (one that points to the terminal or whatever), or the 'bad' one
@@ -1649,6 +1699,7 @@ start_job_command (struct child *child)
 #endif  /* Amiga */
 #ifdef WINDOWS32
   {
+#  ifndef CONFIG_NEW_WIN_CHILDREN
       HANDLE hPID;
       char* arg0;
       int outfd = FD_STDOUT;
@@ -1692,6 +1743,23 @@ start_job_command (struct child *child)
           fprintf (stderr, _("\nCounted %d args in failed launch\n"), i);
           goto error;
         }
+#  else   /* CONFIG_NEW_WIN_CHILDREN */
+    struct variable *shell_var = lookup_variable("SHELL", 5);
+    const char *shell_value = !shell_var ? NULL
+                            : !shell_var->recursive || strchr(shell_var->value, '$') == NULL
+                            ? shell_var->value : variable_expand (shell_var->value);
+    int rc = MkWinChildCreate(argv, child->environment, shell_value, child, &child->pid);
+    if (rc != 0)
+      {
+        int i;
+        unblock_sigs ();
+        fprintf (stderr, _("failed to launch process (rc=%d)\n"), rc);
+        for (i = 0; argv[i]; i++)
+          fprintf (stderr, "%s ", argv[i]);
+        fprintf (stderr, "\n", argv[i]);
+        goto error;
+      }
+#endif  /* CONFIG_NEW_WIN_CHILDREN */
   }
 #endif /* WINDOWS32 */
 #endif  /* __MSDOS__ or Amiga or WINDOWS32 */
@@ -1764,7 +1832,9 @@ start_waiting_job (struct child *c)
       && ((job_slots_used > 0 && load_too_high ())
 #endif
 #ifdef WINDOWS32
+# ifndef CONFIG_NEW_WIN_CHILDREN
           || (process_used_slots () >= MAXIMUM_WAIT_OBJECTS)
+# endif
 #endif
           ))
     {
@@ -2185,7 +2255,7 @@ load_too_high (void)
   double load, guess;
   time_t now;
 
-#ifdef WINDOWS32
+#if defined(WINDOWS32) && !defined(CONFIG_NEW_WIN_CHILDREN)
   /* sub_proc.c cannot wait for more than MAXIMUM_WAIT_OBJECTS children */
   if (process_used_slots () >= MAXIMUM_WAIT_OBJECTS)
     return 1;
@@ -2426,6 +2496,7 @@ child_execute_job (struct output *out, int good_stdin, char **argv, char **envp)
 #endif /* !AMIGA && !__MSDOS__ && !VMS */
 #endif /* !WINDOWS32 */
 
+#if !defined(WINDOWS32) || !defined(CONFIG_NEW_WIN_CHILDREN)
 #ifndef _AMIGA
 /* Replace the current process with one running the command in ARGV,
    with environment ENVP.  This function does not return.  */
@@ -2449,6 +2520,7 @@ exec_command (char **argv, char **envp)
   _exit (EXIT_FAILURE);
 #else
 #ifdef WINDOWS32
+# ifndef CONFIG_NEW_WIN_CHILDREN
   HANDLE hPID;
   HANDLE hWaitPID;
   int exit_code = EXIT_FAILURE;
@@ -2504,7 +2576,9 @@ exec_command (char **argv, char **envp)
 
   /* return child's exit code as our exit code */
   exit (exit_code);
+# else  /* CONFIG_NEW_WIN_CHILDREN */
 
+# endif /* CONFIG_NEW_WIN_CHILDREN */
 #else  /* !WINDOWS32 */
 
 # ifdef __EMX__
@@ -2638,6 +2712,7 @@ void clean_tmp (void)
 }
 
 #endif /* On Amiga */
+#endif /* !defined(WINDOWS32) || !defined(CONFIG_NEW_WIN_CHILDREN) */
 
 #ifndef VMS
 /* Figure out the argument list necessary to run LINE as a command.  Try to
@@ -2766,7 +2841,7 @@ construct_command_argv_internal (char *line, char **restp, const char *shell,
       0 };
 
   const char *sh_chars;
-  const char **sh_cmds;
+  char const * const * sh_cmds;                                                /* kmk: +_sh +const*2 */
 #elif defined(__riscos__)
   static const char *sh_chars = "";
   static const char *sh_cmds[] = { 0 };
@@ -3319,7 +3394,12 @@ construct_command_argv_internal (char *line, char **restp, const char *shell,
 
                 /* This is the start of a new recipe line.  Skip whitespace
                    and prefix characters but not newlines.  */
+#ifndef CONFIG_WITH_COMMANDS_FUNC
                 while (ISBLANK (*f) || *f == '-' || *f == '@' || *f == '+')
+#else
+                char ch;
+                while (ISBLANK ((ch = *f)) || ch == '-' || ch == '@' || ch == '+' || ch == '%')
+#endif
                   ++f;
 
                 /* Copy until we get to the next logical recipe line.  */
@@ -3371,7 +3451,12 @@ construct_command_argv_internal (char *line, char **restp, const char *shell,
               {
                 /* This is the start of a new recipe line.  Skip whitespace
                    and prefix characters but not newlines.  */
+#ifndef CONFIG_WITH_COMMANDS_FUNC
                 while (ISBLANK (*f) || *f == '-' || *f == '@' || *f == '+')
+#else
+                char ch;
+                while (ISBLANK ((ch = *f)) || ch == '-' || ch == '@' || ch == '+' || ch == '%')
+#endif
                   ++f;
 
                 /* Copy until we get to the next logical recipe line.  */
@@ -3742,8 +3827,12 @@ construct_command_argv (char *line, char **restp, struct file *file,
      */
     if (shell)
       {
+# if 1 /* bird */
+        unix_slashes (shell);
+# else
         char *p = w32ify (shell, 0);
         strcpy (shell, p);
+# endif
       }
 #endif
 #ifdef __EMX__

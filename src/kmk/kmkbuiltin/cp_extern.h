@@ -38,24 +38,18 @@ typedef struct {
 	char	p_path[PATH_MAX];	/* pointer to the start of a path */
 } PATH_T;
 
-#define argv0   cp_argv0
-#define to      cp_to
-#define fflag   cp_fflag
-#define iflag   cp_iflag
-#define nflag   cp_nflag
-#define pflag   cp_pflag
-#define vflag   cp_vflag
-#define info    cp_info
-#define usage   cp_usage
-#define setfile cp_setfile
+typedef struct CPUTILSINSTANCE {
+    PKMKBUILTINCTX pCtx;
+    /*extern*/ PATH_T to;
+    /*extern*/ int fflag, iflag, nflag, pflag, vflag;
+} CPUTILSINSTANCE;
 
-extern const char *argv0;
-extern PATH_T to;
-extern int fflag, iflag, nflag, pflag, vflag;
-extern volatile sig_atomic_t info;
+#if defined(SIGINFO) && defined(KMK_BUILTIN_STANDALONE)
+extern volatile sig_atomic_t g_cp_info;
+#endif
 
-int	copy_fifo(struct stat *, int);
-int	copy_file(const FTSENT *, int, int, int *);
-int	copy_link(const FTSENT *, int);
-int	copy_special(struct stat *, int);
-int	setfile(struct stat *, int);
+int	copy_fifo(CPUTILSINSTANCE *pThis, struct stat *, int);
+int	copy_file(CPUTILSINSTANCE *pThis, const FTSENT *, int, int, int *);
+int	copy_link(CPUTILSINSTANCE *pThis, const FTSENT *, int);
+int	copy_special(CPUTILSINSTANCE *pThis, struct stat *, int);
+int	copy_file_attribs(CPUTILSINSTANCE *pThis, struct stat *, int);

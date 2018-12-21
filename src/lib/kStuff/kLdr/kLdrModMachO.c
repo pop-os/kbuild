@@ -1,4 +1,4 @@
-/* $Id: kLdrModMachO.c 102 2017-10-02 10:45:31Z bird $ */
+/* $Id: kLdrModMachO.c 112 2018-07-04 09:37:39Z bird $ */
 /** @file
  * kLdr - The Module Interpreter for the MACH-O format.
  */
@@ -420,12 +420,18 @@ static int kldrModMachODoCreate(PKRDR pRdr, KLDRFOFF offImage, KU32 fOpenFlags, 
             pMod->enmEndian = KLDRENDIAN_LITTLE;
             switch (s.Hdr32.cpusubtype)
             {
-                case CPU_SUBTYPE_I386_ALL:          pMod->enmCpu = KCPU_X86_32_BLEND; break;
-                /*case CPU_SUBTYPE_386: ^^           pMod->enmCpu = KCPU_I386; break;*/
-                case CPU_SUBTYPE_486:               pMod->enmCpu = KCPU_I486; break;
-                case CPU_SUBTYPE_486SX:             pMod->enmCpu = KCPU_I486SX; break;
-                /*case CPU_SUBTYPE_586: vv */
-                case CPU_SUBTYPE_PENT:              pMod->enmCpu = KCPU_I586; break;
+                case CPU_SUBTYPE_I386_ALL: /* == CPU_SUBTYPE_386 */
+                    pMod->enmCpu = KCPU_X86_32_BLEND;
+                    break;
+                case CPU_SUBTYPE_486:
+                    pMod->enmCpu = KCPU_I486;
+                    break;
+                case CPU_SUBTYPE_486SX:
+                    pMod->enmCpu = KCPU_I486SX;
+                    break;
+                case CPU_SUBTYPE_PENT: /* == CPU_SUBTYPE_586 */
+                    pMod->enmCpu = KCPU_I586;
+                    break;
                 case CPU_SUBTYPE_PENTPRO:
                 case CPU_SUBTYPE_PENTII_M3:
                 case CPU_SUBTYPE_PENTII_M5:
@@ -433,12 +439,15 @@ static int kldrModMachODoCreate(PKRDR pRdr, KLDRFOFF offImage, KU32 fOpenFlags, 
                 case CPU_SUBTYPE_CELERON_MOBILE:
                 case CPU_SUBTYPE_PENTIUM_3:
                 case CPU_SUBTYPE_PENTIUM_3_M:
-                case CPU_SUBTYPE_PENTIUM_3_XEON:    pMod->enmCpu = KCPU_I686; break;
+                case CPU_SUBTYPE_PENTIUM_3_XEON:
+                    pMod->enmCpu = KCPU_I686;
+                    break;
                 case CPU_SUBTYPE_PENTIUM_M:
                 case CPU_SUBTYPE_PENTIUM_4:
                 case CPU_SUBTYPE_PENTIUM_4_M:
                 case CPU_SUBTYPE_XEON:
-                case CPU_SUBTYPE_XEON_MP:           pMod->enmCpu = KCPU_P4; break;
+                case CPU_SUBTYPE_XEON_MP:
+                    pMod->enmCpu = KCPU_P4;
                     break;
 
                 default:
