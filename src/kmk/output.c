@@ -36,8 +36,15 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #ifdef WINDOWS32
 # include <windows.h>
 # include <io.h>
-# include "sub_proc.h"
+# ifndef CONFIG_NEW_WIN_CHILDREN
+#  include "sub_proc.h"
+# else
+#  include "w32/winchildren.h"
+# endif
 #endif /* WINDOWS32 */
+#ifdef KBUILD_OS_WINDOWS
+# include "console.h"
+#endif
 
 struct output *output_context = NULL;
 unsigned int stdio_traced = 0;
@@ -52,20 +59,485 @@ unsigned int stdio_traced = 0;
 # define STREAM_OK(_s) 1
 #endif
 
+
+#ifdef CONFIG_WITH_OUTPUT_IN_MEMORY
+# define MEMBUF_MIN_SEG_SIZE  4096
+# define MEMBUF_MAX_SEG_SIZE  (512*1024)
+# define MEMBUF_MAX_MOVE_LEN  (  MEMBUF_MIN_SEG_SIZE \
+                               - offsetof (struct output_segment, runs) \
+                               - sizeof (struct output_run))
+# define MEMBUF_MAX_TOTAL     (  sizeof (void *) <= 4 \
+                               ? (size_t)512*1024 : (size_t)16*1024*1024 )
+
+static void *acquire_semaphore (void);
+static void  release_semaphore (void *);
+static int   log_working_directory (int);
+
+/* Is make's stdout going to the same place as stderr?
+   Also, did we already sync_init (== -1)?  */
+static int combined_output = -1;
+
+/* Internal worker for output_dump and membuf_dump_most. */
+static void membuf_dump (struct output *out)
+{
+  if (out->out.total || out->err.total)
+    {
+      int traced = 0;
+      struct output_run *err_run;
+      struct output_run *out_run;
+      struct output_segment *seg;
+      FILE *prevdst;
+
+      /* Try to acquire the semaphore.  If it fails, dump the output
+         unsynchronized; still better than silently discarding it.
+         We want to keep this lock for as little time as possible.  */
+      void *sem = acquire_semaphore ();
+# if defined (KBUILD_OS_WINDOWS) || defined (KBUILD_OS_OS2) || defined (KBUILD_OS_DOS)
+      int prev_mode_out = _setmode (fileno (stdout), _O_BINARY);
+      int prev_mode_err = _setmode (fileno (stderr), _O_BINARY);
+# endif
+
+# ifndef KMK /* this drives me bananas. */
+      /* Log the working directory for this dump.  */
+      if (print_directory_flag && output_sync != OUTPUT_SYNC_RECURSE)
+        traced = log_working_directory (1);
+# endif
+
+      /* Work the out and err sequences in parallel. */
+      out_run = out->out.head_run;
+      err_run = out->err.head_run;
+      prevdst = NULL;
+      while (err_run || out_run)
+        {
+          FILE       *dst;
+          const void *src;
+          size_t      len;
+          if (out_run && (!err_run || out_run->seqno <= err_run->seqno))
+            {
+              src = out_run + 1;
+              len = out_run->len;
+              dst = stdout;
+              out_run = out_run->next;
+            }
+          else
+            {
+              src = err_run + 1;
+              len = err_run->len;
+              dst = stderr;
+              err_run = err_run->next;
+            }
+          if (dst != prevdst)
+            fflush(prevdst);
+          prevdst = dst;
+# if 0 /* for debugging */
+          while (len > 0)
+            {
+              const char *nl = (const char *)memchr (src, '\n', len);
+              size_t line_len = nl ? nl - (const char *)src + 1 : len;
+              char *tmp = (char *)xmalloc (1 + line_len + 1 + 1);
+              tmp[0] = '{';
+              memcpy (&tmp[1], src, line_len);
+              tmp[1 + line_len] = '}';
+#  ifdef KBUILD_OS_WINDOWS
+              maybe_con_fwrite (tmp, 1 + line_len + 1, 1, dst);
+#  else
+              fwrite (tmp, 1 + line_len + 1, 1, dst);
+#  endif
+              free (tmp);
+              src  = (const char *)src + line_len;
+              len -= line_len;
+            }
+#else
+#  ifdef KBUILD_OS_WINDOWS
+          maybe_con_fwrite (src, len, 1, dst);
+#  else
+          fwrite (src, len, 1, dst);
+#  endif
+# endif
+        }
+      if (prevdst)
+        fflush (prevdst);
+
+# ifndef KMK /* this drives me bananas. */
+      if (traced)
+        log_working_directory (0);
+# endif
+
+      /* Exit the critical section.  */
+# if defined (KBUILD_OS_WINDOWS) || defined (KBUILD_OS_OS2) || defined (KBUILD_OS_DOS)
+      _setmode (fileno (stdout), prev_mode_out);
+      _setmode (fileno (stderr), prev_mode_err);
+# endif
+      if (sem)
+        release_semaphore (sem);
+
+      /* Free the segments and reset the state. */
+      while ((seg = out->out.head_seg))
+        {
+         out->out.head_seg = seg->next;
+         free (seg);
+        }
+      out->out.tail_seg = NULL;
+      out->out.tail_run = NULL;
+      out->out.head_run = NULL;
+      out->out.left     = 0;
+      out->out.total    = 0;
+
+      while ((seg = out->err.head_seg))
+        {
+         out->err.head_seg = seg->next;
+         free (seg);
+        }
+      out->err.tail_seg = NULL;
+      out->err.tail_run = NULL;
+      out->err.head_run = NULL;
+      out->err.left     = 0;
+      out->err.total    = 0;
+
+      out->seqno = 0;
+    }
+  else
+    assert (out->out.head_seg == NULL && out->err.head_seg == NULL);
+}
+
+/* Writes up to LEN bytes to the given segment.
+   Returns how much was actually written.  */
+static size_t
+membuf_write_segment (struct output_membuf *membuf, struct output_segment *seg,
+                      const char *src, size_t len, unsigned int *pseqno)
+{
+  size_t written = 0;
+  if (seg && membuf->left > 0)
+    {
+      struct output_run *run = membuf->tail_run;
+      char  *dst = (char *)(run + 1) + run->len;
+      assert ((uintptr_t)run - (uintptr_t)seg < seg->size);
+
+      /* If the sequence number didn't change, then we can append
+         to the current run without further considerations. */
+      if (run->seqno == *pseqno)
+          written = len;
+      /* If the current run does not end with a newline, don't start a new
+         run till we encounter one. */
+      else if (dst[-1] != '\n')
+        {
+          char const *srcnl = (const char *)memchr (src, '\n', len);
+          written = srcnl ? srcnl - src + 1 : len;
+        }
+      /* Try create a new empty run and append to it. */
+      else
+        {
+          size_t const offnextrun = (  (uintptr_t)dst - (uintptr_t)(seg)
+                                     + sizeof(void *) - 1)
+                                  & ~(sizeof(void *) - 1);
+          if (offnextrun > seg->size - sizeof (struct output_run) * 2)
+            return 0; /* need new segment */
+
+          run = run->next = (struct output_run *)((char *)seg + offnextrun);
+          run->next  = NULL;
+          run->seqno = ++(*pseqno);
+          run->len   = 0;
+          membuf->tail_run = run;
+          membuf->left = seg->size - (offnextrun + sizeof (*run));
+          dst = (char *)(run + 1);
+          written = len;
+        }
+
+      /* Append to the current run. */
+      if (written > membuf->left)
+        written = membuf->left;
+      memcpy (dst, src, written);
+      run->len += written;
+      membuf->left -= written;
+    }
+  return written;
+}
+
+/* Helper for membuf_write_new_segment and membuf_dump_most that figures out
+   now much data needs to be moved from the previous run in order to make it
+   end with a newline.  */
+static size_t membuf_calc_move_len (struct output_run *tail_run)
+{
+  size_t to_move = 0;
+  if (tail_run)
+    {
+      const char *data = (const char *)(tail_run + 1);
+      size_t off = tail_run->len;
+      while (off > 0 && data[off - 1] != '\n')
+        off--;
+      to_move = tail_run->len - off;
+      if (to_move  >=  MEMBUF_MAX_MOVE_LEN)
+        to_move = 0;
+    }
+  return to_move;
+}
+
+/* Allocates a new segment and writes to it.
+   This will take care to make sure the previous run terminates with
+   a newline so that we pass whole lines to fwrite when dumping. */
+static size_t
+membuf_write_new_segment (struct output_membuf *membuf, const char *src,
+                          size_t len, unsigned int *pseqno)
+{
+  struct output_run     *prev_run = membuf->tail_run;
+  struct output_segment *prev_seg = membuf->tail_seg;
+  size_t const           to_move  = membuf_calc_move_len (prev_run);
+  struct output_segment *new_seg;
+  size_t written;
+  char *dst;
+
+  /* Figure the the segment size.  We start with MEMBUF_MIN_SEG_SIZE and double
+     it each time till we reach MEMBUF_MAX_SEG_SIZE. */
+  size_t const offset_runs = offsetof (struct output_segment, runs);
+  size_t segsize = !prev_seg ? MEMBUF_MIN_SEG_SIZE
+                 : prev_seg->size >= MEMBUF_MAX_SEG_SIZE ? MEMBUF_MAX_SEG_SIZE
+                 : prev_seg->size * 2;
+  while (   segsize < to_move + len + offset_runs + sizeof (struct output_run) * 2
+         && segsize < MEMBUF_MAX_SEG_SIZE)
+    segsize *= 2;
+
+  /* Allocate the segment and link it and the first run. */
+  new_seg = (struct output_segment *)xmalloc (segsize);
+  new_seg->size = segsize;
+  new_seg->next = NULL;
+  new_seg->runs[0].next = NULL;
+  if (!prev_seg)
+    {
+      membuf->head_seg = new_seg;
+      membuf->head_run = &new_seg->runs[0];
+    }
+  else
+    {
+      prev_seg->next = new_seg;
+      prev_run->next = &new_seg->runs[0];
+    }
+  membuf->tail_seg = new_seg;
+  membuf->tail_run = &new_seg->runs[0];
+  membuf->total += segsize;
+  membuf->left = segsize - sizeof (struct output_run) - offset_runs;
+
+  /* Initialize and write data to the first run. */
+  dst = (char *)&new_seg->runs[0]; /* Try bypass gcc array size cleverness. */
+  dst += sizeof (struct output_run);
+  assert (MEMBUF_MAX_MOVE_LEN < MEMBUF_MIN_SEG_SIZE);
+  if (to_move > 0)
+    {
+      /* Move to_move bytes from the previous run in hope that we'll get a
+         newline to soon.  Afterwards call membuf_segment_write to work SRC. */
+      assert (prev_run != NULL);
+      assert (membuf->left >= to_move);
+      prev_run->len -= to_move;
+      new_seg->runs[0].len = to_move;
+      new_seg->runs[0].seqno = prev_run->seqno;
+      memcpy (dst, (const char *)(prev_run + 1) + prev_run->len, to_move);
+      membuf->left -= to_move;
+
+      written = membuf_write_segment (membuf, new_seg, src, len, pseqno);
+    }
+  else
+    {
+      /* Create a run with up to LEN from SRC. */
+      written = len;
+      if (written > membuf->left)
+        written = membuf->left;
+      new_seg->runs[0].len = written;
+      new_seg->runs[0].seqno = ++(*pseqno);
+      memcpy (dst, src, written);
+      membuf->left -= written;
+    }
+  return written;
+}
+
+/* Worker for output_write that will dump most of the output when we hit
+   MEMBUF_MAX_TOTAL on either of the two membuf structures, then free all the
+   output segments.  Incomplete lines will be held over to the next buffers
+   and copied into new segments. */
+static void
+membuf_dump_most (struct output *out)
+{
+  size_t out_to_move = membuf_calc_move_len (out->out.tail_run);
+  size_t err_to_move = membuf_calc_move_len (out->err.tail_run);
+  if (!out_to_move && !err_to_move)
+    membuf_dump (out);
+  else
+    {
+      /* Allocate a stack buffer for holding incomplete lines.  This should be
+         fine since we're only talking about max 2 * MEMBUF_MAX_MOVE_LEN.
+         The -1 on the sequence numbers, ise because membuf_write_new_segment
+         will increment them before use. */
+      unsigned int out_seqno = out_to_move ? out->out.tail_run->seqno - 1 : 0;
+      unsigned int err_seqno = err_to_move ? out->err.tail_run->seqno - 1 : 0;
+      char *tmp = alloca (out_to_move + err_to_move);
+      if (out_to_move)
+        {
+          out->out.tail_run->len -= out_to_move;
+          memcpy (tmp,
+                  (char *)(out->out.tail_run + 1) + out->out.tail_run->len,
+                  out_to_move);
+        }
+      if (err_to_move)
+        {
+          out->err.tail_run->len -= err_to_move;
+          memcpy (tmp + out_to_move,
+                  (char *)(out->err.tail_run + 1) + out->err.tail_run->len,
+                  err_to_move);
+        }
+
+      membuf_dump (out);
+
+      if (out_to_move)
+        {
+          size_t written = membuf_write_new_segment (&out->out, tmp,
+                                                     out_to_move, &out_seqno);
+          assert (written == out_to_move); (void)written;
+        }
+      if (err_to_move)
+        {
+          size_t written = membuf_write_new_segment (&out->err,
+                                                     tmp + out_to_move,
+                                                     err_to_move, &err_seqno);
+          assert (written == err_to_move); (void)written;
+        }
+    }
+}
+
+
+/* write/fwrite like function, binary mode. */
+ssize_t
+output_write_bin (struct output *out, int is_err, const char *src, size_t len)
+{
+  size_t ret = len;
+  if (!out || !out->syncout)
+    {
+      FILE *f = is_err ? stderr : stdout;
+# if defined (KBUILD_OS_WINDOWS) || defined (KBUILD_OS_OS2) || defined (KBUILD_OS_DOS)
+      /* On DOS platforms we need to disable \n -> \r\n converts that is common on
+         standard output/error.  Also optimize for console output. */
+      int saved_errno;
+      int fd = fileno (f);
+      int prev_mode = _setmode (fd, _O_BINARY);
+      maybe_con_fwrite (src, len, 1, f);
+      if (fflush (f) == EOF)
+        ret = -1;
+      saved_errno = errno;
+      _setmode (fd, prev_mode);
+      errno = saved_errno;
+# else
+      fwrite (src, len, 1, f);
+      if (fflush (f) == EOF)
+        ret = -1;
+# endif
+    }
+  else
+    {
+      struct output_membuf *membuf = is_err ? &out->err : &out->out;
+      while (len > 0)
+        {
+          size_t runlen = membuf_write_segment (membuf, membuf->tail_seg, src, len, &out->seqno);
+          if (!runlen)
+            {
+              if (membuf->total < MEMBUF_MAX_TOTAL)
+                runlen = membuf_write_new_segment (membuf, src, len, &out->seqno);
+              else
+                membuf_dump_most (out);
+            }
+          /* advance */
+          len -= runlen;
+          src += runlen;
+        }
+    }
+  return ret;
+}
+
+#endif /* CONFIG_WITH_OUTPUT_IN_MEMORY */
+
+/* write/fwrite like function, text mode. */
+ssize_t
+output_write_text (struct output *out, int is_err, const char *src, size_t len)
+{
+#ifdef CONFIG_WITH_OUTPUT_IN_MEMORY
+# if defined (KBUILD_OS_WINDOWS) || defined (KBUILD_OS_OS2) || defined (KBUILD_OS_DOS)
+  ssize_t ret = len;
+  if (!out || !out->syncout)
+    {
+      /* ASSUME fwrite does the desired conversion. */
+      FILE *f = is_err ? stderr : stdout;
+# ifdef KBUILD_OS_WINDOWS
+      if (maybe_con_fwrite (src, len, 1, f) < 0)
+        ret = -1;
+# else
+      fwrite (src, len, 1, f);
+# endif
+      if (fflush (f) == EOF)
+        ret = -1;
+    }
+  else
+    {
+      /* Work the buffer line by line, replacing each \n with \r\n. */
+      while (len > 0)
+        {
+          const char *nl = memchr ( src, '\n', len);
+          size_t line_len = nl ? nl - src : len;
+          output_write_bin (out, is_err, src, line_len);
+          if (!nl)
+              break;
+          output_write_bin (out, is_err, "\r\n", 2);
+          len -= line_len + 1;
+          src += line_len + 1;
+        }
+    }
+  return ret;
+# else
+  return output_write_bin (out, is_err, src, len);
+# endif
+#else
+  ssize_t ret = len;
+  if (! out || ! out->syncout)
+    {
+      FILE *f = is_err ? stderr : stdout;
+# ifdef KBUILD_OS_WINDOWS
+      maybe_con_fwrite(src, len, 1, f);
+# else
+      fwrite (src, len, 1, f);
+# endif
+      fflush (f);
+    }
+  else
+    {
+      int fd = is_err ? out->err : out->out;
+      int r;
+
+      EINTRLOOP (r, lseek (fd, 0, SEEK_END));
+      while (1)
+        {
+          EINTRLOOP (r, write (fd, src, len));
+          if (r == len || r <= 0)
+            break;
+          len -= r;
+          src += r;
+        }
+    }
+  return ret;
+#endif
+}
+
+
+
 /* Write a string to the current STDOUT or STDERR.  */
 static void
 _outputs (struct output *out, int is_err, const char *msg)
 {
+#ifdef CONFIG_WITH_OUTPUT_IN_MEMORY
+  output_write_text (out, is_err, msg, strlen (msg));
+#else  /* !CONFIG_WITH_OUTPUT_IN_MEMORY */
   if (! out || ! out->syncout)
     {
       FILE *f = is_err ? stderr : stdout;
-#ifdef KBUILD_OS_WINDOWS
-      /** @todo check if fputs is also subject to char-by-char stupidity */
-      extern size_t maybe_con_fwrite(void const *, size_t, size_t, FILE *);
+# ifdef KBUILD_OS_WINDOWS
       maybe_con_fwrite(msg, strlen(msg), 1, f);
-#else
+# else
       fputs (msg, f);
-#endif
+# endif
       fflush (f);
     }
   else
@@ -84,6 +556,7 @@ _outputs (struct output *out, int is_err, const char *msg)
           msg += r;
         }
     }
+#endif /* !CONFIG_WITH_OUTPUT_IN_MEMORY */
 }
 
 /* Write a message indicating that we've just entered or
@@ -185,6 +658,28 @@ sync_init (void)
   int combined_output = 0;
 
 #ifdef WINDOWS32
+# ifdef CONFIG_NEW_WIN_CHILDREN
+  if (STREAM_OK (stdout))
+    {
+      if (STREAM_OK (stderr))
+        {
+          char mtxname[256];
+          sync_handle = create_mutex (mtxname, sizeof (mtxname));
+          if (sync_handle != -1)
+            {
+              prepare_mutex_handle_string (mtxname);
+              return same_stream (stdout, stderr);
+            }
+          perror_with_name ("output-sync suppressed: ", "create_mutex");
+        }
+      else
+        perror_with_name ("output-sync suppressed: ", "stderr");
+    }
+  else
+    perror_with_name ("output-sync suppressed: ", "stdout");
+  output_sync = OUTPUT_SYNC_NONE;
+
+# else  /* !CONFIG_NEW_WIN_CHILDREN */
   if ((!STREAM_OK (stdout) && !STREAM_OK (stderr))
       || (sync_handle = create_mutex ()) == -1)
     {
@@ -196,6 +691,7 @@ sync_init (void)
       combined_output = same_stream (stdout, stderr);
       prepare_mutex_handle_string (sync_handle);
     }
+# endif /* !CONFIG_NEW_WIN_CHILDREN */
 
 #else
   if (STREAM_OK (stdout))
@@ -220,13 +716,18 @@ sync_init (void)
   return combined_output;
 }
 
+#ifndef CONFIG_WITH_OUTPUT_IN_MEMORY
 /* Support routine for output_sync() */
 static void
 pump_from_tmp (int from, FILE *to)
 {
+# ifdef KMK
+  char buffer[8192];
+# else
   static char buffer[8192];
+#endif
 
-#ifdef WINDOWS32
+# if defined (KBUILD_OS_WINDOWS) || defined (KBUILD_OS_OS2) || defined (KBUILD_OS_DOS)
   int prev_mode;
 
   /* "from" is opened by open_tmpfd, which does it in binary mode, so
@@ -253,12 +754,13 @@ pump_from_tmp (int from, FILE *to)
       fflush (to);
     }
 
-#ifdef WINDOWS32
+# if defined (KBUILD_OS_WINDOWS) || defined (KBUILD_OS_OS2) || defined (KBUILD_OS_DOS)
   /* Switch "to" back to its original mode, so that log messages by
      Make have the same EOL format as without --output-sync.  */
   _setmode (fileno (to), prev_mode);
 #endif
 }
+#endif /* CONFIG_WITH_OUTPUT_IN_MEMORY */
 
 /* Obtain the lock for writing output.  */
 static void *
@@ -285,6 +787,8 @@ release_semaphore (void *sem)
   if (fcntl (sync_handle, F_SETLKW, flp) == -1)
     perror ("fcntl()");
 }
+
+#ifndef CONFIG_WITH_OUTPUT_IN_MEMORY
 
 /* Returns a file descriptor to a temporary file.  The file is automatically
    closed/deleted on exit.  Don't use a FILE* stream.  */
@@ -353,6 +857,8 @@ setup_tmpfile (struct output *out)
   output_sync = OUTPUT_SYNC_NONE;
 }
 
+#endif /* CONFIG_WITH_OUTPUT_IN_MEMORY */
+
 /* Synchronize the output of jobs in -j mode to keep the results of
    each job together. This is done by holding the results in temp files,
    one for stdout and potentially another for stderr, and only releasing
@@ -361,6 +867,9 @@ setup_tmpfile (struct output *out)
 void
 output_dump (struct output *out)
 {
+#ifdef CONFIG_WITH_OUTPUT_IN_MEMORY
+  membuf_dump (out);
+#else
   int outfd_not_empty = FD_NOT_EMPTY (out->out);
   int errfd_not_empty = FD_NOT_EMPTY (out->err);
 
@@ -403,6 +912,7 @@ output_dump (struct output *out)
           EINTRLOOP (e, ftruncate (out->err, 0));
         }
     }
+#endif
 }
 #endif /* NO_OUTPUT_SYNC */
 
@@ -511,7 +1021,21 @@ output_init (struct output *out)
 {
   if (out)
     {
+#ifdef CONFIG_WITH_OUTPUT_IN_MEMORY
+      out->out.head_seg  = NULL;
+      out->out.tail_seg  = NULL;
+      out->out.head_run  = NULL;
+      out->out.tail_run  = NULL;
+      out->err.head_seg  = NULL;
+      out->err.tail_seg  = NULL;
+      out->err.head_run  = NULL;
+      out->err.tail_run  = NULL;
+      out->err.total     = 0;
+      out->out.total     = 0;
+      out->seqno         = 0;
+#else
       out->out = out->err = OUTPUT_NONE;
+#endif
       out->syncout = !!output_sync;
       return;
     }
@@ -554,10 +1078,17 @@ output_close (struct output *out)
   output_dump (out);
 #endif
 
+#ifdef CONFIG_WITH_OUTPUT_IN_MEMORY
+  assert (out->out.total == 0);
+  assert (out->out.head_seg == NULL);
+  assert (out->err.total == 0);
+  assert (out->err.head_seg == NULL);
+#else
   if (out->out >= 0)
     close (out->out);
   if (out->err >= 0 && out->err != out->out)
     close (out->err);
+#endif
 
   output_init (out);
 }
@@ -566,16 +1097,30 @@ output_close (struct output *out)
 void
 output_start (void)
 {
+#ifdef CONFIG_WITH_OUTPUT_IN_MEMORY
+  /* If we're syncing output make sure the sempahore (win) is set up. */
+  if (output_context && output_context->syncout)
+    if (combined_output < 0)
+      combined_output = sync_init ();
+#else
 #ifndef NO_OUTPUT_SYNC
   /* If we're syncing output make sure the temporary file is set up.  */
   if (output_context && output_context->syncout)
     if (! OUTPUT_ISSET(output_context))
       setup_tmpfile (output_context);
 #endif
+#endif
 
+#ifndef KMK
   /* If we're not syncing this output per-line or per-target, make sure we emit
      the "Entering..." message where appropriate.  */
   if (output_sync == OUTPUT_SYNC_NONE || output_sync == OUTPUT_SYNC_RECURSE)
+#else
+  /* Indiscriminately output "Entering..." and "Leaving..." message for each
+     command line or target is plain annoying!  And when there is no recursion
+     it's actually inappropriate.   Haven't got a simple way of detecting that,
+     so back to the old behavior for now.  [bird] */
+#endif
     if (! stdio_traced && print_directory_flag)
       stdio_traced = log_working_directory (1);
 }

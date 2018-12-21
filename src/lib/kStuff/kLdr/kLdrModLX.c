@@ -1,4 +1,4 @@
-/* $Id: kLdrModLX.c 102 2017-10-02 10:45:31Z bird $ */
+/* $Id: kLdrModLX.c 114 2018-10-28 13:36:48Z bird $ */
 /** @file
  * kLdr - The Module Interpreter for the Linear eXecutable (LX) Format.
  */
@@ -192,6 +192,7 @@ static int kldrModLXDoCreate(PKRDR pRdr, KLDRFOFF offNewHdr, PKLDRMODLX *ppModLX
     PKLDRMOD pMod;
     KSIZE cb;
     KSIZE cchFilename;
+    KSIZE offLdrStuff;
     KU32 off, offEnd;
     KU32 i;
     int rc;
@@ -284,8 +285,9 @@ static int kldrModLXDoCreate(PKRDR pRdr, KLDRFOFF offNewHdr, PKLDRMODLX *ppModLX
     cchFilename = kHlpStrLen(kRdrName(pRdr));
     cb = K_ALIGN_Z(sizeof(KLDRMODLX), 8)
        + K_ALIGN_Z(K_OFFSETOF(KLDRMOD, aSegments[Hdr.e32_objcnt + 1]), 8)
-       + K_ALIGN_Z(cchFilename + 1, 8)
-       + Hdr.e32_ldrsize + 2; /* +2 for two extra zeros. */
+       + K_ALIGN_Z(cchFilename + 1, 8);
+    offLdrStuff = cb;
+    cb += Hdr.e32_ldrsize + 2; /* +2 for two extra zeros. */
     pModLX = (PKLDRMODLX)kHlpAlloc(cb);
     if (!pModLX)
         return KERR_NO_MEMORY;
@@ -352,7 +354,7 @@ static int kldrModLXDoCreate(PKRDR pRdr, KLDRFOFF offNewHdr, PKLDRMODLX *ppModLX
     pModLX->offHdr = offNewHdr >= 0 ? offNewHdr : 0;
     kHlpMemCopy(&pModLX->Hdr, &Hdr, sizeof(Hdr));
 
-    pModLX->pbLoaderSection = K_ALIGN_P(pMod->pszFilename + pMod->cchFilename + 1, 16);
+    pModLX->pbLoaderSection = (KU8 *)pModLX + offLdrStuff;
     pModLX->pbLoaderSectionLast = pModLX->pbLoaderSection + pModLX->Hdr.e32_ldrsize - 1;
     pModLX->paObjs = NULL;
     pModLX->paPageMappings = NULL;

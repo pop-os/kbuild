@@ -27,6 +27,9 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #ifdef KMK
 # include "kbuild.h"
 #endif
+#ifdef CONFIG_WITH_KMK_BUILTIN_STATS
+# include "kmkbuiltin.h"
+#endif
 
 #include <assert.h>
 #ifdef _AMIGA
@@ -37,7 +40,11 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  */
 # include <windows.h>
 # include <io.h>
 # include "pathstuff.h"
-# include "sub_proc.h"
+# ifndef CONFIG_NEW_WIN_CHILDREN
+#  include "sub_proc.h"
+# else
+#  include "w32/winchildren.h"
+# endif
 # include "w32err.h"
 #endif
 #ifdef __EMX__
@@ -464,9 +471,27 @@ static const char *const usage[] =
     N_("\
   -o FILE, --old-file=FILE, --assume-old=FILE\n\
                               Consider FILE to be very old and don't remake it.\n"),
+#ifndef KMK
     N_("\
   -O[TYPE], --output-sync[=TYPE]\n\
                               Synchronize output of parallel jobs by TYPE.\n"),
+#elif defined(KBUILD_OS_WINDOWS)
+    N_("\
+  -O[TYPE], --output-sync[=TYPE]\n\
+                              Synchronize output of parallel jobs by TYPE:\n\
+                                none    = no synchronization.\n\
+                                line    = receip line output\n\
+                                target  = entire receip output (default)\n\
+                                recurse = entire recursive invocation\n"),
+#else
+    N_("\
+  -O[TYPE], --output-sync[=TYPE]\n\
+                              Synchronize output of parallel jobs by TYPE:\n\
+                                none    = no synchronization (default).\n\
+                                line    = receip line output\n\
+                                target  = entire receip output\n\
+                                recurse = entire recursive invocation\n"),
+#endif
     N_("\
   -p, --print-data-base       Print make's internal database.\n"),
     N_("\
@@ -709,7 +734,11 @@ int one_shell;
    attempts to synchronize the output of parallel jobs such that the results
    of each job stay together.  */
 
+#if defined(KMK) && defined(KBUILD_OS_WINDOWS)
+int output_sync = OUTPUT_SYNC_TARGET;
+#else
 int output_sync = OUTPUT_SYNC_NONE;
+#endif
 
 /* Nonzero if the "--trace" option was given.  */
 
@@ -1090,6 +1119,16 @@ set_make_priority_and_affinity (void)
    mutex is passed, as a string, to sub-makes via the --sync-mutex
    command-line argument.  */
 void
+# ifdef CONFIG_NEW_WIN_CHILDREN
+prepare_mutex_handle_string (const char *mtxname)
+{
+  if (!sync_mutex)
+    {
+      sync_mutex = xstrdup(mtxname);
+      define_makeflags (1, 0);
+    }
+}
+# else
 prepare_mutex_handle_string (sync_handle_t handle)
 {
   if (!sync_mutex)
@@ -1101,6 +1140,7 @@ prepare_mutex_handle_string (sync_handle_t handle)
       define_makeflags (1, 0);
     }
 }
+# endif
 
 #endif  /* NO_OUTPUT_SYNC */
 
@@ -1220,8 +1260,12 @@ find_and_set_default_shell (const char *token)
     {
       batch_mode_shell = 1;
       unixy_shell = 0;
+# if 1  /* bird: sprintf? wtf. */
+      default_shell = unix_slashes (xstrdup (search_token));
+# else
       sprintf (sh_path, "%s", search_token);
       default_shell = xstrdup (w32ify (sh_path, 0));
+# endif
       DB (DB_VERBOSE, (_("find_and_set_shell() setting default_shell = %s\n"),
                        default_shell));
       sh_found = 1;
@@ -1235,8 +1279,12 @@ find_and_set_default_shell (const char *token)
   else if (_access (search_token, 0) == 0)
     {
       /* search token path was found */
+# if 1  /* bird: sprintf? wtf. */
+      default_shell = unix_slashes (xstrdup (search_token));
+# else
       sprintf (sh_path, "%s", search_token);
       default_shell = xstrdup (w32ify (sh_path, 0));
+# endif
       DB (DB_VERBOSE, (_("find_and_set_shell() setting default_shell = %s\n"),
                        default_shell));
       sh_found = 1;
@@ -1258,10 +1306,18 @@ find_and_set_default_shell (const char *token)
             {
               *ep = '\0';
 
+# if 1 /* bird: insanity insurance */
+              _snprintf (sh_path, GET_PATH_MAX, "%s/%s", p, search_token);
+# else
               sprintf (sh_path, "%s/%s", p, search_token);
+# endif
               if (_access (sh_path, 0) == 0)
                 {
+# if 1  /* bird: we can modify sh_path directly. */
+                  default_shell = xstrdup (unix_slashes (sh_path));
+# else
                   default_shell = xstrdup (w32ify (sh_path, 0));
+# endif
                   sh_found = 1;
                   *ep = PATH_SEPARATOR_CHAR;
 
@@ -1280,10 +1336,18 @@ find_and_set_default_shell (const char *token)
           /* be sure to check last element of Path */
           if (p && *p)
             {
+# if 1 /* bird: insanity insurance */
+              _snprintf (sh_path, GET_PATH_MAX, "%s/%s", p, search_token);
+# else
               sprintf (sh_path, "%s/%s", p, search_token);
+# endif
               if (_access (sh_path, 0) == 0)
                 {
+# if 1  /* bird: we can modify sh_path directly. */
+                  default_shell = xstrdup (unix_slashes (sh_path));
+# else
                   default_shell = xstrdup (w32ify (sh_path, 0));
+# endif
                   sh_found = 1;
                 }
             }
@@ -1451,8 +1515,10 @@ get_online_cpu_count(void)
       }
     if (!cpus)
       cpus = 1;
+#  ifdef CONFIG_NEW_WIN_CHILDREN
     if (cpus > 64)
       cpus = 64; /* (wait for multiple objects limit) */
+#  endif
     return cpus;
 
 # elif defined(__OS2__)
@@ -2106,7 +2172,15 @@ main (int argc, char **argv, char **envp)
    */
   if (strpbrk (argv[0], "/:\\") || strstr (argv[0], "..")
       || strneq (argv[0], "//", 2))
-    argv[0] = xstrdup (w32ify (argv[0], 1));
+# if 1  /* bird */
+    {
+      PATH_VAR (tmp_path_buf);
+      argv[0] = xstrdup (unix_slashes_resolved (argv[0], tmp_path_buf,
+                                                GET_PATH_MAX));
+    }
+# else  /* bird */
+      //argv[0] = xstrdup (w32ify (argv[0], 1));
+# endif /* bird */
 #else /* WINDOWS32 */
 #if defined (__MSDOS__) || defined (__EMX__)
   if (strchr (argv[0], '\\'))
@@ -2187,6 +2261,11 @@ main (int argc, char **argv, char **envp)
     job_slots = (unsigned int)arg_job_slots;
 
  job_setup_complete:
+
+#if defined (WINDOWS32) && defined(CONFIG_NEW_WIN_CHILDREN)
+  /* Initialize the windows child management. */
+  MkWinChildInit(job_slots);
+#endif
 
   /* The extra indirection through $(MAKE_COMMAND) is done
      for hysterical raisins.  */
@@ -3105,7 +3184,11 @@ main (int argc, char **argv, char **envp)
           if (stack_limit.rlim_cur)
             setrlimit (RLIMIT_STACK, &stack_limit);
 #endif
+# if !defined(WINDOWS32) || !defined(CONFIG_NEW_WIN_CHILDREN)
           exec_command ((char **)nargv, environ);
+# else
+          MkWinChildReExecMake ((char **)nargv, environ);
+# endif
 #endif
           free (aargv);
           break;
@@ -4141,9 +4224,9 @@ print_stats ()
   printf (_("\n# Make statistics, printed on %s"), ctime (&when));
 
   /* Allocators: */
-#ifdef CONFIG_WITH_COMPILER
+# ifdef CONFIG_WITH_COMPILER
   kmk_cc_print_stats ();
-#endif
+# endif
 # ifndef CONFIG_WITH_STRCACHE2
   strcache_print_stats ("#");
 # else
@@ -4161,6 +4244,9 @@ print_stats ()
 # ifdef KMK
   print_kbuild_define_stats ();
 # endif
+# ifdef CONFIG_WITH_KMK_BUILTIN_STATS
+  kmk_builtin_print_stats (stdout, "# ");
+# endif
 # ifdef CONFIG_WITH_COMPILER
   kmk_cc_print_stats ();
 # endif
@@ -4168,7 +4254,7 @@ print_stats ()
   when = time ((time_t *) 0);
   printf (_("\n# Finished Make statistics on %s\n"), ctime (&when));
 }
-#endif
+#endif /* CONFIG_WITH_PRINT_STATS_SWITCH */
 
 static void
 clean_jobserver (int status)

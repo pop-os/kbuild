@@ -473,7 +473,9 @@ char *strsignal (int signum);
 # include <fcntl.h>
 # include <malloc.h>
 # define pipe(_p)        _pipe((_p), 512, O_BINARY)
+# ifndef CONFIG_NEW_WIN_CHILDREN /* (only used by commands.c) */
 # define kill(_pid,_sig) w32_kill((_pid),(_sig))
+# endif
 /* MSVC and Watcom C don't have ftruncate.  */
 # if defined(_MSC_VER) || defined(__WATCOMC__)
 #  define ftruncate(_fd,_len) _chsize(_fd,_len)
@@ -484,7 +486,9 @@ char *strsignal (int signum);
 # endif
 
 void sync_Path_environment (void);
+# ifndef CONFIG_NEW_WIN_CHILDREN /* (only used by commands.c) */
 int w32_kill (pid_t pid, int sig);
+# endif
 int find_and_set_default_shell (const char *token);
 
 /* indicates whether or not we have Bourne shell */
@@ -647,6 +651,10 @@ void fatal (const floc *flocp, size_t length, const char *fmt, ...)
                                            (_f), (_s1), (_s2), (_s3), (_s4))        /* bird */
 #define OSSNS(_t,_a,_f,_s1,_s2,_n,_s3) _t((_a), strlen (_s1) + strlen (_s2) + strlen (_s3) + INTSTR_LENGTH, \
                                           (_f), (_s1), (_s2), (_n), (_s3))          /* bird */
+#define ONNS(_t,_a,_f,_n1,_n2,_s1)     _t((_a), INTSTR_LENGTH * 2 + strlen (_s1), \
+                                          (_f), (_n1), (_n2), (_s1))                /* bird */
+#define ONNNS(_t,_a,_f,_n1,_n2,_n3,_s1) _t((_a), INTSTR_LENGTH * 3 + strlen (_s1), \
+                                          (_f), (_n1), (_n2), (_n3), (_s1))         /* bird */
 
 #define OUT_OF_MEM() O (fatal, NILF, _("virtual memory exhausted"))
 
@@ -710,6 +718,9 @@ const char *dir_name (const char *);
 void print_dir_data_base (void);
 void dir_setup_glob (glob_t *);
 void hash_init_directories (void);
+#if defined (KMK) && defined (KBUILD_OS_WINDOWS)
+int utf16_regular_file_p(const wchar_t *pwszPath);
+#endif
 
 void define_default_variables (void);
 void undefine_default_variables (void);
@@ -1166,7 +1177,7 @@ extern int dir_cache_deleted_directory(const char *pszDir);
 # endif
 #endif
 
-#if defined (CONFIG_WITH_NANOTS) || defined (CONFIG_WITH_PRINT_TIME_SWITCH)
+#if defined (CONFIG_WITH_NANOTS) || defined (CONFIG_WITH_PRINT_TIME_SWITCH) || defined(CONFIG_WITH_KMK_BUILTIN_STATS)
 /* misc.c */
 extern big_int nano_timestamp (void);
 extern int format_elapsed_nano (char *buf, size_t size, big_int ts);

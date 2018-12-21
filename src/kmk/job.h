@@ -67,12 +67,20 @@ typedef intptr_t sync_handle_t;
 
 /* Public functions emulated/provided in posixfcn.c.  */
 int fcntl (intptr_t fd, int cmd, ...);
+#  ifdef CONFIG_NEW_WIN_CHILDREN
+intptr_t create_mutex (char *mtxname, size_t size);
+#  else
 intptr_t create_mutex (void);
+#  endif
 int same_stream (FILE *f1, FILE *f2);
 
 #  define RECORD_SYNC_MUTEX(m) record_sync_mutex(m)
 void record_sync_mutex (const char *str);
+#  ifdef CONFIG_NEW_WIN_CHILDREN
+void prepare_mutex_handle_string (const char *mtxname);
+#  else
 void prepare_mutex_handle_string (intptr_t hdl);
+#  endif
 # else  /* !WINDOWS32 */
 
 typedef int sync_handle_t;      /* file descriptor */
@@ -146,7 +154,7 @@ int child_execute_job (struct output *out, int good_stdin, char **argv, char **e
 void exec_command (char **argv) __attribute__ ((noreturn));
 #elif defined(__EMX__)
 int exec_command (char **argv, char **envp);
-#else
+#elif !defined(WINDOWS32) || !defined(CONFIG_NEW_WIN_CHILDREN)
 void exec_command (char **argv, char **envp) __attribute__ ((noreturn));
 #endif
 

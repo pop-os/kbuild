@@ -28,6 +28,9 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifdef WINDOWS32 /* bird */
 # include "pathstuff.h"
+# ifdef CONFIG_NEW_WIN_CHILDREN
+#  include "w32/winchildren.h"
+# endif
 #endif
 
 #ifdef KMK_HELPERS
@@ -2285,10 +2288,10 @@ shell_completed (int exit_code, int exit_sig)
 #ifdef WINDOWS32
 /*untested*/
 
+# ifndef CONFIG_NEW_WIN_CHILDREN
 #include <windows.h>
 #include <io.h>
 #include "sub_proc.h"
-
 
 int
 windows32_openpipe (int *pipedes, int errfd, pid_t *pid_p, char **command_argv, char **envp)
@@ -2415,6 +2418,7 @@ windows32_openpipe (int *pipedes, int errfd, pid_t *pid_p, char **command_argv, 
       return -1;
     }
 }
+# endif /* !CONFIG_NEW_WIN_CHILDREN */
 #endif
 
 
@@ -2556,8 +2560,12 @@ func_shell_base (char *o, char **argv, int trim_newlines)
   /* Set up the output in case the shell writes something.  */
   output_start ();
 
+#ifdef CONFIG_WITH_OUTPUT_IN_MEMORY
+  errfd = -1; /** @todo fixme */
+#else
   errfd = (output_context && output_context->err >= 0
            ? output_context->err : FD_STDERR);
+#endif
 
 #if defined(__MSDOS__)
   fpipe = msdos_openpipe (pipedes, &pid, argv[0]);
@@ -2568,7 +2576,12 @@ func_shell_base (char *o, char **argv, int trim_newlines)
     }
 
 #elif defined(WINDOWS32)
+# ifdef CONFIG_NEW_WIN_CHILDREN
+  pipedes[1] = -1;
+  MkWinChildCreateWithStdOutPipe (command_argv, envp, errfd, &pid, &pipedes[0]);
+# else
   windows32_openpipe (pipedes, errfd, &pid, command_argv, envp);
+# endif
   /* Restore the value of just_print_flag.  */
   just_print_flag = j_p_f;
 
@@ -2856,14 +2869,10 @@ abspath (const char *name, char *apath)
     return NULL;
 
 #ifdef WINDOWS32                                                    /* bird */
-  dest = w32ify((char *)name, 1);
+  dest = unix_slashes_resolved (name, apath, GET_PATH_MAX);
   if (!dest)
     return NULL;
-  {
-  size_t len = strlen(dest);
-  memcpy(apath, dest, len);
-  dest = apath + len;
-  }
+  dest = strchr(apath, '\0');
 
   (void)end; (void)start; (void)apath_limit;
 
@@ -3038,13 +3047,21 @@ func_file (char *o, char **argv, const char *funcname UNUSED)
   if (fn[0] == '>')
     {
       FILE *fp;
+#ifdef KMK_FOPEN_NO_INHERIT_MODE
+      const char *mode = "w" KMK_FOPEN_NO_INHERIT_MODE;
+#else
       const char *mode = "w";
+#endif
 
       /* We are writing a file.  */
       ++fn;
       if (fn[0] == '>')
         {
+#ifdef KMK_FOPEN_NO_INHERIT_MODE
+          mode = "a" KMK_FOPEN_NO_INHERIT_MODE;
+#else
           mode = "a";
+#endif
           ++fn;
         }
       NEXT_TOKEN (fn);
@@ -3080,7 +3097,11 @@ func_file (char *o, char **argv, const char *funcname UNUSED)
       if (argv[1])
         O (fatal, *expanding_var, _("file: too many arguments"));
 
+#ifdef KMK_FOPEN_NO_INHERIT_MODE
+      ENULLLOOP (fp, fopen (fn, "r" KMK_FOPEN_NO_INHERIT_MODE));
+#else
       ENULLLOOP (fp, fopen (fn, "r"));
+#endif
       if (fp == NULL)
         {
           if (errno == ENOENT)
