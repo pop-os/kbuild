@@ -1,14 +1,16 @@
 Description: Docs are non-DFSG
 Author: Gianfranco Costamagna <locutusofborg@debian.org>
 
-Last-Update: 2018-03-15
+Last-Update: 2019-01-07
 
---- kbuild-0.1.9998svn3149+dfsg.orig/src/kmk/configure.ac
-+++ kbuild-0.1.9998svn3149+dfsg/src/kmk/configure.ac
-@@ -507,7 +507,7 @@ AS_IF([test "x$make_cv_load" = xno && te
- 
- # Specify what files are to be created.
- AC_CONFIG_FILES([Makefile glob/Makefile po/Makefile.in config/Makefile \
+diff --git a/src/kmk/configure.ac b/src/kmk/configure.ac
+index 76a38a2..69b09c8 100644
+--- a/src/kmk/configure.ac
++++ b/src/kmk/configure.ac
+@@ -512,7 +512,7 @@ AS_IF([test "x$make_cv_load" = xno && test "x$user_load" = xyes],
+ #AC_CONFIG_FILES([Makefile glob/Makefile po/Makefile.in config/Makefile \
+ #                 doc/Makefile w32/Makefile tests/config-flags.pm])
+ AC_CONFIG_FILES([Makefile glob/Makefile config/Makefile \
 -                 doc/Makefile w32/Makefile tests/config-flags.pm])
 +                 w32/Makefile tests/config-flags.pm])
  
