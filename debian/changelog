@@ -1,3 +1,9 @@
+kbuild (1:0.1.9998svn3293+dfsg-1) unstable; urgency=medium
+
+  * New upstream version 0.1.9998svn3293+dfsg
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Tue, 08 Jan 2019 22:18:40 +0100
+
 kbuild (1:0.1.9998svn3290+dfsg-1) unstable; urgency=medium
 
   * New upstream version 0.1.9998svn3290+dfsg
