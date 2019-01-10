@@ -1,3 +1,9 @@
+kbuild (1:0.1.9998svn3293+dfsg-2) unstable; urgency=medium
+
+  * Upload a fix for armhf
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Thu, 10 Jan 2019 10:52:22 +0100
+
 kbuild (1:0.1.9998svn3293+dfsg-1) unstable; urgency=medium
 
   * New upstream version 0.1.9998svn3293+dfsg
