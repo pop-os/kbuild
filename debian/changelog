@@ -1,3 +1,10 @@
+kbuild (1:0.1.9998svn3295+dfsg-1) UNRELEASED; urgency=medium
+
+  * New upstream version 0.1.9998svn3295+dfsg
+  * Drop patch, now upstream
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Sat, 12 Jan 2019 09:56:39 +0100
+
 kbuild (1:0.1.9998svn3293+dfsg-2) unstable; urgency=medium
 
   * Upload a fix for armhf
