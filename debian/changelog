@@ -1,9 +1,10 @@
-kbuild (1:0.1.9998svn3295+dfsg-1) UNRELEASED; urgency=medium
+kbuild (1:0.1.9998svn3296+dfsg-1~exp1) experimental; urgency=medium
 
-  * New upstream version 0.1.9998svn3295+dfsg
+  * New upstream version 0.1.9998svn3296+dfsg
   * Drop patch, now upstream
+  * Bump compat level to 12
 
- -- Gianfranco Costamagna <locutusofborg@debian.org>  Sat, 12 Jan 2019 09:56:39 +0100
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Thu, 23 May 2019 09:46:09 +0200
 
 kbuild (1:0.1.9998svn3293+dfsg-2) unstable; urgency=medium
 
