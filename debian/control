@@ -11,7 +11,7 @@ Build-Depends: debhelper-compat (= 12),
                texinfo,
                pkg-config
 Standards-Version: 4.3.0
-Homepage: http://svn.netlabs.org/kbuild
+Homepage: https://svn.netlabs.org/kbuild
 Vcs-Browser: https://salsa.debian.org/pkg-virtualbox-team/kbuild
 Vcs-Git: https://salsa.debian.org/pkg-virtualbox-team/kbuild.git
 
