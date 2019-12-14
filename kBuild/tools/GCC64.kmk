@@ -39,6 +39,7 @@ TOOL_GCC64_CC  ?= gcc$(HOSTSUFF_EXE) -m64
 TOOL_GCC64_CXX ?= g++$(HOSTSUFF_EXE) -m64
 TOOL_GCC64_AS  ?= gcc$(HOSTSUFF_EXE) -m64
 TOOL_GCC64_AR  ?= ar$(HOSTSUFF_EXE)
+TOOL_GCC64_RANLIB ?= ranlib$(HOSTSUFF_EXE)
 TOOL_GCC64_LD  ?= gcc$(HOSTSUFF_EXE) -m64
 TOOL_GCC64_LD_SYSMOD ?= ld$(HOSTSUFF_EXE)
 ifndef TOOL_GCC64_LDFLAGS.$(KBUILD_TARGET)
@@ -224,17 +225,21 @@ endef
 # @param    $(deps)		Other dependencies.
 # @param    $(othersrc) Unhandled sources.
 # @param    $(outbase)  Output basename (full). Use this for list files and such.
-TOOL_GCC64_LINK_LIBRARY_OUTPUT = $(out).ar-script
+TOOL_GCC64_LINK_LIBRARY_OUTPUT =
 TOOL_GCC64_LINK_LIBRARY_DEPEND = $(othersrc)
 TOOL_GCC64_LINK_LIBRARY_DEPORD =
 define TOOL_GCC64_LINK_LIBRARY_CMDS
-	$(QUIET)$(APPEND) $(out).ar-script 'CREATE $(out)'
-	$(QUIET)$(APPEND) -n $(out).ar-script \
-		$(foreach o,$(objs), 'ADDMOD $(o)') \
-		$(foreach o,$(othersrc), 'ADDLIB $(o)')
-	$(QUIET)$(APPEND) $(out).ar-script 'SAVE'
-	$(QUIET)$(APPEND) $(out).ar-script 'END'
-	$(QUIET)$(REDIRECT) -rti $(out).ar-script -- $(TOOL_GCC64_AR) -M
+	$(QUIET)$(TOOL_GCC64_AR) $(flags) $(out) $(objs)
+	$(foreach lib,$(othersrc)\
+		,$(NL)$(TAB)$(call MSG_AR_MERGE,$(target),$(out),$(lib)) \
+		$(NL)$(TAB)$(QUIET)$(RM_EXT) -f $(dir $(outbase))ar.tmp.dir/* \
+		$(NL)$(TAB)$(QUIET)$(MKDIR) -p $(dir $(outbase))/ar.tmp.dir/ \
+		$(NL)$(TAB)$(QUIET)(cd $(dir $(outbase))ar.tmp.dir/ \
+			&& $(TOOL_GCC64_AR) x $(abspath $(lib)) \
+			&& $(TOOL_GCC64_AR) $(flags) $(out) *) \
+		$(NL)$(TAB)$(QUIET)$(RM_EXT) -f $(dir $(outbase))/ar.tmp.dir/* \
+		$(NL)$(TAB)$(QUIET)$(RMDIR) $(dir $(outbase))ar.tmp.dir/)
+	$(QUIET)$(TOOL_GCC64_RANLIB) $(out)
 endef
 
 

@@ -71,6 +71,7 @@ TOOL_XGCCAMD64LINUX_CC  ?= $(TOOL_XGCCAMD64LINUX_PREFIX)gcc$(TOOL_XGCCAMD64LINUX
 TOOL_XGCCAMD64LINUX_CXX ?= $(TOOL_XGCCAMD64LINUX_PREFIX)g++$(TOOL_XGCCAMD64LINUX_HOSTSUFF_EXE)
 TOOL_XGCCAMD64LINUX_AS  ?= $(TOOL_XGCCAMD64LINUX_PREFIX)gcc$(TOOL_XGCCAMD64LINUX_HOSTSUFF_EXE)
 TOOL_XGCCAMD64LINUX_AR  ?= $(TOOL_XGCCAMD64LINUX_PREFIX)ar$(TOOL_XGCCAMD64LINUX_HOSTSUFF_EXE)
+TOOL_XGCCAMD64LINUX_RANLIB ?= $(TOOL_XGCCAMD64LINUX_PREFIX)ranlib$(TOOL_XGCCAMD64LINUX_HOSTSUFF_EXE)
 TOOL_XGCCAMD64LINUX_LD  ?= $(TOOL_XGCCAMD64LINUX_PREFIX)g++$(TOOL_XGCCAMD64LINUX_HOSTSUFF_EXE)
 TOOL_XGCCAMD64LINUX_LD_SYSMOD ?= $(TOOL_XGCCAMD64LINUX_PREFIX)ld$(TOOL_XGCCAMD64LINUX_HOSTSUFF_EXE)
 
@@ -197,17 +198,21 @@ endef
 # @param    $(deps)		Other dependencies.
 # @param    $(othersrc) Unhandled sources.
 # @param    $(outbase)  Output basename (full). Use this for list files and such.
-TOOL_XGCCAMD64LINUX_LINK_LIBRARY_OUTPUT = $(out).ar-script
+TOOL_XGCCAMD64LINUX_LINK_LIBRARY_OUTPUT =
 TOOL_XGCCAMD64LINUX_LINK_LIBRARY_DEPEND = $(othersrc)
 TOOL_XGCCAMD64LINUX_LINK_LIBRARY_DEPORD =
 define TOOL_XGCCAMD64LINUX_LINK_LIBRARY_CMDS
-	$(QUIET)$(APPEND) $(out).ar-script 'CREATE $(out)'
-	$(QUIET)$(APPEND) -n $(out).ar-script \
-		$(foreach o,$(objs), 'ADDMOD $(o)') \
-		$(foreach o,$(othersrc), 'ADDLIB $(o)')
-	$(QUIET)$(APPEND) $(out).ar-script 'SAVE'
-	$(QUIET)$(APPEND) $(out).ar-script 'END'
-	$(QUIET)$(REDIRECT) -rti $(out).ar-script -- $(TOOL_XGCCAMD64LINUX_AR) -M
+	$(QUIET)$(TOOL_XGCCAMD64LINUX_AR) $(flags) $(out) $(objs)
+	$(foreach lib,$(othersrc)\
+		,$(NL)$(TAB)$(call MSG_AR_MERGE,$(target),$(out),$(lib)) \
+		$(NL)$(TAB)$(QUIET)$(RM_EXT) -f $(dir $(outbase))ar.tmp.dir/* \
+		$(NL)$(TAB)$(QUIET)$(MKDIR) -p $(dir $(outbase))/ar.tmp.dir/ \
+		$(NL)$(TAB)$(QUIET)(cd $(dir $(outbase))ar.tmp.dir/ \
+			&& $(TOOL_XGCCAMD64LINUX_AR) x $(abspath $(lib)) \
+			&& $(TOOL_XGCCAMD64LINUX_AR) $(flags) $(out) *) \
+		$(NL)$(TAB)$(QUIET)$(RM_EXT) -f $(dir $(outbase))/ar.tmp.dir/* \
+		$(NL)$(TAB)$(QUIET)$(RMDIR) $(dir $(outbase))ar.tmp.dir/)
+	$(QUIET)$(TOOL_XGCCAMD64LINUX_RANLIB) $(out)
 endef
 
 

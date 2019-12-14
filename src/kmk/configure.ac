@@ -512,7 +512,7 @@ AS_IF([test "x$make_cv_load" = xno && test "x$user_load" = xyes],
 #AC_CONFIG_FILES([Makefile glob/Makefile po/Makefile.in config/Makefile \
 #                 doc/Makefile w32/Makefile tests/config-flags.pm])
 AC_CONFIG_FILES([Makefile glob/Makefile config/Makefile \
-                 doc/Makefile w32/Makefile tests/config-flags.pm])
+                 w32/Makefile tests/config-flags.pm])
 
 # OK, do it!
 

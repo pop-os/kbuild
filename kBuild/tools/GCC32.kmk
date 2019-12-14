@@ -39,6 +39,7 @@ TOOL_GCC32_CC  ?= gcc$(HOSTSUFF_EXE) -m32
 TOOL_GCC32_CXX ?= g++$(HOSTSUFF_EXE) -m32
 TOOL_GCC32_AS  ?= gcc$(HOSTSUFF_EXE) -m32
 TOOL_GCC32_AR  ?= ar$(HOSTSUFF_EXE)
+TOOL_GCC32_RANLIB ?= ranlib$(HOSTSUFF_EXE)
 TOOL_GCC32_LD  ?= gcc$(HOSTSUFF_EXE) -m32
 TOOL_GCC32_LD_SYSMOD ?= ld$(HOSTSUFF_EXE)
 ifndef TOOL_GCC32_LDFLAGS.$(KBUILD_TARGET)
@@ -225,20 +226,21 @@ endef
 # @param    $(deps)		Other dependencies.
 # @param    $(othersrc) Unhandled sources.
 # @param    $(outbase)  Output basename (full). Use this for list files and such.
-TOOL_GCC32_LINK_LIBRARY_OUTPUT = $(out).ar-script
+TOOL_GCC32_LINK_LIBRARY_OUTPUT =
 TOOL_GCC32_LINK_LIBRARY_DEPEND = $(othersrc)
 TOOL_GCC32_LINK_LIBRARY_DEPORD =
 define TOOL_GCC32_LINK_LIBRARY_CMDS
-	$(QUIET)$(APPEND) $(out).ar-script 'CREATE $(out)'
-	$(QUIET)$(APPEND) -n $(out).ar-script \
-		$(foreach o,$(objs), 'ADDMOD $(o)') \
-		$(foreach o,$(filter-out %.def %.imp %.dll,$(othersrc)), 'ADDLIB $(o)')
-	$(if $(filter %.def %.imp %.dll,$(othersrc))\
-		,$(TOOL_GCC32_AR_IMP) -o $(outbase).imp.a $(filter %.def %.imp %.dll,$(othersrc))\
-		 $(NL)$(TAB)$(QUIET)$(APPEND) $(out).ar-script 'ADDLIB $(outbase).imp.a')
-	$(QUIET)$(APPEND) $(out).ar-script 'SAVE'
-	$(QUIET)$(APPEND) $(out).ar-script 'END'
-	$(QUIET)$(REDIRECT) -rti $(out).ar-script -- $(TOOL_GCC32_AR) -M
+	$(QUIET)$(TOOL_GCC32_AR) $(flags) $(out) $(objs)
+	$(foreach lib,$(othersrc)\
+		,$(NL)$(TAB)$(call MSG_AR_MERGE,$(target),$(out),$(lib)) \
+		$(NL)$(TAB)$(QUIET)$(RM_EXT) -f $(dir $(outbase))ar.tmp.dir/* \
+		$(NL)$(TAB)$(QUIET)$(MKDIR) -p $(dir $(outbase))/ar.tmp.dir/ \
+		$(NL)$(TAB)$(QUIET)(cd $(dir $(outbase))ar.tmp.dir/ \
+			&& $(TOOL_GCC32_AR) x $(abspath $(lib)) \
+			&& $(TOOL_GCC32_AR) $(flags) $(out) *) \
+		$(NL)$(TAB)$(QUIET)$(RM_EXT) -f $(dir $(outbase))/ar.tmp.dir/* \
+		$(NL)$(TAB)$(QUIET)$(RMDIR) $(dir $(outbase))ar.tmp.dir/)
+	$(QUIET)$(TOOL_GCC32_RANLIB) $(out)
 endef
 
 

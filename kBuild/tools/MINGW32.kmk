@@ -81,6 +81,7 @@ TOOL_MINGW32_CC  ?= $(TOOL_MINGW32_PREFIX)gcc$(TOOL_MINGW32_HOSTSUFF_EXE)
 TOOL_MINGW32_CXX ?= $(TOOL_MINGW32_PREFIX)g++$(TOOL_MINGW32_HOSTSUFF_EXE)
 TOOL_MINGW32_AS  ?= $(TOOL_MINGW32_PREFIX)gcc$(TOOL_MINGW32_HOSTSUFF_EXE)
 TOOL_MINGW32_AR  ?= $(TOOL_MINGW32_PREFIX)ar$(TOOL_MINGW32_HOSTSUFF_EXE)
+TOOL_MINGW32_RANLIB ?= $(TOOL_MINGW32_PREFIX)ranlib$(TOOL_MINGW32_HOSTSUFF_EXE)
 ifndef TOOL_MINGW32_XCOMPILE# The gentoo package doesn't have g++.
 TOOL_MINGW32_LD  ?= $(TOOL_MINGW32_PREFIX)g++$(TOOL_MINGW32_HOSTSUFF_EXE)
 else
@@ -200,17 +201,21 @@ endef
 # @param    $(deps)     Other dependencies.
 #
 # @param    $(outbase)  Output basename (full). Use this for list files and such.
-TOOL_MINGW32_LINK_LIBRARY_OUTPUT = $(out).ar-script
+TOOL_MINGW32_LINK_LIBRARY_OUTPUT =
 TOOL_MINGW32_LINK_LIBRARY_DEPEND = $(othersrc)
 TOOL_MINGW32_LINK_LIBRARY_DEPORD =
 define TOOL_MINGW32_LINK_LIBRARY_CMDS
-	$(QUIET)$(APPEND) $(out).ar-script 'CREATE $(out)'
-	$(QUIET)$(APPEND) -n $(out).ar-script \
-		$(foreach o,$(objs), 'ADDMOD $(o)') \
-		$(foreach o,$(othersrc), 'ADDLIB $(o)')
-	$(QUIET)$(APPEND) $(out).ar-script 'SAVE'
-	$(QUIET)$(APPEND) $(out).ar-script 'END'
-	$(QUIET)$(TOOL_MINGW32_AR) -M < $(out).ar-script
+	$(QUIET)$(TOOL_MINGW32_AR) $(flags) $(out) $(objs)
+	$(foreach lib,$(othersrc)\
+		,$(NL)$(TAB)$(call MSG_AR_MERGE,$(target),$(out),$(lib)) \
+		$(NL)$(TAB)$(QUIET)$(RM_EXT) -f $(dir $(outbase))ar.tmp.dir/* \
+		$(NL)$(TAB)$(QUIET)$(MKDIR) -p $(dir $(outbase))/ar.tmp.dir/ \
+		$(NL)$(TAB)$(QUIET)(cd $(dir $(outbase))ar.tmp.dir/ \
+			&& $(TOOL_MINGW32_AR) x $(abspath $(lib)) \
+			&& $(TOOL_MINGW32_AR) $(flags) $(out) *) \
+		$(NL)$(TAB)$(QUIET)$(RM_EXT) -f $(dir $(outbase))/ar.tmp.dir/* \
+		$(NL)$(TAB)$(QUIET)$(RMDIR) $(dir $(outbase))ar.tmp.dir/)
+	$(QUIET)$(TOOL_MINGW32_RANLIB) $(out)
 endef
 
 

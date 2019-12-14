@@ -43,6 +43,7 @@ ifeq ($(KBUILD_TARGET),solaris)
 else
  TOOL_GXX3_AR ?= ar$(HOSTSUFF_EXE)
 endif
+TOOL_GXX3_RANLIB ?= ranlib$(HOSTSUFF_EXE)
 ifeq ($(KBUILD_TARGET),os2)
  TOOL_GXX3_AR_IMP ?= emximp$(HOSTSTUFF_EXE)
 else
@@ -258,21 +259,21 @@ endef
 # @param    $(deps)     Other dependencies.
 # @param    $(othersrc) Unhandled sources.
 # @param    $(outbase)  Output basename (full). Use this for list files and such.
-TOOL_GXX3_LINK_LIBRARY_OUTPUT = $(out).ar-script
-TOOL_GXX3_LINK_LIBRARY_OUTPUT_MAYBE = $(outbase).imp.a
+TOOL_GXX3_LINK_LIBRARY_OUTPUT =
 TOOL_GXX3_LINK_LIBRARY_DEPEND = $(othersrc)
 TOOL_GXX3_LINK_LIBRARY_DEPORD =
 define TOOL_GXX3_LINK_LIBRARY_CMDS
-	$(QUIET)$(APPEND) $(out).ar-script 'CREATE $(out)'
-	$(QUIET)$(APPEND) -n $(out).ar-script \
-		$(foreach o,$(filter-out %.h.gch,$(objs)), 'ADDMOD $(o)') \
-		$(foreach o,$(filter-out %.def %.imp %.dll,$(othersrc)), 'ADDLIB $(o)')
-	$(if $(filter %.def %.imp %.dll,$(othersrc))\
-		,$(TOOL_GXX3_AR_IMP) -o $(outbase).imp.a $(filter %.def %.imp %.dll,$(othersrc))\
-		 $(NL)$(TAB)$(QUIET)$(APPEND) $(out).ar-script 'ADDLIB $(outbase).imp.a')
-	$(QUIET)$(APPEND) $(out).ar-script 'SAVE'
-	$(QUIET)$(APPEND) $(out).ar-script 'END'
-	$(QUIET)$(REDIRECT) -rti $(out).ar-script -- $(TOOL_GXX3_AR) -M
+	$(QUIET)$(TOOL_GXX3_AR) $(flags) $(out) $(objs)
+	$(foreach lib,$(othersrc)\
+		,$(NL)$(TAB)$(call MSG_AR_MERGE,$(target),$(out),$(lib)) \
+		$(NL)$(TAB)$(QUIET)$(RM_EXT) -f $(dir $(outbase))ar.tmp.dir/* \
+		$(NL)$(TAB)$(QUIET)$(MKDIR) -p $(dir $(outbase))/ar.tmp.dir/ \
+		$(NL)$(TAB)$(QUIET)(cd $(dir $(outbase))ar.tmp.dir/ \
+			&& $(TOOL_GXX3_AR) x $(abspath $(lib)) \
+			&& $(TOOL_GXX3_AR) $(flags) $(out) *) \
+		$(NL)$(TAB)$(QUIET)$(RM_EXT) -f $(dir $(outbase))/ar.tmp.dir/* \
+		$(NL)$(TAB)$(QUIET)$(RMDIR) $(dir $(outbase))ar.tmp.dir/)
+	$(QUIET)$(TOOL_GXX3_RANLIB) $(out)
 endef
 
 
