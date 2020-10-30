@@ -1,0 +1,22 @@
+Description: fix build by using the correct echo binary, not the builtin one.
+ Builtin echo does not escape regexes by default, so when mknodes generates nodes.c, a line such as:
+ TRACE2((psh, "copyfunc: %p - %u refs\n", n->pblock, refs)); K_NOREF(refs);
+
+ gets translated into
+ TRACE2((psh, "copyfunc: %p - %u refs
+ ", n->pblock, refs)); K_NOREF(refs);
+
+ making the program FTBFS.
+ This patch fixes the build failure.
+Author: Gianfranco Costamagna <locutusofborg@debian.org>
+--- kbuild-0.1.9998svn3489+dfsg.orig/src/kash/mknodes.sh
++++ kbuild-0.1.9998svn3489+dfsg/src/kash/mknodes.sh
+@@ -224,7 +224,7 @@ while IFS=; read -r line; do
+ 		echo "      };"
+ 		echo "      new->type = n->type;"
+ 		;;
+-	* ) echo "$line";;
++	* ) /bin/echo "$line";;
+ 	esac
+ done
+ 

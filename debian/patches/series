@@ -1,2 +1,3 @@
 07_special-chars-build-path.diff
 do-not-build-docs.patch
+build-fix
