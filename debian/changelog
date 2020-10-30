@@ -3,6 +3,8 @@ kbuild (1:0.1.9998svn3489+dfsg-1) unstable; urgency=medium
   * New upstream version 0.1.9998svn3489+dfsg
   * Update copyright years
   * Refresh patch 07_special-chars-build-path.diff
+  * Add patch to fix build with echo not escaping regexes during c file
+    generation.
 
  -- Gianfranco Costamagna <locutusofborg@debian.org>  Fri, 30 Oct 2020 12:07:12 +0100
 
