@@ -1,4 +1,4 @@
-/* $Id: shthread.h 2413 2010-09-11 17:43:04Z bird $ */
+/* $Id: shthread.h 3457 2020-09-14 17:34:28Z bird $ */
 /** @file
  *
  * Shell thread methods.
@@ -29,10 +29,21 @@
 
 #include "shtypes.h"
 
-typedef struct shmtx
+typedef union shmtx
 {
     char b[64];
+    KU64 au64[64/sizeof(KU64)];
+    void *aptrs[64/sizeof(void *)];
 } shmtx;
+
+/** Magic mutex value (final u64).
+ * This is used to detect whether the mutex has been initialized or not,
+ * allowing shmtx_delete to be called more than once without doing harm.
+ * @internal */
+#define SHMTX_MAGIC        KU64_C(0x8888000019641018) /**< Charles Stross */
+/** Index into shmtx::au64 of the SHMTX_MAGIC value.
+ * @internal */
+#define SHMTX_MAGIC_IDX    (sizeof(shmtx) / sizeof(KU64) - 1)
 
 typedef struct shmtxtmp { int i; } shmtxtmp;
 
@@ -45,6 +56,25 @@ int shmtx_init(shmtx *pmtx);
 void shmtx_delete(shmtx *pmtx);
 void shmtx_enter(shmtx *pmtx, shmtxtmp *ptmp);
 void shmtx_leave(shmtx *pmtx, shmtxtmp *ptmp);
+
+
+K_INLINE unsigned sh_atomic_inc(KU32 volatile *valuep)
+{
+#ifdef _MSC_VER
+    return _InterlockedIncrement((long *)valuep);
+#else
+    return __sync_add_and_fetch(valuep, 1);
+#endif
+}
+
+K_INLINE unsigned sh_atomic_dec(unsigned volatile *valuep)
+{
+#ifdef _MSC_VER
+    return _InterlockedDecrement((long *)valuep);
+#else
+    return __sync_sub_and_fetch(valuep, 1);
+#endif
+}
 
 #endif
 
