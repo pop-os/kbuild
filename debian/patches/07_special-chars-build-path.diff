@@ -8,15 +8,15 @@ Index: kbuild/kBuild/tools/GCC32.kmk
 ===================================================================
 --- kbuild.orig/kBuild/tools/GCC32.kmk
 +++ kbuild/kBuild/tools/GCC32.kmk
-@@ -39,6 +39,7 @@
- TOOL_GCC32_CXX ?= g++$(HOSTSUFF_EXE) -m32
- TOOL_GCC32_AS  ?= gcc$(HOSTSUFF_EXE) -m32
- TOOL_GCC32_AR  ?= ar$(HOSTSUFF_EXE)
-+TOOL_GCC32_RANLIB ?= ranlib$(HOSTSUFF_EXE)
- TOOL_GCC32_LD  ?= gcc$(HOSTSUFF_EXE) -m32
- TOOL_GCC32_LD_SYSMOD ?= ld$(HOSTSUFF_EXE)
- ifndef TOOL_GCC32_LDFLAGS.$(KBUILD_TARGET)
-@@ -225,20 +226,21 @@
+@@ -54,6 +54,7 @@
+ TOOL_GCC32_CXX       ?= $(TOOL_GCC32_PREFIX)g++$(TOOL_GCC32_SUFFIX) -m32
+ TOOL_GCC32_AS        ?= $(TOOL_GCC32_PREFIX)gcc$(TOOL_GCC32_SUFFIX) -m32
+ TOOL_GCC32_AR        ?= $(TOOL_GCC32_PREFIX2)ar$(TOOL_GCC32_SUFFIX2)
++TOOL_GCC32_RANLIB    ?= $(TOOL_GCC32_PREFIX)ranlib$(HOSTSUFF_EXE)
+ TOOL_GCC32_LD        ?= $(TOOL_GCC32_PREFIX)gcc$(TOOL_GCC32_SUFFIX) -m32
+ if1of ($(KBUILD_HOST), solaris)
+  TOOL_GCC32_LD_SYSMOD ?= $(TOOL_GCC32_PREFIX3)ld$(TOOL_GCC32_SUFFIX3)
+@@ -240,20 +241,21 @@
  # @param    $(deps)		Other dependencies.
  # @param    $(othersrc) Unhandled sources.
  # @param    $(outbase)  Output basename (full). Use this for list files and such.
@@ -53,15 +53,15 @@ Index: kbuild/kBuild/tools/GCC3.kmk
 ===================================================================
 --- kbuild.orig/kBuild/tools/GCC3.kmk
 +++ kbuild/kBuild/tools/GCC3.kmk
-@@ -42,6 +42,7 @@
- else
-  TOOL_GCC3_AR ?= ar$(HOSTSUFF_EXE)
- endif
+@@ -52,6 +52,7 @@
+ TOOL_GCC3_CXX       ?= $(TOOL_GCC3_PREFIX)g++$(TOOL_GCC3_SUFFIX)
+ TOOL_GCC3_AS        ?= $(TOOL_GCC3_PREFIX)gcc$(TOOL_GCC3_SUFFIX)
+ TOOL_GCC3_AR        ?= $(TOOL_GCC3_PREFIX2)ar$(TOOL_GCC3_SUFFIX2)
 +TOOL_GCC3_RANLIB ?= ranlib$(HOSTSUFF_EXE)
  ifeq ($(KBUILD_TARGET),os2)
-  TOOL_GCC3_AR_IMP ?= emximp$(HOSTSTUFF_EXE)
+  TOOL_GCC3_AR_IMP   ?= $(TOOL_GCC3_PREFIX3)emximp$(TOOL_GCC3_SUFFIX3)
  else
-@@ -229,21 +230,21 @@
+@@ -239,21 +240,21 @@
  # @param    $(deps)		Other dependencies.
  # @param    $(othersrc) Unhandled sources.
  # @param    $(outbase)  Output basename (full). Use this for list files and such.
@@ -99,15 +99,15 @@ Index: kbuild/kBuild/tools/GCC64.kmk
 ===================================================================
 --- kbuild.orig/kBuild/tools/GCC64.kmk
 +++ kbuild/kBuild/tools/GCC64.kmk
-@@ -39,6 +39,7 @@
- TOOL_GCC64_CXX ?= g++$(HOSTSUFF_EXE) -m64
- TOOL_GCC64_AS  ?= gcc$(HOSTSUFF_EXE) -m64
- TOOL_GCC64_AR  ?= ar$(HOSTSUFF_EXE)
-+TOOL_GCC64_RANLIB ?= ranlib$(HOSTSUFF_EXE)
- TOOL_GCC64_LD  ?= gcc$(HOSTSUFF_EXE) -m64
- TOOL_GCC64_LD_SYSMOD ?= ld$(HOSTSUFF_EXE)
- ifndef TOOL_GCC64_LDFLAGS.$(KBUILD_TARGET)
-@@ -224,17 +225,21 @@
+@@ -53,6 +53,7 @@
+ TOOL_GCC64_CXX       ?= $(TOOL_GCC64_PREFIX)g++$(TOOL_GCC64_SUFFIX) -m64
+ TOOL_GCC64_AS        ?= $(TOOL_GCC64_PREFIX)gcc$(TOOL_GCC64_SUFFIX) -m64
+ TOOL_GCC64_AR        ?= $(TOOL_GCC64_PREFIX2)ar$(TOOL_GCC64_SUFFIX2)
++TOOL_GCC64_RANLIB    ?= $(TOOL_GCC64_PREFIX)ranlib$(TOOL_GCC64_SUFFIX)
+ TOOL_GCC64_LD        ?= $(TOOL_GCC64_PREFIX)gcc$(TOOL_GCC64_SUFFIX) -m64
+ if1of ($(KBUILD_HOST), solaris)
+  TOOL_GCC64_LD_SYSMOD ?= $(TOOL_GCC64_PREFIX3)ld$(TOOL_GCC64_SUFFIX3)
+@@ -238,17 +239,21 @@
  # @param    $(deps)		Other dependencies.
  # @param    $(othersrc) Unhandled sources.
  # @param    $(outbase)  Output basename (full). Use this for list files and such.
@@ -141,15 +141,15 @@ Index: kbuild/kBuild/tools/GXX32.kmk
 ===================================================================
 --- kbuild.orig/kBuild/tools/GXX32.kmk
 +++ kbuild/kBuild/tools/GXX32.kmk
-@@ -40,6 +40,7 @@
- TOOL_GXX32_PCH ?= $(TOOL_GXX32_CXX)
- TOOL_GXX32_AS  ?= gcc$(HOSTSUFF_EXE) -m32
- TOOL_GXX32_AR  ?= ar$(HOSTSUFF_EXE)
-+TOOL_GXX32_RANLIB ?= ranlib$(HOSTSUFF_EXE)
- TOOL_GXX32_LD  ?= g++$(HOSTSUFF_EXE) -m32
- TOOL_GXX32_LD_SYSMOD ?= ld$(HOSTSUFF_EXE)
- ifndef TOOL_GXX32_LDFLAGS.$(KBUILD_TARGET)
-@@ -252,20 +253,21 @@
+@@ -54,6 +54,7 @@
+ TOOL_GXX32_PCH      ?= $(TOOL_GXX32_CXX)
+ TOOL_GXX32_AS       ?= $(TOOL_GXX32_PREFIX)gcc$(TOOL_GXX32_SUFFIX) -m32
+ TOOL_GXX32_AR       ?= $(TOOL_GXX32_PREFIX2)ar$(TOOL_GXX32_SUFFIX2)
++TOOL_GXX32_RANLIB   ?= $(TOOL_GXX32_PREFIX)ranlib$(TOOL_GXX32_SUFFIX)
+ TOOL_GXX32_LD       ?= $(TOOL_GXX32_PREFIX)g++$(TOOL_GXX32_SUFFIX) -m32
+ if1of ($(KBUILD_HOST), solaris)
+  TOOL_GXX32_LD_SYSMOD ?= $(TOOL_GXX32_PREFIX3)ld$(TOOL_GXX32_SUFFIX3)
+@@ -266,20 +267,21 @@
  # @param    $(deps)		Other dependencies.
  # @param    $(othersrc) Unhandled sources.
  # @param    $(outbase)  Output basename (full). Use this for list files and such.
@@ -186,15 +186,15 @@ Index: kbuild/kBuild/tools/GXX3.kmk
 ===================================================================
 --- kbuild.orig/kBuild/tools/GXX3.kmk
 +++ kbuild/kBuild/tools/GXX3.kmk
-@@ -43,6 +43,7 @@
- else
-  TOOL_GXX3_AR ?= ar$(HOSTSUFF_EXE)
- endif
-+TOOL_GXX3_RANLIB ?= ranlib$(HOSTSUFF_EXE)
+@@ -54,6 +54,7 @@
+ TOOL_GXX3_PCH       ?= $(TOOL_GXX3_CXX)
+ TOOL_GXX3_AS        ?= $(TOOL_GXX3_PREFIX)gcc$(TOOL_GXX3_SUFFIX)
+ TOOL_GXX3_AR        ?= $(TOOL_GXX3_PREFIX2)ar$(TOOL_GXX3_SUFFIX2)
++TOOL_GXX3_RANLIB    ?= $(TOOL_GXX3_PREFIX)ranlib$(TOOL_GXX3_SUFFIX)
  ifeq ($(KBUILD_TARGET),os2)
-  TOOL_GXX3_AR_IMP ?= emximp$(HOSTSTUFF_EXE)
+  TOOL_GXX3_AR_IMP   ?= $(TOOL_GXX3_PREFIX3)emximp$(TOOL_GXX3_SUFFIX3)
  else
-@@ -258,21 +259,21 @@
+@@ -269,21 +270,21 @@
  # @param    $(deps)     Other dependencies.
  # @param    $(othersrc) Unhandled sources.
  # @param    $(outbase)  Output basename (full). Use this for list files and such.
@@ -232,15 +232,15 @@ Index: kbuild/kBuild/tools/GXX64.kmk
 ===================================================================
 --- kbuild.orig/kBuild/tools/GXX64.kmk
 +++ kbuild/kBuild/tools/GXX64.kmk
-@@ -40,6 +40,7 @@
- TOOL_GXX64_PCH ?= $(TOOL_GXX64_CXX)
- TOOL_GXX64_AS  ?= gcc$(HOSTSUFF_EXE) -m64
- TOOL_GXX64_AR  ?= ar$(HOSTSUFF_EXE)
-+TOOL_GXX64_RANLIB ?= ranlib$(HOSTSUFF_EXE)
- TOOL_GXX64_LD  ?= g++$(HOSTSUFF_EXE) -m64
- TOOL_GXX64_LD_SYSMOD ?= ld$(HOSTSUFF_EXE)
- ifndef TOOL_GXX64_LDFLAGS.$(KBUILD_TARGET)
-@@ -252,17 +253,21 @@
+@@ -54,6 +54,7 @@
+ TOOL_GXX64_PCH      ?= $(TOOL_GXX64_CXX)
+ TOOL_GXX64_AS       ?= $(TOOL_GXX64_PREFIX)gcc$(TOOL_GXX64_SUFFIX) -m64
+ TOOL_GXX64_AR       ?= $(TOOL_GXX64_PREFIX2)ar$(TOOL_GXX64_SUFFIX2)
++TOOL_GXX64_RANLIB   ?= $(TOOL_GXX64_PREFIX)ranlib$(TOOL_GXX64_SUFFIX)
+ TOOL_GXX64_LD       ?= $(TOOL_GXX64_PREFIX)g++$(TOOL_GXX64_SUFFIX) -m64
+ if1of ($(KBUILD_HOST), solaris)
+  TOOL_GXX64_LD_SYSMOD ?= $(TOOL_GXX64_PREFIX3)ld$(TOOL_GXX64_SUFFIX3)
+@@ -266,17 +267,21 @@
  # @param    $(deps)		Other dependencies.
  # @param    $(othersrc) Unhandled sources.
  # @param    $(outbase)  Output basename (full). Use this for list files and such.
@@ -316,15 +316,15 @@ Index: kbuild/kBuild/tools/XGCCAMD64LINUX.kmk
 ===================================================================
 --- kbuild.orig/kBuild/tools/XGCCAMD64LINUX.kmk
 +++ kbuild/kBuild/tools/XGCCAMD64LINUX.kmk
-@@ -71,6 +71,7 @@
- TOOL_XGCCAMD64LINUX_CXX ?= $(TOOL_XGCCAMD64LINUX_PREFIX)g++$(TOOL_XGCCAMD64LINUX_HOSTSUFF_EXE)
- TOOL_XGCCAMD64LINUX_AS  ?= $(TOOL_XGCCAMD64LINUX_PREFIX)gcc$(TOOL_XGCCAMD64LINUX_HOSTSUFF_EXE)
- TOOL_XGCCAMD64LINUX_AR  ?= $(TOOL_XGCCAMD64LINUX_PREFIX)ar$(TOOL_XGCCAMD64LINUX_HOSTSUFF_EXE)
-+TOOL_XGCCAMD64LINUX_RANLIB ?= $(TOOL_XGCCAMD64LINUX_PREFIX)ranlib$(TOOL_XGCCAMD64LINUX_HOSTSUFF_EXE)
- TOOL_XGCCAMD64LINUX_LD  ?= $(TOOL_XGCCAMD64LINUX_PREFIX)g++$(TOOL_XGCCAMD64LINUX_HOSTSUFF_EXE)
- TOOL_XGCCAMD64LINUX_LD_SYSMOD ?= $(TOOL_XGCCAMD64LINUX_PREFIX)ld$(TOOL_XGCCAMD64LINUX_HOSTSUFF_EXE)
+@@ -73,6 +73,7 @@
+ TOOL_XGCCAMD64LINUX_CXX ?= $(TOOL_XGCCAMD64LINUX_PREFIX)g++$(TOOL_XGCCAMD64LINUX_SUFFIX)
+ TOOL_XGCCAMD64LINUX_AS  ?= $(TOOL_XGCCAMD64LINUX_PREFIX)gcc$(TOOL_XGCCAMD64LINUX_SUFFIX)
+ TOOL_XGCCAMD64LINUX_AR  ?= $(TOOL_XGCCAMD64LINUX_PREFIX2)ar$(TOOL_XGCCAMD64LINUX_SUFFIX2)
++TOOL_XGCCAMD64LINUX_RANLIB ?= $(TOOL_XGCCAMD64LINUX_PREFIX)ranlib$(TOOL_XGCCAMD64LINUX_SUFFIX)
+ TOOL_XGCCAMD64LINUX_LD  ?= $(TOOL_XGCCAMD64LINUX_PREFIX)g++$(TOOL_XGCCAMD64LINUX_SUFFIX)
+ TOOL_XGCCAMD64LINUX_LD_SYSMOD ?= $(TOOL_XGCCAMD64LINUX_PREFIX2)ld$(TOOL_XGCCAMD64LINUX_SUFFIX2)
  
-@@ -197,17 +198,21 @@
+@@ -199,17 +200,21 @@
  # @param    $(deps)		Other dependencies.
  # @param    $(othersrc) Unhandled sources.
  # @param    $(outbase)  Output basename (full). Use this for list files and such.
