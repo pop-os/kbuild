@@ -29,7 +29,7 @@ override_dh_auto_install:
 override_dh_auto_clean:
 	-kBuild/env.sh kmk uninstall
 	rm -rf debian/stamp-* out kBuild/bin/*/* SvnInfo.kmk
-	( cd src/kmk; rm -f aclocal.m4 config.h.in configure Makefile.in )
+	( cd src/kmk; rm -f aclocal.m4 config.h.in configure Makefile.in config/ar-lib )
 	( cd src/kmk/config; rm -f compile config.guess config.sub depcomp install-sh Makefile.in missing )
 	rm -f src/kmk/glob/Makefile.in src/kmk/w32/Makefile.in
 	( cd src/sed/config; rm -f intdiv0.m4 intmax.m4 inttypes_h.m4 inttypes.m4 inttypes-pri.m4 isc-posix.m4 longdouble.m4 longlong.m4 mkinstalldirs nls.m4 po.m4 printf-posix.m4 signed.m4 size_max.m4 stdint_h.m4 uintmax_t.m4 ulonglong.m4 wchar_t.m4 wint_t.m4 xsize.m4 )
