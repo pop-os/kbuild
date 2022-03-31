@@ -1,4 +1,4 @@
-/* $Id: shfile.c 3477 2020-09-17 21:52:16Z bird $ */
+/* $Id: shfile.c 3542 2022-01-29 01:36:00Z bird $ */
 /** @file
  *
  * File management.
@@ -220,6 +220,7 @@ static KU64 shfile_nano_ts(void)
 static unsigned __stdcall shfile_async_close_handle_thread(void *ignored)
 {
     KBOOL decrement_pending = K_FALSE;
+    shthread_set_name("Async CloseHandle");
     while (!g_shfile_async_close.terminate_threads)
     {
         HANDLE toclose;
@@ -475,6 +476,7 @@ static int shfile_grow_tab_locked(shfdtab *pfdtab, int fdMin)
     int         new_size = pfdtab->size + SHFILE_GROW;
     while (new_size < fdMin)
         new_size += SHFILE_GROW;
+    TRACE2((NULL, "shfile_grow_tab_locked: old %p / %d entries; new size: %d\n", pfdtab->tab, pfdtab->size, new_size));
     new_tab = sh_realloc(shthread_get_shell(), pfdtab->tab, new_size * sizeof(shfile));
     if (new_tab)
     {
@@ -496,6 +498,8 @@ static int shfile_grow_tab_locked(shfdtab *pfdtab, int fdMin)
 
         pfdtab->tab = new_tab;
         pfdtab->size = new_size;
+
+        TRACE2((NULL, "shfile_grow_tab_locked: new %p / %d entries\n", pfdtab->tab, pfdtab->size));
     }
 
     return fdRet;
@@ -1023,8 +1027,9 @@ int shfile_init(shfdtab *pfdtab, shfdtab *inherit)
                     {
                         ph -= dwPerH;
 
-                        if (    (paf[i] & (FOPEN | FNOINHERIT)) == FOPEN
-                            &&  *ph != (uint32_t)INVALID_HANDLE_VALUE)
+                        if (   (paf[i] & (FOPEN | FNOINHERIT)) == FOPEN
+                            && *ph != (uint32_t)INVALID_HANDLE_VALUE
+                            && *ph != 0)
                         {
                             HANDLE  h = (HANDLE)(intptr_t)*ph;
                             int     fd2;
@@ -1040,7 +1045,7 @@ int shfile_init(shfdtab *pfdtab, shfdtab *inherit)
                                 dwErr = shfile_query_handle_access_mask(h, &Mask);
                                 if (dwErr == ERROR_INVALID_HANDLE)
                                     continue;
-                                else if (dwErr == NO_ERROR)
+                                if (dwErr == NO_ERROR)
                                 {
                                     fFlags = 0;
                                     if (    (Mask & (GENERIC_READ | FILE_READ_DATA))
@@ -1080,7 +1085,8 @@ int shfile_init(shfdtab *pfdtab, shfdtab *inherit)
                         ||  pfdtab->tab[i].fd == -1)
                     {
                         HANDLE hFile = GetStdHandle(aStdHandles[i].dwStdHandle);
-                        if (hFile != INVALID_HANDLE_VALUE)
+                        if (   hFile != INVALID_HANDLE_VALUE
+                            && hFile != NULL)
                         {
                             DWORD       dwType  = GetFileType(hFile);
                             unsigned    fFlags  = aStdHandles[i].fFlags;
