@@ -4,13 +4,14 @@ Priority: optional
 Maintainer: Debian Virtualbox Team <team+debian-virtualbox@tracker.debian.org>
 Uploaders: Ritesh Raj Sarraf <rrs@debian.org>,
            Gianfranco Costamagna <locutusofborg@debian.org>
-Build-Depends: debhelper-compat (= 12),
+Build-Depends: debhelper-compat (= 13),
                byacc,
                flex,
                libacl1-dev,
                texinfo,
                pkg-config
-Standards-Version: 4.4.1
+Standards-Version: 4.6.0
+Rules-Requires-Root: no
 Homepage: https://svn.netlabs.org/kbuild
 Vcs-Browser: https://salsa.debian.org/pkg-virtualbox-team/kbuild
 Vcs-Git: https://salsa.debian.org/pkg-virtualbox-team/kbuild.git
