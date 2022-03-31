@@ -1,5 +1,5 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Source: http://svn.netlabs.org/kbuild/
+Source: https://svn.netlabs.org/kbuild/
 Upstream-Contact: Knut St. Osmundsen <bird-kBuild-spam@anduin.net>
 
 Files: *
@@ -12,6 +12,13 @@ Files: src/kash/*
 Copyright: 1990-1994 The Regents of the University of California
            2016 knut st. osmundsen <bird-klibc-spam-xiv@anduin.net>
 License: BSD-3-clause
+
+Files: src/grep/*
+Copyright: 1992, 1997-2002, 2004-2012 Free Software Foundation, Inc.
+           2004, Stepan Kasal <kasal@ucw.cz> 
+           2007, Tony Abou-Assaleh <taa@acm.org>
+           2009-2012, Jim Meyering <jim@meyering.net> and Paolo Bonzini <bonzini@gnu.org>
+License: GPL-3+
 
 Files: src/kmk/*
 Copyright: 1988-2009 Free Software Foundation, Inc.
