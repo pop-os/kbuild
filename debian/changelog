@@ -1,3 +1,14 @@
+kbuild (1:0.1.9998svn3564+dfsg-1) unstable; urgency=medium
+
+  * New upstream version 0.1.9998svn3564+dfsg
+  * Patch refresh
+  * Update compat level to 13
+  * Bump std-version to 4.6.0
+  * debian/copyright: add mention of grep sources
+  * debian/copyright: use https for orig source URL
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Thu, 31 Mar 2022 07:56:03 +0200
+
 kbuild (1:0.1.9998svn3489+dfsg-2) unstable; urgency=medium
 
   * Implement an assert fallback where new kHlpAssertBreakpoint function
