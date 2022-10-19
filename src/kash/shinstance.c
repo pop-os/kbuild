@@ -1,4 +1,4 @@
-/* $Id: shinstance.c 3506 2021-12-15 22:54:57Z bird $ */
+/* $Id: shinstance.c 3570 2022-07-09 14:42:02Z bird $ */
 /** @file
  * The shell instance methods.
  */
@@ -428,21 +428,21 @@ static void sh_destroy(shinstance *psh)
 #endif
 
     /* output.h */
-	if (psh->output.buf != NULL)
+    if (psh->output.buf != NULL)
     {
         ckfree(psh, psh->output.buf);
         psh->output.buf = NULL;
-	}
-	if (psh->errout.buf != NULL)
+    }
+    if (psh->errout.buf != NULL)
     {
         ckfree(psh, psh->errout.buf);
         psh->errout.buf = NULL;
-	}
-	if (psh->memout.buf != NULL)
+    }
+    if (psh->memout.buf != NULL)
     {
         ckfree(psh, psh->memout.buf);
         psh->memout.buf = NULL;
-	}
+    }
 
     /* options.h */
     if (psh->arg0malloc)
@@ -488,7 +488,7 @@ static void sh_destroy(shinstance *psh)
         do
         {
             struct localvar *next = lvar->next;
-			if (!(lvar->flags & VTEXTFIXED))
+            if (!(lvar->flags & VTEXTFIXED))
                 sh_free(psh, lvar->text);
             sh_free(psh, lvar);
             lvar = next;
@@ -508,7 +508,7 @@ static void sh_destroy(shinstance *psh)
                 struct var *next = var->next;
                 if (!(var->flags & (VTEXTFIXED | VSTACK)))
                     sh_free(psh, var->text);
-                if (!(var->flags & VSTRFIXED))
+                if (!(var->flags & (VSTRFIXED | VSTRFIXED2)))
                     sh_free(psh, var);
                 var = next;
             } while (var);

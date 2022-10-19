@@ -1,4 +1,4 @@
-# $Id: GCC3OMF.kmk 3393 2020-06-30 17:11:42Z bird $
+# $Id: GCC3OMF.kmk 3567 2022-06-26 20:00:02Z bird $
 ## @file
 # kBuild Tool Config - GCC v3 targeting OS/2 OMF.
 #
@@ -58,11 +58,6 @@ TOOL_GCC3OMF_LD_SYSMOD_MAP ?= -Zmap=$(1)
 
 TOOL_GCC3OMF_RC = $(TOOL_GCC3OMF_PREFIX3)rc$(TOOL_GCC3OMF_SUFFIX3)
 
-ifdef SLKRUNS
-TOOL_GCC3OMF_CC  += -fmessage-length=0
-TOOL_GCC3OMF_CXX += -fmessage-length=0
-endif
-
 # General Properties used by kBuild
 TOOL_GCC3OMF_COBJSUFF         ?= .o
 TOOL_GCC3OMF_CFLAGS           ?= -Zomf
@@ -121,7 +116,7 @@ define TOOL_GCC3OMF_COMPILE_C_CMDS
 	$(QUIET)$(KOBJCACHE) -f $(outbase).koc -d $(PATH_OBJCACHE) -t $(bld_trg).$(bld_trg_arch) -p\
 		--kObjCache-cpp $(outbase).i\
 		$(TOOL_GCC3OMF_CC) -E -o -\
-		$(flags) $(addprefix -I, $(incs)) $(addprefix -D, $(defs))\
+		$(flags) $(qaddprefix sh,-I, $(incs)) $(qaddprefix sh,-D, $(defs))\
 		-Wp,-MD,$(dep) -Wp,-MT,$(obj) -Wp,-MP\
 		$(abspath $(source))\
 		--kObjCache-cc $(obj)\
@@ -135,7 +130,7 @@ else # !KBUILD_USE_KOBJCACHE
 TOOL_GCC3OMF_COMPILE_C_OUTPUT =
 define TOOL_GCC3OMF_COMPILE_C_CMDS
 	$(QUIET)$(TOOL_GCC3OMF_CC) -c\
-		$(flags) $(addprefix -I, $(incs)) $(addprefix -D, $(defs))\
+		$(flags) $(qaddprefix sh,-I, $(incs)) $(qaddprefix sh,-D, $(defs))\
 		-Wp,-MD,$(dep) -Wp,-MT,$(obj) -Wp,-MP \
 		-o $(obj)\
 		$(abspath $(source))
@@ -166,7 +161,7 @@ define TOOL_GCC3OMF_COMPILE_CXX_CMDS
 	$(QUIET)$(KOBJCACHE) -f $(outbase).koc -d $(PATH_OBJCACHE) -t $(bld_trg).$(bld_trg_arch) -p\
 		--kObjCache-cpp $(outbase).ii\
 		$(TOOL_GCC3OMF_CXX) -E -o -\
-		$(flags) $(addprefix -I, $(incs)) $(addprefix -D, $(defs))\
+		$(flags) $(qaddprefix sh,-I, $(incs)) $(qaddprefix sh,-D, $(defs))\
 		-Wp,-MD,$(dep) -Wp,-MT,$(obj) -Wp,-MP\
 		$(abspath $(source))\
 		--kObjCache-cc $(obj)\
@@ -180,7 +175,7 @@ else # !KBUILD_USE_KOBJCACHE
 TOOL_GCC3OMF_COMPILE_CXX_OUTPUT =
 define TOOL_GCC3OMF_COMPILE_CXX_CMDS
 	$(QUIET)$(TOOL_GCC3OMF_CXX) -c\
-		$(flags) $(addprefix -I, $(incs)) $(addprefix -D, $(defs))\
+		$(flags) $(qaddprefix sh,-I, $(incs)) $(qaddprefix sh,-D, $(defs))\
 		-Wp,-MD,$(dep) -Wp,-MT,$(obj) -Wp,-MP \
 		-o $(obj)\
 		$(abspath $(source))
@@ -207,7 +202,7 @@ TOOL_GCC3OMF_COMPILE_AS_DEPEND =
 TOOL_GCC3OMF_COMPILE_AS_DEPORD =
 define TOOL_GCC3OMF_COMPILE_AS_CMDS
 	$(QUIET)$(TOOL_GCC3OMF_AS) -c\
-		$(flags) $(addprefix -I, $(incs)) $(addprefix -D, $(defs))\
+		$(flags) $(qaddprefix sh,-I, $(incs)) $(qaddprefix sh,-D, $(defs))\
 		-Wp,-MD,$(dep) -Wp,-MT,$(obj) -Wp,-MP\
 		-o $(obj)\
 		$(abspath $(source))

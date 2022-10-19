@@ -1,4 +1,4 @@
-# $Id: GCC64.kmk 3393 2020-06-30 17:11:42Z bird $
+# $Id: GCC64.kmk 3567 2022-06-26 20:00:02Z bird $
 ## @file
 # kBuild Tool Config - Generic 64-bit GCC v3.2.x or later Using The System GCC.
 #
@@ -78,11 +78,6 @@ else
 endif
 TOOL_GCC64_OBJCOPY ?= $(TOOL_GCC64_PREFIX2)gobjcopy$(TOOL_GCC64_SUFFIX2)
 
-ifdef SLKRUNS
- TOOL_GCC64_CC  += -fmessage-length=0
- TOOL_GCC64_CXX += -fmessage-length=0
-endif
-
 # General Properties used by kBuild
 TOOL_GCC64_COBJSUFF         ?= .o
 TOOL_GCC64_CFLAGS           ?=
@@ -136,7 +131,7 @@ define TOOL_GCC64_COMPILE_C_CMDS
 	$(QUIET)$(KOBJCACHE) -f $(outbase).koc -d $(PATH_OBJCACHE) -t $(bld_trg).$(bld_trg_arch) -p\
 		--kObjCache-cpp $(outbase).i\
 		$(TOOL_GCC64_CC) -E -o -\
-		$(flags) $(addprefix -I, $(incs)) $(addprefix -D, $(defs))\
+		$(flags) $(qaddprefix sh,-I, $(incs)) $(qaddprefix sh,-D, $(defs))\
 		-Wp,-MD,$(dep) -Wp,-MT,$(obj) -Wp,-MP\
 		$(abspath $(source))\
 		--kObjCache-cc $(obj)\
@@ -150,7 +145,7 @@ else # !KBUILD_USE_KOBJCACHE
 TOOL_GCC64_COMPILE_C_OUTPUT =
 define TOOL_GCC64_COMPILE_C_CMDS
 	$(QUIET)$(TOOL_GCC64_CC) -c\
-		$(flags) $(addprefix -I, $(incs)) $(addprefix -D, $(defs))\
+		$(flags) $(qaddprefix sh,-I, $(incs)) $(qaddprefix sh,-D, $(defs))\
 		-Wp,-MD,$(dep) -Wp,-MT,$(obj) -Wp,-MP\
 		-o $(obj)\
 		$(abspath $(source))
@@ -180,7 +175,7 @@ define TOOL_GCC64_COMPILE_CXX_CMDS
 	$(QUIET)$(KOBJCACHE) -f $(outbase).koc -d $(PATH_OBJCACHE) -t $(bld_trg).$(bld_trg_arch) -p\
 		--kObjCache-cpp $(outbase).ii\
 		$(TOOL_GCC64_CXX) -E -o -\
-		$(flags) $(addprefix -I, $(incs)) $(addprefix -D, $(defs))\
+		$(flags) $(qaddprefix sh,-I, $(incs)) $(qaddprefix sh,-D, $(defs))\
 		-Wp,-MD,$(dep) -Wp,-MT,$(obj) -Wp,-MP\
 		$(abspath $(source))\
 		--kObjCache-cc $(obj)\
@@ -194,7 +189,7 @@ else # !KBUILD_USE_KOBJCACHE
 TOOL_GCC64_COMPILE_CXX_OUTPUT =
 define TOOL_GCC64_COMPILE_CXX_CMDS
 	$(QUIET)$(TOOL_GCC64_CXX) -c\
-		$(flags) $(addprefix -I, $(incs)) $(addprefix -D, $(defs))\
+		$(flags) $(qaddprefix sh,-I, $(incs)) $(qaddprefix sh,-D, $(defs))\
 		-Wp,-MD,$(dep) -Wp,-MT,$(obj) -Wp,-MP\
 		-o $(obj)\
 		$(abspath $(source))
@@ -221,7 +216,7 @@ TOOL_GCC64_COMPILE_AS_DEPEND =
 TOOL_GCC64_COMPILE_AS_DEPORD =
 define TOOL_GCC64_COMPILE_AS_CMDS
 	$(QUIET)$(TOOL_GCC64_AS) -c\
-		$(flags) $(addprefix -I, $(incs)) $(addprefix -D, $(defs))\
+		$(flags) $(qaddprefix sh,-I, $(incs)) $(qaddprefix sh,-D, $(defs))\
 		-Wp,-MD,$(dep) -Wp,-MT,$(obj) -Wp,-MP\
 		-o $(obj)\
 		$(abspath $(source))
