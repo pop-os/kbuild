@@ -1,3 +1,10 @@
+kbuild (1:0.1.9998svn3571+dfsg-1) unstable; urgency=medium
+
+  * New upstream version 0.1.9998svn3571+dfsg
+  * Refresh patch
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Wed, 19 Oct 2022 17:44:34 +0200
+
 kbuild (1:0.1.9998svn3564+dfsg-1) unstable; urgency=medium
 
   * New upstream version 0.1.9998svn3564+dfsg
