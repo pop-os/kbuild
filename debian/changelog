@@ -1,3 +1,9 @@
+kbuild (1:0.1.9998svn3571+dfsg-2) unstable; urgency=medium
+
+  * Revert upstream commit 3566, makes the build FTBFS
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Sat, 22 Oct 2022 10:25:52 +0200
+
 kbuild (1:0.1.9998svn3571+dfsg-1) unstable; urgency=medium
 
   * New upstream version 0.1.9998svn3571+dfsg
