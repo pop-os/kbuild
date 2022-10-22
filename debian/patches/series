@@ -2,3 +2,4 @@
 do-not-build-docs.patch
 build-fix
 assert.patch
+revert-3566.patch
