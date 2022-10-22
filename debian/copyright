@@ -3,7 +3,7 @@ Source: https://svn.netlabs.org/kbuild/
 Upstream-Contact: Knut St. Osmundsen <bird-kBuild-spam@anduin.net>
 
 Files: *
-Copyright: 2004-2020 Knut St. Osmundsen <bird-kBuild-spam@anduin.net>
+Copyright: 2004-2022 Knut St. Osmundsen <bird-kBuild-spam@anduin.net>
 License: GPL-3+
 
 Files: src/kash/*
