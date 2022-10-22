@@ -1,3 +1,13 @@
+kbuild (1:0.1.9998svn3571+dfsg-3) unstable; urgency=medium
+
+  * Bump copyright years
+  * Bump another copyright year
+  * Drop as-needed flag, now default
+  * Drop another as-needed reference
+  * Drop dpkg-parsechangelog call in rules file
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Sat, 22 Oct 2022 10:33:27 +0200
+
 kbuild (1:0.1.9998svn3571+dfsg-2) unstable; urgency=medium
 
   * Revert upstream commit 3566, makes the build FTBFS
