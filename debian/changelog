@@ -1,3 +1,9 @@
+kbuild (1:0.1.9998svn3571+dfsg-4) unstable; urgency=medium
+
+  * Fixup another UPSTREAM_VERSION reference
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Sun, 23 Oct 2022 10:50:51 +0200
+
 kbuild (1:0.1.9998svn3571+dfsg-3) unstable; urgency=medium
 
   * Bump copyright years
