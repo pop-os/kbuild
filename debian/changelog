@@ -1,3 +1,10 @@
+kbuild (1:0.1.9998svn3589+dfsg-1) unstable; urgency=medium
+
+  * New upstream version 0.1.9998svn3589+dfsg
+  * Update get-orig-source script
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Wed, 19 Apr 2023 13:37:54 +0200
+
 kbuild (1:0.1.9998svn3572+dfsg-1) unstable; urgency=medium
 
   * New upstream version 0.1.9998svn3572+dfsg
