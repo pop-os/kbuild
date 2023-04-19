@@ -19,3 +19,5 @@ if [ -r .svn/deb-layout ]; then
   mv ${TAR} ${origDir}
   echo "moved ${TAR} to ${origDir}"
 fi
+
+echo "Done, now you can run \ngbp import-orig ${TAR}"
