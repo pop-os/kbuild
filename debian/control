@@ -17,7 +17,7 @@ Vcs-Browser: https://salsa.debian.org/pkg-virtualbox-team/kbuild
 Vcs-Git: https://salsa.debian.org/pkg-virtualbox-team/kbuild.git
 
 Package: kbuild
-Architecture: any
+Architecture: amd64
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Description: framework for writing simple makefiles for complex tasks
  The goals of the kBuild framework:
